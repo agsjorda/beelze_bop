@@ -1,0 +1,59 @@
+MegaW_BZ.webp
+size:676,270
+filter:Linear,Linear
+pma:false
+scale:0.2
+BACK MOUTH
+bounds:597,69,90,75
+rotate:90
+BOTTLEE BODY
+bounds:152,41,154,227
+EYE BOTTLEE
+bounds:456,9,30,32
+EYE BROW BOTLEE
+bounds:370,2,36,37
+EYE BROW BOTTLEE 2
+bounds:408,18,46,23
+HAND BOTTLE LEFT
+bounds:555,161,107,98
+offsets:7,0,114,98
+rotate:90
+HAND BOTTLE RIGHT
+bounds:597,3,64,77
+rotate:90
+LANYARD
+bounds:286,4,35,40
+rotate:90
+LEG BOTTLE LEFT
+bounds:497,61,75,98
+offsets:25,0,100,98
+rotate:90
+LEG BOTTLE RIGHT
+bounds:308,41,95,96
+rotate:90
+MEDAL
+bounds:328,4,35,40
+rotate:90
+NOSE BOTTLEE
+bounds:152,8,80,31
+PAULDRON 1
+bounds:510,13,46,42
+rotate:90
+PAULDRON 2
+bounds:234,2,50,37
+PELVIS
+bounds:406,43,93,89
+rotate:90
+PUPIL BOTTLEE
+bounds:554,4,24,25
+TONGUE BOTTLEE
+bounds:488,3,38,20
+rotate:90
+TOOTH BOTTLEE
+bounds:554,31,23,28
+wins/MEGA 1
+bounds:2,6,262,148
+offsets:1,0,263,148
+rotate:90
+wins/MEGA 2
+bounds:308,138,245,130

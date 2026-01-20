@@ -1,0 +1,28 @@
+FreeSpin_BZ.webp
+size:461,81
+filter:Linear,Linear
+pma:false
+scale:0.09
+FREE SPIN 1
+bounds:327,31,24,18
+offsets:0,0,25,19
+FREE SPIN 2
+bounds:387,3,72,76
+offsets:1,0,75,77
+FREE SPIN 3
+bounds:270,2,47,55
+offsets:1,0,50,56
+rotate:90
+FREE SPIN 4
+bounds:200,5,44,68
+offsets:1,0,47,70
+rotate:90
+FREE SPIN 5
+bounds:327,14,23,15
+offsets:1,0,25,16
+FREE SPIN 6
+bounds:200,51,185,28
+offsets:2,1,188,30
+FREE SPIN 7
+bounds:2,3,196,76
+offsets:1,1,198,78
