@@ -1,0 +1,32 @@
+FreeSpinRetri_BZ.webp
+size:440,76
+filter:Linear,Linear
+pma:false
+scale:0.09
+Layer 10
+bounds:250,47,168,27
+offsets:2,2,172,29
+Layer 11
+bounds:250,4,41,63
+offsets:1,0,43,64
+rotate:90
+Layer 2
+bounds:182,3,66,71
+offsets:2,0,69,71
+Layer 3
+bounds:420,53,21,18
+offsets:1,0,23,18
+rotate:90
+Layer 4
+bounds:367,3,21,14
+offsets:1,0,23,16
+Layer 5
+bounds:315,2,43,50
+offsets:1,0,46,51
+rotate:90
+Layer 8
+bounds:2,6,178,68
+offsets:1,2,181,72
+Layer 9
+bounds:367,19,68,26
+offsets:1,2,71,29

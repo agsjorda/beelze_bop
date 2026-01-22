@@ -1,0 +1,51 @@
+Character1_BZ.webp
+size:308,142
+filter:Linear,Linear
+pma:true
+scale:0.15
+SACK LEG 1
+bounds:2,20,35,83
+offsets:0,4,35,87
+rotate:90
+SACKS  EYE 1
+bounds:24,5,13,18
+rotate:90
+SACKS  EYE 2
+bounds:2,6,12,20
+rotate:90
+SACKS  FOOT 1  2
+bounds:197,94,43,46
+SACKS  FOOT 2-1
+bounds:231,46,43,46
+SACKS  HEAD
+bounds:68,68,72,69
+rotate:90
+SACKS  LEG 2
+bounds:154,39,35,75
+rotate:90
+SACKS ARM 1
+bounds:154,5,32,55
+rotate:90
+SACKS ARM 1 2
+bounds:87,10,65,56
+SACKS ARM 2
+bounds:139,76,56,64
+SACKS ARM 2 1
+bounds:254,5,39,50
+rotate:90
+SACKS BODY
+bounds:2,57,64,83
+offsets:18,14,82,97
+SACKS FOOT 1
+bounds:242,98,42,31
+rotate:90
+SACKS FOOT 2 1
+bounds:275,98,42,31
+rotate:90
+SACKS MOUTH
+bounds:276,76,28,20
+SACKS NOSE
+bounds:44,9,9,7
+rotate:90
+SACKS TAIL
+bounds:211,2,41,35

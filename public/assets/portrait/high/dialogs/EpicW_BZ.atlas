@@ -1,0 +1,54 @@
+EpicW_BZ.webp
+size:629,268
+filter:Linear,Linear
+pma:false
+scale:0.2
+ARM 2 EPIC WIN
+bounds:355,2,62,110
+ARM EPIC WIN
+bounds:505,126,140,78
+rotate:90
+BODY EPIC WIN
+bounds:276,114,116,152
+offsets:0,2,116,154
+CIGAR WIN
+bounds:585,165,44,35
+rotate:90
+EYE LEFT EPIC WIN
+bounds:2,4,8,14
+rotate:90
+EYE RIGHT EPIC WIN
+bounds:18,4,8,14
+rotate:90
+EYES EPIC WIN
+bounds:585,211,55,35
+rotate:90
+LEG 1 EPIC WIN
+bounds:394,119,109,147
+LEG 2 EPIC WIN
+bounds:248,7,105,55
+Layer25
+bounds:559,30,68,94
+MOUTH SHADOWEPIC WIN
+bounds:210,3,59,36
+rotate:90
+NOSE WIN
+bounds:164,2,44,60
+PONYTAIL EPIC WIN
+bounds:466,19,91,98
+RIGHT EAR EPIC WIN
+bounds:585,127,32,36
+SLEEVE EPIC WIN
+bounds:276,68,75,44
+TAIL EPIC WIN
+bounds:419,17,100,45
+rotate:90
+TONGUE EPIC WIN
+bounds:559,6,22,17
+rotate:90
+wins/EPIC 1
+bounds:164,64,202,110
+rotate:90
+wins/EPIC 2
+bounds:2,14,252,160
+rotate:90

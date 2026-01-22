@@ -1,0 +1,50 @@
+Symbol2_BZ.webp
+size:214,142
+filter:Linear,Linear
+pma:false
+scale:0.06
+CHEEKBONE
+bounds:179,4,15,11
+rotate:90
+CHEEKBONE BLACK
+bounds:166,4,15,11
+rotate:90
+DICE 2
+bounds:192,18,22,20
+rotate:90
+DICE
+bounds:192,18,22,20
+rotate:90
+DICE 2 BLACK
+bounds:191,42,22,20
+rotate:90
+DICE BLACK
+bounds:191,42,22,20
+rotate:90
+HAT
+bounds:175,66,36,28
+rotate:90
+HAT BLACK
+bounds:175,104,36,28
+rotate:90
+JAW
+bounds:134,71,69,39
+rotate:90
+JAW BLACK
+bounds:120,21,69,39
+JAW SHADOW
+bounds:2,2,62,58
+offsets:7,5,69,63
+NOSE SHADOW
+bounds:143,2,21,17
+NOSE SHADOW BLACK
+bounds:120,2,21,17
+SKULL
+bounds:68,62,78,64
+rotate:90
+SKULL BLACK
+bounds:2,62,78,64
+rotate:90
+SKULL SHADOW
+bounds:66,5,55,52
+rotate:90

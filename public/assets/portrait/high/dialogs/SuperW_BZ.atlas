@@ -1,0 +1,64 @@
+SuperW_BZ.webp
+size:451,237
+filter:Linear,Linear
+pma:false
+scale:0.1
+ARM 1 SUPER
+bounds:39,10,15,44
+rotate:90
+ARM 2 SUPER
+bounds:2,4,21,35
+rotate:90
+BIRD EYE SUPER
+bounds:70,2,1,1
+BIRD EYE SUPER 2
+bounds:67,2,1,1
+BIRD SUPER
+bounds:202,12,13,11
+rotate:90
+BODY SUPER
+bounds:377,56,79,60
+rotate:90
+BROW 2 SUPER
+bounds:55,2,6,4
+rotate:90
+BROW SUPER
+bounds:72,6,2,4
+rotate:90
+CHAIR SUPER
+bounds:377,137,72,98
+EYE SUPER
+bounds:67,5,3,3
+EYE SUPER 2
+bounds:61,4,4,4
+EYE WHITE SUPER
+bounds:167,6,16,19
+EYELID SUPER
+bounds:39,2,14,6
+FACE SUPER
+bounds:85,5,20,26
+rotate:90
+HAIR 3 SUPER
+bounds:113,5,20,26
+rotate:90
+HAIR SUPER 1
+bounds:347,10,34,24
+HAIR SUPER 2
+bounds:141,4,21,24
+rotate:90
+LEG 1 SUPER
+bounds:383,16,59,38
+LEG 2 SUPER
+bounds:280,7,27,65
+rotate:90
+WING SUPER 1
+bounds:202,2,14,8
+WING SUPER 2
+bounds:185,7,15,18
+offsets:0,0,29,18
+wins/SUPER1
+bounds:280,36,199,95
+offsets:0,1,200,96
+rotate:90
+wins/SUPER2
+bounds:2,27,276,208

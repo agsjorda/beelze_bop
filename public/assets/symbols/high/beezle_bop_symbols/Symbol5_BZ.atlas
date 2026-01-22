@@ -1,0 +1,45 @@
+Symbol5_BZ.webp
+size:168,140
+filter:Linear,Linear
+pma:false
+scale:0.06
+BOTTLE BODY
+bounds:74,51,70,87
+BOTTLE BODY BLACK
+bounds:2,51,70,87
+BOTTLE TONGUE BLACK
+bounds:121,23,21,9
+BOTTLECAPPATCH
+bounds:78,3,26,27
+offsets:15,2,43,35
+EYE 1 BOTTLE
+bounds:121,34,15,18
+rotate:90
+EYE 2 BOTTLE
+bounds:103,32,16,17
+EYEBROW 2 BOTTLE BLACK
+bounds:78,36,23,13
+EYEBROW BOTTLE BLACK
+bounds:146,32,20,18
+MOUTH SHADOW BOTTLE
+bounds:2,2,47,40
+rotate:90
+NOSE BOTTLE
+bounds:146,52,42,18
+rotate:90
+NOSE BOTTLE BLACK
+bounds:146,96,42,18
+rotate:90
+PATCH STRING
+bounds:44,3,46,32
+rotate:90
+PUPIL 1 BOTTLE
+bounds:117,7,12,14
+PUPIL 2 BOTTLE
+bounds:131,2,12,14
+TEETH BOTTLE
+bounds:144,18,12,15
+rotate:90
+TONGUE BOTTLE
+bounds:106,9,21,9
+rotate:90

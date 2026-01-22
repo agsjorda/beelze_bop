@@ -1,0 +1,56 @@
+Character2_BZ.webp
+size:294,269
+filter:Linear,Linear
+pma:true
+scale:0.15
+BEEL ARM 1
+bounds:2,5,60,30
+offsets:0,0,60,60
+BEEL ARM 1 UPPER
+bounds:220,77,50,61
+offsets:0,0,52,61
+rotate:90
+BEEL ARM 2
+bounds:221,188,79,71
+rotate:90
+BEEL ARM 2 1
+bounds:222,129,69,57
+BEEL BODY
+bounds:2,37,113,114
+offsets:15,56,157,170
+BEEL FACE
+bounds:117,72,64,66
+BEEL FINGERS
+bounds:224,8,23,19
+BEEL HAND 2 1
+bounds:183,68,35,70
+BEEL MOUTH
+bounds:177,36,55,30
+BEEL NOSE
+bounds:180,2,22,32
+BEEL PANTS
+bounds:2,153,129,114
+offsets:0,0,144,114
+BEEL PUPIL 1
+bounds:220,68,11,7
+BEEL PUPIL 2
+bounds:117,141,10,13
+rotate:90
+BEEL SHOES 1
+bounds:117,35,58,35
+BEEL SHOES 2
+bounds:117,7,61,26
+BEEL STAFF
+bounds:133,140,39,87
+rotate:90
+BEEL TEETH 1
+bounds:234,51,48,24
+BEEL TEETH 2
+bounds:64,12,51,23
+BEEL WING 1
+bounds:234,29,37,20
+BEEL WING 2
+bounds:204,5,29,18
+rotate:90
+STAFF SPIN
+bounds:133,181,86,86

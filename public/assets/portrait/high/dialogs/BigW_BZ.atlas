@@ -1,0 +1,75 @@
+BigW_BZ.webp
+size:895,189
+filter:Linear,Linear
+pma:false
+scale:0.2
+ARM 1 BIG
+bounds:700,4,95,71
+ARM 2 BIG
+bounds:770,91,96,82
+rotate:90
+BANDANA
+bounds:379,5,77,61
+BODY BIG
+bounds:797,9,80,92
+rotate:90
+CHIN   BIG
+bounds:854,104,20,20
+FACE  BIG
+bounds:665,77,103,110
+LEFTCACTI  BIG
+bounds:566,25,32,46
+LEG 1 BIG
+bounds:592,74,71,113
+LEG 2 BIG
+bounds:478,73,114,112
+rotate:90
+Layer16
+bounds:543,2,23,15
+Layer17
+bounds:875,128,19,18
+rotate:90
+Layer18
+bounds:630,2,28,18
+rotate:90
+Layer19
+bounds:650,8,20,22
+Layer4
+bounds:568,2,30,21
+Layer5
+bounds:672,2,20,29
+Layer6
+bounds:600,5,23,28
+rotate:90
+Layer7
+bounds:854,126,19,21
+MOUTH SHADOW CACTI  BIG
+bounds:218,2,64,41
+rotate:90
+PALM BIG 1
+bounds:854,149,38,36
+rotate:90
+PALM BIG 2
+bounds:660,33,38,39
+RIGHTCACTI BIG
+bounds:619,32,39,40
+SHOE 1 BIG
+bounds:261,5,116,61
+SHOE 2 BIG
+bounds:434,68,119,42
+rotate:90
+TEETH 1 CACTI  BIG
+bounds:600,30,42,17
+rotate:90
+TEETH 2 CACTI  BIG
+bounds:543,19,52,21
+rotate:90
+TONGUE CACTI  BIG
+bounds:876,108,18,15
+rotate:90
+WAIST BIG
+bounds:458,10,83,56
+wins/BIG 1
+bounds:218,68,214,119
+wins/BIG 2
+bounds:2,10,214,177

@@ -1,0 +1,53 @@
+Symbol4_BZ.webp
+size:186,142
+filter:Linear,Linear
+pma:false
+scale:0.06
+CHIN
+bounds:121,2,16,15
+rotate:90
+CHIN BLACK
+bounds:104,2,16,15
+rotate:90
+EYELID 2 CACTI BLACK
+bounds:144,58,13,22
+rotate:90
+EYELID CACTI
+bounds:138,5,13,22
+rotate:90
+EYELID CACTI 2
+bounds:153,34,13,22
+EYELID CACTI BLACK
+bounds:168,46,13,22
+EYES CACTI SHADOW
+bounds:144,112,35,28
+FACE CACTI
+bounds:73,54,69,86
+FACE CACTI BLACK
+bounds:2,54,69,86
+LEFTCACTI
+bounds:144,73,26,37
+LEFTCACTI BLACK
+bounds:34,15,26,37
+MOUTH SHADOW CACTI
+bounds:2,2,50,30
+rotate:90
+RIGHTCACTI
+bounds:92,20,27,32
+RIGHTCACTI BLACK
+bounds:62,20,28,32
+TEETH 1 CACTI
+bounds:137,20,32,14
+rotate:90
+TEETH 1 CACTI BLACK
+bounds:121,20,32,14
+rotate:90
+TEETH 2 CACTI
+bounds:62,6,40,12
+TEETH 2 CACTI BLACK
+bounds:172,70,40,12
+rotate:90
+TONGUE CACTI
+bounds:153,21,13,11
+TONGUE CACTI BLACK
+bounds:34,2,13,11

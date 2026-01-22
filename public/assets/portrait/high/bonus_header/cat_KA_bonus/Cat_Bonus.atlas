@@ -1,0 +1,16 @@
+Cat_Bonus.png
+size:580,580
+filter:Linear,Linear
+pma:true
+cat_body_bonus
+bounds:2,279,341,298
+offsets:0,16,342,314
+cat_eyes_bonus
+bounds:341,176,160,60
+offsets:4,0,164,60
+cat_head_bonus
+bounds:2,2,337,275
+offsets:0,0,338,276
+cat_tail_bonus
+bounds:345,238,123,339
+offsets:1,0,126,341
