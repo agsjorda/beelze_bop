@@ -104,6 +104,8 @@ export class SlotController {
 	
 	// Buy feature drawer component
 	private buyFeature: BuyFeature | null = null;
+	// One-time debug override: force scatter trigger on first buy feature spin
+	private didForceFirstBuyFeatureScatter: boolean = false;
 	
 	// Amplify bet pulsing system
 	private amplifyBetBounceTimer: Phaser.Time.TimerEvent | null = null;
@@ -527,9 +529,18 @@ export class SlotController {
 	private getTextStyle(): Phaser.Types.GameObjects.Text.TextStyle {
 		return {
 			fontSize: '10px',
-			color: '#ffffff',
+			   color: '#000000',
 			fontFamily: 'poppins-regular'
 		};
+	}
+
+	private playSpinButtonClickSfx(): void {
+		try {
+			const audioManager = (window as any)?.audioManager;
+			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
+				audioManager.playSoundEffect(SoundEffectType.SPIN_CLICK);
+			}
+		} catch {}
 	}
 
 	private createControllerElements(scene: Scene, assetScale: number): void {
@@ -1073,6 +1084,7 @@ export class SlotController {
 		spinButton.setInteractive();
 		spinButton.on('pointerdown', async () => {
 			console.log('[SlotController] Spin button clicked');
+			this.playSpinButtonClickSfx();
 			// If autoplay is active (or about to start), clicking spin will stop autoplay instead
 			if (gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested) {
 				console.log('[SlotController] Stopping autoplay via spin button click');
@@ -1678,6 +1690,7 @@ export class SlotController {
 		spinButton.setInteractive();
 		spinButton.on('pointerdown', async () => {
 			console.log('[SlotController] Spin button clicked');
+			this.playSpinButtonClickSfx();
 			// If autoplay is active (or about to start), clicking spin will stop autoplay instead
 			if (gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested) {
 				console.log('[SlotController] Stopping autoplay via spin button click');
@@ -1929,12 +1942,13 @@ export class SlotController {
 			const y = this.featureAmountText.y;
 			this.featureAmountText.setPosition(featureX + (isDemo ? 0 : 5), y);
 			if (isDemo) {
-				this.featureDollarText.setVisible(false);
-				this.featureDollarText.setText('');
+				   this.featureDollarText.setVisible(false);
+				   this.featureDollarText.setText('');
 			} else {
-				this.featureDollarText.setVisible(true);
-				this.featureDollarText.setText('$');
-				this.featureDollarText.setPosition(this.featureAmountText.x - (this.featureAmountText.width / 2) - 3, y);
+				   this.featureDollarText.setVisible(true);
+				   this.featureDollarText.setText('$');
+				   this.featureDollarText.setColor && this.featureDollarText.setColor('#000000');
+				   this.featureDollarText.setPosition(this.featureAmountText.x - (this.featureAmountText.width / 2) - 3, y);
 			}
 		}
 	}
@@ -2096,7 +2110,8 @@ export class SlotController {
 
 		// Listen for reels start to disable amplify button
 		gameEventManager.on(GameEventType.REELS_START, () => {
-			console.log('[SlotController] Reels started - disabling amplify button');
+			console.log('[SlotController] Reels started - disabling spin button and amplify button');
+			this.disableSpinButton();
 			this.disableAmplifyButton();
 			// Decrement normal autoplay spins at start of reels
 			if (this.autoplaySpinsRemaining > 0 && gameStateManager.isAutoPlaying && !gameStateManager.isBonus) {
@@ -3909,6 +3924,7 @@ public updateAutoplayButtonState(): void {
 		}
 		
 		try {
+			let shouldKeepBuyFeatureFlag = false;
 			// Get the current bet from BuyFeature
 			const buyFeatureBet = this.buyFeature.getCurrentBetAmount();
 			const calculatedPrice = buyFeatureBet * 100; // Same multiplier as BuyFeature uses
@@ -3957,15 +3973,22 @@ public updateAutoplayButtonState(): void {
 
 			// Call doSpin with buy feature parameters
 			console.log('[SlotController] Calling doSpin for buy feature...');
-			const spinData = await this.gameAPI.doSpin(buyFeatureBet, true, false); // isBuyFs: true, isEnhancedBet: false
+			gameStateManager.isBuyFeatureSpin = true;
+			let spinData = await this.gameAPI.doSpin(buyFeatureBet, true, false); // isBuyFs: true, isEnhancedBet: false
+			console.log('[BUY_FEATURE_SPIN_DATA]', spinData);
+			// Server-driven behavior: do not force scatters on the frontend.
 			
 			console.log('[SlotController] Buy feature spin completed:', spinData);
+			const hasFreeSpinItems = !!(spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items);
+			shouldKeepBuyFeatureFlag = hasFreeSpinItems || SpinDataUtils.hasFreeSpins(spinData);
+			if (!shouldKeepBuyFeatureFlag) {
+				gameStateManager.isBuyFeatureSpin = false;
+			}
 			
 			// If this buy feature spin contains free spin data (scatter), temporarily disable turbo so
 			// scatter symbol animations and sequence play at normal speed, then restore after dialogs
 			try {
-				const hasFsItems = !!(spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items);
-				if (hasFsItems) {
+				if (hasFreeSpinItems) {
 					const gd = this.getGameData();
 					if (gd) {
 						const wasTurboGD = !!gd.isTurbo;
@@ -4006,6 +4029,7 @@ public updateAutoplayButtonState(): void {
 			
 		} catch (error) {
 			console.error('[SlotController] Error processing buy feature purchase:', error);
+			gameStateManager.isBuyFeatureSpin = false;
 			// Re-enable controls on error to avoid locking the UI
 			this.enableSpinButton();
 			this.enableAutoplayButton();
@@ -4015,6 +4039,72 @@ public updateAutoplayButtonState(): void {
 			this.enableBetBackgroundInteraction('buy feature error');
 			// TODO: Show error message to user and restore balance if needed
 		}
+	}
+
+	private forceBuyFeatureScatterSpin(spinData: SpinData): SpinData {
+		try {
+			const slot: any = spinData?.slot;
+			if (!slot || !Array.isArray(slot.area)) return spinData;
+
+			const area = slot.area as number[][];
+			const requiredScatters = 4;
+			let scatterCount = 0;
+			for (let col = 0; col < area.length; col++) {
+				if (!Array.isArray(area[col])) continue;
+				for (let row = 0; row < area[col].length; row++) {
+					if (area[col][row] === 0) {
+						scatterCount++;
+					}
+				}
+			}
+			if (scatterCount < requiredScatters) {
+				for (let col = 0; col < area.length && scatterCount < requiredScatters; col++) {
+					if (!Array.isArray(area[col]) || area[col].length === 0) continue;
+					for (let row = 0; row < area[col].length && scatterCount < requiredScatters; row++) {
+						if (area[col][row] !== 0) {
+							area[col][row] = 0; // scatter symbol id
+							scatterCount++;
+						}
+					}
+				}
+			}
+
+			const baseFreeSpins = 10;
+			const existing = slot.freeSpin || slot.freespin;
+			const fsData = existing && typeof existing === 'object' ? existing : {};
+			if (!Array.isArray(fsData.items) || fsData.items.length === 0) {
+				fsData.items = [{
+					spinsLeft: baseFreeSpins,
+					subTotalWin: 0,
+					area: area,
+					payline: []
+				}];
+			} else if (typeof fsData.items[0]?.spinsLeft !== 'number' || fsData.items[0].spinsLeft <= 0) {
+				fsData.items[0].spinsLeft = baseFreeSpins;
+			}
+			if (fsData.items && fsData.items[0]) {
+				fsData.items[0].area = area;
+			}
+			if (typeof fsData.count !== 'number' || fsData.count <= 0) {
+				fsData.count = baseFreeSpins;
+			}
+			if (typeof fsData.totalWin !== 'number') {
+				fsData.totalWin = 0;
+			}
+
+			if (slot.freeSpin) {
+				slot.freeSpin = fsData;
+			}
+			if (slot.freespin) {
+				slot.freespin = fsData;
+			}
+			if (!slot.freeSpin && !slot.freespin) {
+				slot.freeSpin = fsData;
+			}
+		} catch (e) {
+			console.warn('[SlotController] Failed to force buy feature scatter spin:', e);
+		}
+		return spinData;
 	}
 
 	/**
@@ -4327,6 +4417,8 @@ public updateAutoplayButtonState(): void {
 					
 					// Use our free spin simulation
 					const spinData = await this.gameAPI.simulateFreeSpin();
+					// DEBUG: Log the full spinData for troubleshooting
+					console.log('[SPINDATA_DEBUG] Free spinData received:', JSON.stringify(spinData));
 					
 					// Compute raw server spinsLeft and sync internal Symbols counter (handles retriggers)
 					const serverSpinsLeft = this.computeDisplaySpinsLeft(spinData);
@@ -4466,9 +4558,17 @@ public updateAutoplayButtonState(): void {
 			// Fallback for initialization phase
 			const spinButton = this.buttons.get('spin');
 			if (spinButton) {
-				spinButton.setTint(0x666666);
+				spinButton.setTint(0x444444); // Darker gray tint
+				spinButton.setAlpha(0.1); // Match feature button style - make it semi-transparent/greyed out
 				spinButton.disableInteractive();
 			}
+		}
+		// Also handle SlotController's own spinIcon
+		if (this.spinIcon) {
+			this.spinIcon.setAlpha(0.5); // Match feature button style - dim the icon
+		}
+		if (this.spinIconTween) {
+			this.spinIconTween.pause(); // Pause icon animation
 		}
 	}
 
@@ -4484,9 +4584,17 @@ public updateAutoplayButtonState(): void {
 			const spinButton = this.buttons.get('spin');
 			if (spinButton) {
 				spinButton.clearTint();
+				spinButton.setAlpha(1.0); // Restore full alpha
 				spinButton.setInteractive();
 				console.log('[SlotController] Spin button enabled');
 			}
+		}
+		// Also handle SlotController's own spinIcon
+		if (this.spinIcon) {
+			this.spinIcon.setAlpha(1.0); // Restore full alpha
+		}
+		if (this.spinIconTween) {
+			this.spinIconTween.resume(); // Resume icon animation
 		}
 	}
 

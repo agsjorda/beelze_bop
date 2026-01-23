@@ -2,8 +2,9 @@ import { Scene } from 'phaser';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
-import { IrisTransition } from './IrisTransition';
-import { SymbolExplosionTransition } from './SymbolExplosionTransition';
+// import { SymbolExplosionTransition } from './SymbolExplosionTransition';
+import { RadialDimmerTransition } from './RadialDimmerTransition';
+import { RadialLightTransition } from './RadialLightTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { UI_CONFIG, WIN_THRESHOLDS, TIMING_CONFIG } from '../../config/GameConfig';
@@ -23,6 +24,7 @@ export interface DialogConfig {
 	freeSpins?: number; // Number of free spins won
 	isRetrigger?: boolean; // For FreeSpin_BZ: whether this is a retrigger case
 	betAmount?: number; // Base bet amount for staged win animations
+	suppressBlackOverlay?: boolean;
 }
 
 export class Dialogs {
@@ -75,10 +77,10 @@ export class Dialogs {
 	private stagedWinCurrentStageIndex: number = 0;
 	private stagedWinStageTimer: Phaser.Time.TimerEvent | null = null;
 
-	// Iris transition for scatter animation
-	private irisTransition: IrisTransition | null = null;
 	// Symbol explosion transition for free spin dialog dismissal
-	private candyTransition: SymbolExplosionTransition | null = null;
+	// private candyTransition: SymbolExplosionTransition | null = null;
+	private radialDimmerTransition: RadialDimmerTransition | null = null;
+	private radialLightTransition: RadialLightTransition | null = null;
 
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
@@ -93,7 +95,7 @@ export class Dialogs {
 
 	// Adjust TotalW_BZ scale
 	private dialogScaleXY: Record<string, { x: number; y: number }> = {
-		'TotalW_BZ': { x: 0.3, y: 0.35 }
+		'TotalW_BZ': { x: 0.3, y: 0.27 }
 	};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
@@ -104,12 +106,17 @@ export class Dialogs {
 		'MegaW_BZ': { x: 0.5, y: 0.4 },
 		'EpicW_BZ': { x: 0.5, y: 0.4 },
 		'SuperW_BZ': { x: 0.5, y: 0.4 },
-		'TotalW_BZ': { x: 0.5, y: 0.4 }
+		'TotalW_BZ': { x: 0.5, y: 0.33 }
 	};
 
 	// Adjust TotalW_BZ XY offset
 	private dialogPositionOffsets: Record<string, { x: number; y: number }> = {
 		'TotalW_BZ': { x: 0, y: 80 }
+	};
+
+	// Offset for number display (e.g. TotalW_BZ amount)
+	private numberDisplayOffsetY: Record<string, number> = {
+		'TotalW_BZ': 150
 	};
 
 	private dialogLoops: Record<string, boolean> = {
@@ -143,10 +150,10 @@ export class Dialogs {
 		// Store scene reference for later use
 		this.currentScene = scene;
 
-		// Initialize iris transition for scatter animation
-		this.irisTransition = new IrisTransition(scene);
 		// Initialize symbol explosion transition for free spin dialog dismissal
-		this.candyTransition = new SymbolExplosionTransition(scene);
+			   // this.candyTransition = new SymbolExplosionTransition(scene);
+		this.radialDimmerTransition = new RadialDimmerTransition(scene);
+		this.radialLightTransition = new RadialLightTransition(scene);
 
 		// Create main dialog overlay container
 		this.dialogOverlay = scene.add.container(0, 0);
@@ -253,22 +260,13 @@ export class Dialogs {
 		if (!this.isWinDialog()) {
 			console.log('[Dialogs] Non-win dialog detected - setting up black overlay');
 
-			// Ensure black overlay is visible and reset to transparent for fade-in
-			this.blackOverlay.setVisible(true);
-			this.blackOverlay.setAlpha(0);
-			console.log('[Dialogs] Non-win dialog - black overlay will fade in');
-			console.log('[Dialogs] Black overlay reset to visible=true, alpha=0 for fade-in');
-
-			// Fade in the black overlay
-			scene.tweens.add({
-				targets: this.blackOverlay,
-				alpha: 1,
-				duration: 500,
-				ease: 'Power2',
-				onComplete: () => {
-					console.log('[Dialogs] Black overlay fade-in complete');
-				}
-			});
+			if (normalizedConfig.suppressBlackOverlay) {
+				this.blackOverlay.setVisible(false);
+				this.blackOverlay.setAlpha(0);
+				console.log('[Dialogs] Black overlay suppressed for this dialog');
+			} else {
+				this.fadeInDialogDimmer(scene);
+			}
 		} else {
 			console.log('[Dialogs] Win dialog - setting black overlay to semi-transparent background');
 			// For win dialogs, ensure black overlay is visible and set to semi-transparent background
@@ -709,6 +707,9 @@ export class Dialogs {
 		const numberConfig: NumberDisplayConfig = {
 			x: scene.scale.width / 2,
 			y: this.getNumberDisplayY(scene, this.currentDialogType),
+			offsetY: this.currentDialogType === 'TotalW_BZ'
+				? this.numberDisplayOffsetY.TotalW_BZ
+				: 0,
 			scale: 0.3,
 			spacing: 0,
 			alignment: 'center',
@@ -832,6 +833,7 @@ export class Dialogs {
 	setNumberDisplayYForWin(y: number): void { this.numberYWin = y; }
 	setNumberDisplayYForFreeSpin(y: number): void { this.numberYFreeSpin = y; }
 	setNumberDisplayYForCongrats(y: number): void { this.numberYCongrats = y; }
+	setNumberDisplayOffsetYForTotalWin(y: number): void { this.numberDisplayOffsetY.TotalW_BZ = y; }
 	setNumberDisplayYPositions(opts: { win?: number; freeSpin?: number; congrats?: number }): void {
 		if (opts.win !== undefined) this.numberYWin = opts.win;
 		if (opts.freeSpin !== undefined) this.numberYFreeSpin = opts.freeSpin;
@@ -1196,122 +1198,95 @@ export class Dialogs {
 			this.currentDialogType === 'SuperW_BZ';
 	}
 
+	private fadeInDialogDimmer(scene: Scene): void {
+		// Ensure black overlay is visible and reset to transparent for fade-in
+		this.blackOverlay.setVisible(true);
+		this.blackOverlay.setAlpha(0);
+		console.log('[Dialogs] Non-win dialog - black overlay will fade in');
+		console.log('[Dialogs] Black overlay reset to visible=true, alpha=0 for fade-in');
+
+		scene.tweens.add({
+			targets: this.blackOverlay,
+			alpha: 1,
+			duration: 500,
+			ease: 'Power2',
+			onComplete: () => {
+				console.log('[Dialogs] Black overlay fade-in complete');
+			}
+		});
+	}
+
+	public async playRadialDimmerCloseTransition(options?: {
+		durationMs?: number;
+		centerX?: number;
+		centerY?: number;
+		startRadius?: number;
+		endRadius?: number;
+	}): Promise<void> {
+		const scene = this.currentScene;
+		if (!scene || !this.radialDimmerTransition) {
+			return;
+		}
+
+		const centerX = options?.centerX ?? scene.scale.width * 0.5;
+		const centerY = options?.centerY ?? scene.scale.height * 0.5;
+		const maxRadius = Math.max(
+			Math.hypot(centerX, centerY),
+			Math.hypot(scene.scale.width - centerX, centerY),
+			Math.hypot(centerX, scene.scale.height - centerY),
+			Math.hypot(scene.scale.width - centerX, scene.scale.height - centerY)
+		);
+		const startRadius = options?.startRadius ?? Math.ceil(maxRadius);
+		const endRadius = options?.endRadius ?? 0;
+		const durationMs = options?.durationMs ?? 1200;
+
+		this.radialDimmerTransition.setCenter(centerX, centerY);
+		this.radialDimmerTransition.setRadiusImmediate(startRadius);
+		this.radialDimmerTransition.show();
+		this.radialDimmerTransition.zoomInToRadius(endRadius, durationMs);
+
+		await new Promise<void>((resolve) => {
+			scene.time.delayedCall(durationMs, () => resolve());
+		});
+	}
+
+	public hideRadialDimmerTransition(): void {
+		this.radialDimmerTransition?.hide();
+	}
+
+	public async playRadialLightTransition(options?: {
+		durationMs?: number;
+		centerX?: number;
+		centerY?: number;
+	}): Promise<void> {
+		const scene = this.currentScene;
+		if (!scene || !this.radialLightTransition) {
+			return;
+		}
+		const centerX = options?.centerX ?? scene.scale.width * 0.5;
+		const centerY = options?.centerY ?? scene.scale.height * 0.5;
+		await this.radialLightTransition.playRevealTransition({
+			durationMs: options?.durationMs,
+			centerX,
+			centerY
+		});
+	}
+
 	/**
 	 * Start candy transition for free spin dialog
 	 */
 	private startCandyTransition(scene: Scene): void {
-		console.log('[Dialogs] Skipping candy transition for free spin dialog');
-
-		// Disable spinner immediately when transition starts
-		scene.events.emit('disableSpinner');
-
-		try {
-			const audioManager = (window as any).audioManager;
-			if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
-				audioManager.fadeOutSfx('dialog_congrats', 400);
-			}
-			if (audioManager && typeof audioManager.stopCurrentMusic === 'function') {
-				audioManager.stopCurrentMusic();
-				console.log('[Dialogs] Stopped free spin music as dialog closes');
-			}
-		} catch { }
-
-		this.disableAllWinDialogElements();
-		this.cleanupDialog();
-
-		this.triggerBonusMode(scene);
-
-		scene.events.emit('dialogAnimationsComplete');
-
-		try {
-			const audioManager = (window as any).audioManager;
-			if (audioManager && typeof audioManager.restoreBackground === 'function') {
-				audioManager.restoreBackground();
-			}
-		} catch { }
-	}
-
-	/**
-	 * Start iris transition for free spin dialog
-	 */
-	private startIrisTransition(scene: Scene): void {
-		if (!this.irisTransition) {
-			console.warn('[Dialogs] Iris transition not available, falling back to normal transition');
-			this.startNormalTransition(scene);
-			return;
-		}
-
-		console.log('[Dialogs] Starting iris transition for free spin dialog');
-
-		// Store the dialog type before cleanup for bonus mode check
-		const dialogTypeBeforeCleanup = this.currentDialogType;
-
-		// Disable spinner immediately when iris transition starts
-		scene.events.emit('disableSpinner');
-		console.log('[Dialogs] Spinner disabled during iris transition');
-
-		// Show iris transition overlay
-		this.irisTransition.show();
-
-		// Start iris transition - zoom in to small radius (closing iris effect)
-		this.irisTransition.zoomInToRadius(28, 1500); // Fast transition to 28px radius
-
-		// Hide dialog content quickly after iris starts closing (200ms delay)
-		scene.time.delayedCall(200, () => {
-			console.log('[Dialogs] Hiding dialog content quickly for better iris visibility');
-			// Fade out FreeSpin dialog SFX if playing
-			try {
-				const audioManager = (window as any).audioManager;
-				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
-					audioManager.fadeOutSfx('dialog_congrats', 400);
-				}
-			} catch { }
-			// Disable dialog elements before cleanup
-			this.disableAllWinDialogElements();
-			this.cleanupDialog();
-		});
-
-		// Wait for iris transition to complete, then proceed
-		scene.time.delayedCall(1500, () => {
-			console.log('[Dialogs] Iris closed - triggering bonus mode');
-
-			// Stop free spin music when dialog closes - bonus music will start when background changes
-			try {
-				const audioManager = (window as any).audioManager;
-				if (audioManager && typeof audioManager.stopCurrentMusic === 'function') {
-					audioManager.stopCurrentMusic();
-					console.log('[Dialogs] Stopped free spin music as dialog closes (iris transition)');
-				}
-			} catch { }
-
-			// Trigger bonus mode during closed iris
-			console.log('[Dialogs] Triggering bonus mode during closed iris');
-			this.triggerBonusMode(scene);
-
-			// Wait 0.5 seconds, then open iris (zoom out) - faster for better flow
-			scene.time.delayedCall(500, () => {
-				console.log('[Dialogs] Opening iris transition');
-				this.irisTransition!.zoomInToRadius(1000, 1500); // Open iris to full size
-
-				// Clean up after iris opens
-				scene.time.delayedCall(1500, () => {
-					console.log('[Dialogs] Iris transition complete');
-					// Hide the iris transition overlay
-					this.irisTransition!.hide();
-
-					// Emit dialog animations complete event AFTER the full iris transition completes
-					scene.events.emit('dialogAnimationsComplete');
-					console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
-					// Restore background music volume after dialog completes
-					try {
-						const audioManager = (window as any).audioManager;
-						if (audioManager && typeof audioManager.restoreBackground === 'function') {
-							audioManager.restoreBackground();
-						}
-					} catch { }
-				});
-			});
-		});
+		   // No transition: just cleanup and trigger bonus mode
+		   this.disableAllWinDialogElements();
+		   this.cleanupDialog();
+		   this.triggerBonusMode(scene);
+		   scene.events.emit('dialogAnimationsComplete');
+		   try {
+			   const audioManager = (window as any).audioManager;
+			   if (audioManager && typeof audioManager.restoreBackground === 'function') {
+				   audioManager.restoreBackground();
+			   }
+		   } catch { }
 	}
 
 	/**
@@ -2317,7 +2292,10 @@ export class Dialogs {
 	}
 
 	showFreeSpinDialog(scene: Scene, config?: Partial<DialogConfig>): void {
-		this.showDialog(scene, { type: 'FreeSpin_BZ', ...config });
+		const delayMs = 1000;
+		scene.time.delayedCall(delayMs, () => {
+			this.showDialog(scene, { type: 'FreeSpin_BZ', ...config });
+		});
 	}
 
 	showLargeWin(scene: Scene, config?: Partial<DialogConfig>): void {

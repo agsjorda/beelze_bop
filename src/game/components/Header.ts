@@ -56,7 +56,7 @@ export class Header {
 		// Add logo
 		
 		// Add winnings text centered on the win bar
-		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.215
+		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.1
 		);
 		
 	}

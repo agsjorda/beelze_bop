@@ -292,6 +292,8 @@ export class SymbolOverlay {
       if (!overlay) return;
       
       overlay.setOrigin(0.5, 0.5);
+      // Hide multiplier number until its win animation triggers.
+      overlay.setVisible(false);
       
       // Scale overlay relative to symbol box (+50% larger)
       const desiredWidth = Math.max(3, displayWidth * 1.3);

@@ -21,6 +21,7 @@ export class GameStateManager {
   private _isShowingWinDialog: boolean = false;
   private _scatterIndex: number = 0;
   private _isBonusFinished: boolean = false;
+  private _isBuyFeatureSpin: boolean = false;
 
   private constructor() {
     this.initializeEventListeners();
@@ -90,6 +91,7 @@ export class GameStateManager {
   public get isShowingWinDialog(): boolean { return this._isShowingWinDialog; }
   public get scatterIndex(): number { return this._scatterIndex; }
   public get isBonusFinished(): boolean { return this._isBonusFinished; }
+  public get isBuyFeatureSpin(): boolean { return this._isBuyFeatureSpin; }
 
   // Setters for state properties (with event emission where appropriate)
   public set timeScale(value: number) {
@@ -155,6 +157,10 @@ export class GameStateManager {
     this._isBonusFinished = value;
   }
 
+  public set isBuyFeatureSpin(value: boolean) {
+    this._isBuyFeatureSpin = value;
+  }
+
   /**
    * Start a spin
    */
@@ -200,6 +206,7 @@ export class GameStateManager {
     this._isShowingWinDialog = false;
     this._scatterIndex = 0;
     this._isBonusFinished = false;
+    this._isBuyFeatureSpin = false;
   }
 
   /**
@@ -218,7 +225,8 @@ export class GameStateManager {
       isShowingWinlines: this._isShowingWinlines,
       isShowingWinDialog: this._isShowingWinDialog,
       scatterIndex: this._scatterIndex,
-      isBonusFinished: this._isBonusFinished
+      isBonusFinished: this._isBonusFinished,
+      isBuyFeatureSpin: this._isBuyFeatureSpin
     };
   }
 }

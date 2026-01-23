@@ -359,7 +359,7 @@ export class BuyFeature {
 		const screenHeight = scene.cameras.main.height;
 		const backgroundTop = screenHeight - 736;
 		
-		const featureName = scene.add.text(screenWidth / 2, backgroundTop + 100, "Sugar Bomb Bonus", {
+		const featureName = scene.add.text(screenWidth / 2, backgroundTop + 100, "Beelze-Bop Bonus", {
 			fontSize: '24px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
@@ -451,6 +451,9 @@ export class BuyFeature {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencySymbol = isDemo ? '' : '$';
 			this.priceDisplay.setText(`${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`);
+			this.priceDisplay.setColor('#ffffff');
+			this.priceDisplay.setStyle({ color: '#ffffff' });
+			console.log('[BuyFeature] priceDisplay update forced to white:', this.priceDisplay.style.color);
 		}
 	}
 
@@ -515,7 +518,7 @@ export class BuyFeature {
 		
 		// Bet input background
 		const inputBg = scene.add.graphics();
-		inputBg.fillStyle(0x000000, 0.4);
+		inputBg.fillStyle(0x000000, 0.0); // Fully transparent for diagnostic
 		inputBg.fillRoundedRect(-182, -37, 364, 74, 15);
 		inputBg.lineStyle(0.5, 0xffffff, 1);
 		inputBg.strokeRoundedRect(-182, -37, 364, 74, 15);
@@ -555,11 +558,18 @@ export class BuyFeature {
 		const currencySymbolBet = isDemoBet ? '' : '$';
 		this.betDisplay = scene.add.text(x, y, `${currencySymbolBet}${this.getCurrentBet().toFixed(2)}`, {
 			fontSize: '24px',
-			color: '#ffffff',
-			fontFamily: 'Poppins-Regular'
+			color: '#00ff00', // GREEN for diagnostic
+			fontFamily: 'Arial'
 		});
 		this.betDisplay.setOrigin(0.5, 0.5);
+		this.betDisplay.setColor('#00ff00');
+		this.betDisplay.setStyle({ color: '#00ff00', fontFamily: 'Arial' });
+		this.betDisplay.setBlendMode(Phaser.BlendModes.NORMAL);
+		this.betDisplay.setAlpha(1);
+		this.betDisplay.setTint(0x00ff00);
 		this.container.add(this.betDisplay);
+		this.container.bringToTop(this.betDisplay);
+		console.log('[BuyFeature] betDisplay created with color GREEN, Arial:', this.betDisplay.style.color, 'tint:', this.betDisplay.tintTopLeft, 'blendMode:', this.betDisplay.blendMode, 'alpha:', this.betDisplay.alpha);
 		
 		// Plus button
 		this.plusButton = scene.add.text(x + 150, y, '+', {
@@ -674,6 +684,13 @@ export class BuyFeature {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencySymbol = isDemo ? '' : '$';
 			this.betDisplay.setText(`${currencySymbol}${this.getCurrentBet().toFixed(2)}`);
+			this.betDisplay.setColor('#00ff00');
+			this.betDisplay.setStyle({ color: '#00ff00', fontFamily: 'Arial' });
+			this.betDisplay.setBlendMode(Phaser.BlendModes.NORMAL);
+			this.betDisplay.setAlpha(1);
+			this.betDisplay.setTint(0x00ff00);
+			this.container.bringToTop(this.betDisplay);
+			console.log('[BuyFeature] betDisplay update forced to GREEN, Arial:', this.betDisplay.style.color, 'tint:', this.betDisplay.tintTopLeft, 'blendMode:', this.betDisplay.blendMode, 'alpha:', this.betDisplay.alpha);
 		}
 	}
 

@@ -103,6 +103,8 @@ export class ScatterAnimationManager {
       console.log('[ScatterAnimationManager] Skipping free spin music switch - already in bonus mode (retrigger)');
     }
 
+    const isBuyFeature = gameStateManager.isBuyFeatureSpin;
+
     try {
       // Step 1: Wait for player to see scatter symbols
       console.log('[ScatterAnimationManager] Waiting for player to see scatter symbols...');
@@ -111,8 +113,32 @@ export class ScatterAnimationManager {
       // Step 2: Skip all spinner animations; directly determine free spins and show dialog
       this.determineFreeSpins(data);
 
+      if (isBuyFeature) {
+        // Ensure symbols are visible behind the free spins dialog.
+        try {
+          const gameScene: any = this.scene as any;
+          await gameScene?.symbols?.forceScatterResetImmediate?.();
+          gameScene?.symbols?.ensureScatterSymbolsVisible?.();
+          gameScene?.symbols?.container?.setVisible?.(true);
+          gameScene?.symbols?.container?.setAlpha?.(1);
+        } catch { }
+      }
+
+      if (isBuyFeature) {
+        await this.waitForBuyFeatureTransitions();
+      }
+
       // Directly show free spins dialog without wheel
       this.showFreeSpinsDialog(data);
+
+      if (isBuyFeature) {
+        try {
+          if (typeof this.dialogsComponent?.hideRadialDimmerTransition === 'function') {
+            this.dialogsComponent.hideRadialDimmerTransition();
+          }
+        } catch {}
+        gameStateManager.isBuyFeatureSpin = false;
+      }
       
       // Note: Symbol reset will happen after dialog animations complete
       console.log('[ScatterAnimationManager] Scatter bonus sequence completed, waiting for dialog animations to finish');
@@ -120,6 +146,9 @@ export class ScatterAnimationManager {
     } catch (error) {
       console.error('[ScatterAnimationManager] Error during scatter animation:', error);
     } finally {
+      if (isBuyFeature && gameStateManager.isBuyFeatureSpin) {
+        gameStateManager.isBuyFeatureSpin = false;
+      }
       this.isAnimating = false;
     }
   }
@@ -150,6 +179,27 @@ export class ScatterAnimationManager {
       this.scene!.time.delayedCall(ms, () => {
         resolve();
       });
+    });
+  }
+
+  private async waitForBuyFeatureTransitions(): Promise<void> {
+    if (!this.scene) return;
+    const gameScene: any = this.scene as any;
+    const symbols = gameScene?.symbols as { isBuyFeatureTransitionComplete?: boolean } | undefined;
+    if (symbols?.isBuyFeatureTransitionComplete) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        resolve();
+      };
+      try {
+        this.scene!.events.once('buyFeatureTransitionsComplete', finish);
+      } catch { }
+      this.scene!.time.delayedCall(5000, finish);
     });
   }
 
@@ -215,7 +265,7 @@ export class ScatterAnimationManager {
 
   // Spinner wait removed; dialogs shown immediately
 
-  private showFreeSpinsDialog(data: Data): void {
+  private showFreeSpinsDialog(data: Data, options: { suppressBlackOverlay?: boolean } = {}): void {
     console.log('[ScatterAnimationManager] ===== SHOW FREE SPINS DIALOG CALLED =====');
     console.log('[ScatterAnimationManager] Dialogs component available:', !!this.dialogsComponent);
     
@@ -269,7 +319,8 @@ export class ScatterAnimationManager {
       console.log('[ScatterAnimationManager] Calling dialogsComponent.showDialog with type: FreeSpin_BZ, freeSpins:', freeSpins);
       this.dialogsComponent.showDialog(this.scene, {
         type: 'FreeSpin_BZ',
-        freeSpins: freeSpins
+        freeSpins: freeSpins,
+        suppressBlackOverlay: options.suppressBlackOverlay
       });
       
       console.log('[ScatterAnimationManager] Free spins dialog displayed successfully');

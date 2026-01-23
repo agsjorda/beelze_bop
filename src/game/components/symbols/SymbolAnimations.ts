@@ -10,6 +10,7 @@
 
 import type { Game } from '../../scenes/Game';
 import type { SymbolObject, SpineTrackEntry } from './types';
+import { gameStateManager } from '../../../managers/GameStateManager';
 import { 
   SPINE_SYMBOL_SCALES, 
   DEFAULT_SPINE_SCALE, 
@@ -106,7 +107,7 @@ export class SymbolAnimations {
       // Apply additional per-symbol adjustments after fitting
       try {
         const symbolValue = (spineObj as any)?.symbolValue;
-        if (symbolValue === 0) {
+        if (symbolValue === 0 && !gameStateManager.isBonus && !gameStateManager.isBuyFeatureSpin) {
           // Extra 20% for scatter
           const sx = (spineObj as any)?.scaleX ?? 1;
           const sy = (spineObj as any)?.scaleY ?? 1;
@@ -214,9 +215,8 @@ export class SymbolAnimations {
             : null;
           
           if (value !== null) {
-            const multiBase = MultiplierSymbols.getAnimationBase(value);
-            if (multiBase) {
-              idleName = `${multiBase}_Idle`;
+            if (MultiplierSymbols.isMultiplier(value)) {
+              idleName = MultiplierSymbols.getIdleAnimationName(value);
             } else {
               idleName = `Symbol${value}_SW_Idle`;
             }

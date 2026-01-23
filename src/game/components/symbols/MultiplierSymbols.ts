@@ -8,7 +8,7 @@
  * - Get overlay texture keys
  */
 
-import { MULTIPLIER_VALUES, MULTIPLIER_ANIMATION_BASES } from './constants';
+import { MULTIPLIER_VALUES } from './constants';
 
 /**
  * Static utility class for multiplier symbol operations
@@ -76,16 +76,10 @@ export class MultiplierSymbols {
    * Returns null if the symbol is not a multiplier
    * 
    * @example
-   * MultiplierSymbols.getAnimationBase(10) // returns 'Symbols11_SW'
-   * MultiplierSymbols.getAnimationBase(21) // returns 'Symbols12_SW'
+   * MultiplierSymbols.getAnimationBase(10) // returns 'Symbol10_BZ'
    */
   public static getAnimationBase(symbolValue: number): string | null {
-    for (const [baseName, values] of Object.entries(MULTIPLIER_ANIMATION_BASES)) {
-      if (values.includes(symbolValue)) {
-        return baseName;
-      }
-    }
-    return null;
+    return this.isMultiplier(symbolValue) ? 'Symbol10_BZ' : null;
   }
 
   /**
@@ -94,7 +88,7 @@ export class MultiplierSymbols {
   public static getIdleAnimationName(symbolValue: number): string | null {
     const base = this.getAnimationBase(symbolValue);
     if (!base) return null;
-    return `${base}_Idle`;
+    return `${base}_idle`;
   }
 
   /**
@@ -103,7 +97,7 @@ export class MultiplierSymbols {
   public static getWinAnimationName(symbolValue: number): string | null {
     const base = this.getAnimationBase(symbolValue);
     if (!base) return null;
-    return `${base}_Win`;
+    return `${base}_win`;
   }
 
   // ============================================================================

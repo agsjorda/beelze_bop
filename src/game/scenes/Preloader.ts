@@ -11,6 +11,7 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { Character } from '../components/Character';
+import { playRadialDimmerTransition } from '../utils/playRadialDimmerTransition';
 
 export class Preloader extends Scene
 {
@@ -471,31 +472,25 @@ export class Preloader extends Scene
             });
         }
 
-        // Prepare fade overlay
-        const fadeOverlay = this.add.rectangle(
-            this.scale.width * 0.5,
-            this.scale.height * 0.5,
-            this.scale.width,
-            this.scale.height,
-            0x000000
-        ).setOrigin(0.5, 0.5).setScrollFactor(0).setAlpha(0);
+		// Prepare fade overlay (no longer used, replaced by RadialDimmerTransition)
+		// const fadeOverlay = this.add.rectangle(
+		//     this.scale.width * 0.5,
+		//     this.scale.height * 0.5,
+		//     this.scale.width,
+		//     this.scale.height,
+		//     0x000000
+		// ).setOrigin(0.5, 0.5).setScrollFactor(0).setAlpha(0);
 
         // Start game on click
         this.buttonSpin?.once('pointerdown', () => {
-            this.tweens.add({
-                targets: fadeOverlay,
-                alpha: 1,
-                duration: 500,
-                ease: 'Power2',
-                onComplete: () => {
-                    console.log('[Preloader] Starting Game scene after click');
-                    this.scene.start('Game', { 
-                        networkManager: this.networkManager, 
-                        screenModeManager: this.screenModeManager,
-                        // Pass the same GameAPI instance so initialization data is shared
-                        gameAPI: this.gameAPI
-                    });
-                }
+            playRadialDimmerTransition(this, () => {
+                console.log('[Preloader] Starting Game scene after radial dimmer');
+                this.scene.start('Game', { 
+                    networkManager: this.networkManager, 
+                    screenModeManager: this.screenModeManager,
+                    // Pass the same GameAPI instance so initialization data is shared
+                    gameAPI: this.gameAPI
+                });
             });
         });
 

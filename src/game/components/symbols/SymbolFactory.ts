@@ -11,6 +11,9 @@ import type { Game } from '../../scenes/Game';
 import type { SymbolObject } from './types';
 import { SymbolAnimations } from './SymbolAnimations';
 import { MultiplierSymbols } from './MultiplierSymbols';
+import type { SymbolOverlay } from './SymbolOverlay';
+import { MULTIPLIER_VISUAL_SCALE } from './constants';
+import { gameStateManager } from '../../../managers/GameStateManager';
 
 /**
  * Factory for creating symbol objects
@@ -21,19 +24,22 @@ export class SymbolFactory {
   private displayWidth: number;
   private displayHeight: number;
   private container: Phaser.GameObjects.Container;
+  private overlay: SymbolOverlay | null;
 
   constructor(
     scene: Game,
     animations: SymbolAnimations,
     displayWidth: number,
     displayHeight: number,
-    container: Phaser.GameObjects.Container
+    container: Phaser.GameObjects.Container,
+    overlay?: SymbolOverlay
   ) {
     this.scene = scene;
     this.animations = animations;
     this.displayWidth = displayWidth;
     this.displayHeight = displayHeight;
     this.container = container;
+    this.overlay = overlay ?? null;
   }
 
   /**
@@ -41,6 +47,10 @@ export class SymbolFactory {
    */
   public setContainer(container: Phaser.GameObjects.Container): void {
     this.container = container;
+  }
+
+  public setOverlay(overlay: SymbolOverlay | null): void {
+    this.overlay = overlay;
   }
 
   // ============================================================================
@@ -57,39 +67,51 @@ export class SymbolFactory {
     y: number,
     alpha: number = 1
   ): SymbolObject {
+    let created: SymbolObject | null = null;
+
     // Try Spine for symbols 0-9
     if (value >= 0 && value <= 9) {
       try {
         const spineSymbol = this.createSpineSymbol(value, x, y, alpha);
         if (spineSymbol) {
-          return spineSymbol;
+          created = spineSymbol;
         }
       } catch (error) {
         console.warn(`[SymbolFactory] Failed to create Spine symbol ${value}, falling back to PNG:`, error);
         // Only fallback to PNG for 0-9
-        return this.createPngSymbol(value, x, y, alpha);
+        created = this.createPngSymbol(value, x, y, alpha);
       }
       // If not returned, fallback to PNG for 0-9
-      return this.createPngSymbol(value, x, y, alpha);
+      if (!created) {
+        created = this.createPngSymbol(value, x, y, alpha);
+      }
     }
 
     // Try multiplier symbols (10-22)
-    if (MultiplierSymbols.isMultiplier(value)) {
+    if (!created && MultiplierSymbols.isMultiplier(value)) {
       try {
         const multiplierSymbol = this.createMultiplierSymbol(value, x, y, alpha);
         if (multiplierSymbol) {
-          return multiplierSymbol;
+          created = multiplierSymbol;
         }
       } catch (error) {
         console.warn(`[SymbolFactory] Failed to create multiplier symbol ${value}:`, error);
       }
       // Create a placeholder sprite if multiplier symbol creation failed
-      console.warn(`[SymbolFactory] Creating placeholder for multiplier value ${value}`);
-      return this.createPlaceholderSymbol(value, x, y, alpha);
+      if (!created) {
+        console.warn(`[SymbolFactory] Creating placeholder for multiplier value ${value}`);
+        created = this.createPlaceholderSymbol(value, x, y, alpha);
+      }
     }
 
     // Fallback to PNG sprite for any other values (should not happen)
-    return this.createPngSymbol(value, x, y, alpha);
+    if (!created) {
+      created = this.createPngSymbol(value, x, y, alpha);
+    }
+
+    this.attachMultiplierOverlay(created, value, x, y);
+
+    return created;
   }
 
   /**
@@ -227,10 +249,10 @@ export class SymbolFactory {
     y: number,
     alpha: number
   ): SymbolObject | null {
-    const animBase = MultiplierSymbols.getAnimationBase(value);
-    if (!animBase) return null;
+    const idleName = MultiplierSymbols.getIdleAnimationName(value);
+    if (!idleName) return null;
     
-    const spineKey = 'SymbolBombs_SW';
+    const spineKey = 'symbol_10_sugar_spine';
     const atlasKey = `${spineKey}-atlas`;
     
     // Check if add.spine exists
@@ -250,11 +272,17 @@ export class SymbolFactory {
         spineObj.setOrigin(0.5, 0.5);
       }
       
-      // Apply scale
-      const scale = this.animations.getSpineSymbolScale(value);
-      if (typeof spineObj.setScale === 'function') {
-        spineObj.setScale(scale);
-      }
+      // Fit to symbol box then apply multiplier visual boost
+      this.animations.fitSpineToSymbolBox(spineObj);
+      try {
+        if (!gameStateManager.isBonus && !gameStateManager.isBuyFeatureSpin) {
+          const baseX = (spineObj as any)?.scaleX ?? 1;
+          const baseY = (spineObj as any)?.scaleY ?? 1;
+          if (typeof spineObj.setScale === 'function') {
+            spineObj.setScale(baseX * MULTIPLIER_VISUAL_SCALE, baseY * MULTIPLIER_VISUAL_SCALE);
+          }
+        }
+      } catch { /* ignore */ }
       
       // Set alpha
       if (typeof spineObj.setAlpha === 'function') {
@@ -262,7 +290,6 @@ export class SymbolFactory {
       }
       
       // Play idle animation
-      const idleName = `${animBase}_Idle`;
       const animState = spineObj.animationState;
       if (animState && typeof animState.setAnimation === 'function') {
         animState.setAnimation(0, idleName, true);
@@ -343,6 +370,13 @@ export class SymbolFactory {
     this.container.add(sprite);
     
     return sprite as SymbolObject;
+  }
+
+  private attachMultiplierOverlay(symbol: SymbolObject, value: number, x: number, y: number): void {
+    if (!this.overlay || !symbol) return;
+    try {
+      this.overlay.attachMultiplierOverlay(symbol, value, x, y, this.displayWidth, this.container);
+    } catch { /* ignore */ }
   }
 
   // ============================================================================

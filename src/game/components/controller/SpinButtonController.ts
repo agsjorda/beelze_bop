@@ -36,6 +36,7 @@ export class SpinButtonController {
   
   // State
   private isDisabled: boolean = false;
+  private readonly DISABLED_ALPHA: number = 0.7;
 
   constructor(
     scene: Scene,
@@ -104,6 +105,9 @@ export class SpinButtonController {
     if (this.spinIcon) {
       this.spinIcon.setAlpha(1.0);
     }
+    if (this.spinIconTween) {
+      this.spinIconTween.resume();
+    }
     this.isDisabled = false;
     log.debug('Spin button enabled');
   }
@@ -112,14 +116,20 @@ export class SpinButtonController {
    * Disable spin button
    */
   public disable(): void {
+    this.isDisabled = true; // Set flag first
     if (this.spinButton) {
       this.spinButton.disableInteractive();
-      this.spinButton.setAlpha(0.5);
+      this.spinButton.setAlpha(0.3); // Match feature button style - make it semi-transparent/greyed out
+      this.spinButton.setTint(0x444444); // Darker gray tint
+      log.debug(`Spin button alpha set to 0.3 (disabled)`);
     }
     if (this.spinIcon) {
-      this.spinIcon.setAlpha(0.5);
+      this.spinIcon.setAlpha(0.3); // Match feature button style - dim the icon
+      log.debug(`Spin icon alpha set to 0.3 (disabled)`);
     }
-    this.isDisabled = true;
+    if (this.spinIconTween) {
+      this.spinIconTween.pause(); // Pause icon animation
+    }
     log.debug('Spin button disabled');
   }
 
@@ -148,9 +158,14 @@ export class SpinButtonController {
    * Play spin button animation
    */
   public playSpinAnimation(): void {
-    // Hide icon during animation
+    // Ensure icon alpha is set correctly based on disabled state
     if (this.spinIcon) {
-      this.spinIcon.setVisible(false);
+      if (this.isDisabled) {
+        this.spinIcon.setAlpha(this.DISABLED_ALPHA);
+        log.debug(`Spin icon alpha set to ${this.DISABLED_ALPHA} in playSpinAnimation (disabled)`);
+      } else {
+        this.spinIcon.setAlpha(1.0);
+      }
     }
     
     // Play main animation
@@ -163,8 +178,13 @@ export class SpinButtonController {
           complete: (entry: any) => {
             if (entry.animation.name === 'animation') {
               this.spinButtonAnimation.setVisible(false);
+              // Ensure icon alpha is correct based on disabled state
               if (this.spinIcon) {
-                this.spinIcon.setVisible(true);
+                if (this.isDisabled) {
+                  this.spinIcon.setAlpha(this.DISABLED_ALPHA);
+                } else {
+                  this.spinIcon.setAlpha(1.0);
+                }
               }
             }
           }
@@ -174,8 +194,13 @@ export class SpinButtonController {
       } catch (error) {
         log.warn('Failed to play spin button animation:', error);
         this.spinButtonAnimation.setVisible(false);
+        // Ensure icon alpha is correct based on disabled state
         if (this.spinIcon) {
-          this.spinIcon.setVisible(true);
+          if (this.isDisabled) {
+            this.spinIcon.setAlpha(this.DISABLED_ALPHA);
+          } else {
+            this.spinIcon.setAlpha(1.0);
+          }
         }
       }
     }
@@ -263,7 +288,13 @@ export class SpinButtonController {
       targets: this.spinIcon,
       angle: '+=360',
       duration: 300,
-      ease: 'Power2'
+      ease: 'Power2',
+      onComplete: () => {
+        // Ensure alpha is maintained after rotation tween
+        if (this.spinIcon && this.isDisabled) {
+          this.spinIcon.setAlpha(this.DISABLED_ALPHA);
+        }
+      }
     });
   }
 

@@ -75,7 +75,7 @@ export class BonusHeader {
 
 
 		// Create winnings text at a stable position (was inside win bar)
-		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.215);
+		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.1);
 	}
 
 	private createLandscapeBonusHeader(scene: Scene, assetScale: number): void {
@@ -83,7 +83,7 @@ export class BonusHeader {
 
 
 		// Create winnings text at a stable position
-		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.215);
+		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.18);
 	}
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
