@@ -142,15 +142,45 @@ export class AssetConfig {
 			const atlas = `assets/symbols/high/beezle_bop_symbols/Symbol${i}_${suffix}.atlas`;
 			const json = `assets/symbols/high/beezle_bop_symbols/Symbol${i}_${suffix}.json`;
 			symbolSpine[spineKey] = { atlas: atlas, json: json };
-			console.log(`[AssetConfig] BZ Symbol ${i}: spine=${atlas}`);
 		}
 
-		// Multiplier symbol spine (used for bonus feature multipliers)
-		symbolSpine['SymbolBombs_SW'] = {
-			atlas: `assets/symbols/high/beezle_bop_symbols/SymbolBombs_SW.atlas`,
-			json: `assets/symbols/high/beezle_bop_symbols/SymbolBombs_SW.json`
+		// symbols for helper
+		for (let i = 0; i <= 9; i++) {
+			const spritePath = `assets/symbols/high/beezle_bop_symbols/statics/symbol${i}.png`;
+			const helperKey = `symbol${i}`;
+			const fallbackKey = `symbol_${i}`;
+			// const atlas = `assets/symbols/high/beezle_bop_symbols/statics/Symbol${i}_${suffix}.atlas`;
+			// const json = `assets/symbols/high/beezle_bop_symbols/statics/Symbol${i}_${suffix}.json`;
+			symbolImages[helperKey] = spritePath;
+			symbolImages[fallbackKey] = spritePath;
+		}
+
+		// Multiplier overlays (PNG numbers shown in front of the multiplier symbol)
+		// Mapping:
+		// 10->2, 11->3, 12->4, 13->5, 14->6, 15->8, 16->10,
+		// 17->12, 18->15, 19->20, 20->25, 21->50, 22->100
+		const overlayMap: { [value: number]: string } = {
+			10: '2',
+			11: '3',
+			12: '4',
+			13: '5',
+			14: '6',
+			15: '8',
+			16: '10',
+			17: '12',
+			18: '15',
+			19: '20',
+			20: '25',
+			21: '50',
+			22: '100'
 		};
-		console.log('[AssetConfig] Multiplier spine: SymbolBombs_SW');
+		Object.entries(overlayMap).forEach(([valueStr, label]) => {
+			const value = Number(valueStr);
+			const key = `multiplier_overlay_${value}`;
+			const path = `assets/symbols/high/beezle_bop_symbols/multiplier_symbols/${label}.png`;
+			symbolImages[key] = path;
+			console.log(`[AssetConfig] Multiplier overlay ${value}: ${path}`);
+		});
 		
 		// Symbol removal explosion VFX
 		symbolSpine['Explosion_BZ_VFX'] = {
@@ -396,33 +426,34 @@ export class AssetConfig {
 		return {
 			audio: {
 				// Menu/UI clicks
-				'click_sw': 'assets/sounds/click_sw.ogg',
-				'mainbg_ka': 'assets/sounds/BG/mainbg_sw.ogg',
-				'bonusbg_ka': 'assets/sounds/BG/bonusbg_sw.ogg',
-				'freespinbg_ka': 'assets/sounds/BG/freespinbg_sw.ogg',
-				'spinb_ka': 'assets/sounds/SFX/spin_sw.ogg',
-				'reeldrop_ka': 'assets/sounds/SFX/reeldrop_sw.ogg',
-				'turbodrop_ka': 'assets/sounds/SFX/turbodrop_sw.ogg',
+				'click_bz': 'assets/sounds/click_sw.ogg',
+				//BG sounds
+				'mainbg_bz': 'assets/sounds/BG/mainbg_BB.ogg',
+				'bonusbg_bz': 'assets/sounds/BG/bonusbg_BB.ogg',
+				'freespinbg_bz': 'assets/sounds/BG/freespinwonbg_BB.ogg',
+				'spinb_bz': 'assets/sounds/SFX/spin_BB.ogg',
+				'reeldrop_bz': 'assets/sounds/SFX/reeldrop_BB.ogg',
+				'turbodrop_bz': 'assets/sounds/SFX/turbodrop_BB.ogg',
 				// Candy explosion transition SFX (used by SymbolExplosionTransition)
-				'candy_transition_sw': 'assets/sounds/SFX/candy_transition.ogg',
+				'candy_transition_bz': 'assets/sounds/SFX/candy_transition.ogg',
 				// Scatter win "nom nom" SFX – played when scatter win animation runs
-				'nomnom_sw': 'assets/sounds/SFX/nomnom_sw.ogg',
-				'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
-				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
+				'nomnom_bz': 'assets/sounds/SFX/nomnom_sw.ogg',
+				'coin_throw_bz': 'assets/sounds/SFX/coin_throw_ka.ogg',
+				'coin_drop_bz': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
-				'bomb_sw': 'assets/sounds/SFX/bomb_sw.ogg',
-				'scatter_sw': 'assets/sounds/SFX/scatter_sw.ogg',
+				'bomb_bz': 'assets/sounds/SFX/bomb_sw.ogg',
+				'scatter_bz': 'assets/sounds/SFX/scatter_BB.ogg',
 				// Tumble symbol-win SFX (play per tumble index)
-				'twin1_sw': 'assets/sounds/SFX/symbol_win/twin1_sw.ogg',
-				'twin2_sw': 'assets/sounds/SFX/symbol_win/twin2_sw.ogg',
-				'twin3_sw': 'assets/sounds/SFX/symbol_win/twin3_sw.ogg',
-				'twin4_sw': 'assets/sounds/SFX/symbol_win/twin4_sw.ogg',
+				'twin1_bz': 'assets/sounds/SFX/symbol_win/twin1_BB.ogg',
+				'twin2_bz': 'assets/sounds/SFX/symbol_win/twin2_BB.ogg',
+				'twin3_bz': 'assets/sounds/SFX/symbol_win/twin3_BB.ogg',
+				'twin4_bz': 'assets/sounds/SFX/symbol_win/twin4_BB.ogg',
 				// Win dialog SFX
-				'bigw_ka': 'assets/sounds/Wins/bigw_sw.ogg',
-				'megaw_ka': 'assets/sounds/Wins/megaw_sw.ogg',
-				'superw_ka': 'assets/sounds/Wins/superw_sw.ogg',
-				'epicw_ka': 'assets/sounds/Wins/epicw_sw.ogg',
-				'congrats_ka': 'assets/sounds/Wins/congrats_sw.ogg'
+				'bigw_bz': 'assets/sounds/Wins/bigw_BB.ogg',
+				'megaw_bz': 'assets/sounds/Wins/megaw_BB.ogg',
+				'superw_bz': 'assets/sounds/Wins/superw_BB.ogg',
+				'epicw_bz': 'assets/sounds/Wins/epicw_BB.ogg',
+				'congrats_bz': 'assets/sounds/Wins/congrats_BB.ogg'
 			}
 		};
 	}

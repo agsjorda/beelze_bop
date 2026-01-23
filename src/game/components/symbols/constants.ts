@@ -54,6 +54,9 @@ export const WIN_TEXT_DELAY_MS = 800;
 /** Stagger between multiplier symbol triggers */
 export const MULTIPLIER_STAGGER_MS = 800;
 
+/** Delay before showing multiplier overlay so explosion VFX reads first */
+export const MULTIPLIER_OVERLAY_DELAY_MS = 250;
+
 /** Duration for shrink animation when resetting scatters */
 export const SCATTER_SHRINK_DURATION_MS = 350;
 
@@ -61,7 +64,7 @@ export const SCATTER_SHRINK_DURATION_MS = 350;
 export const SCATTER_MOVE_DURATION_MS = 500;
 
 /** Duration for gather animation when scatters move to center */
-export const SCATTER_GATHER_DURATION_MS = 600;
+export const SCATTER_GATHER_DURATION_MS = 800;
 
 /** Duration for fade-in animation on winning overlay */
 export const OVERLAY_FADE_IN_DURATION_MS = 300;
@@ -101,8 +104,8 @@ export const DEFAULT_SPINE_SCALE = 0.6;
 /** Scale adjustment multiplier applied to all spine symbols */
 export const SPINE_SCALE_ADJUSTMENT = 0.93;
 
-/** Visual boost scale for multiplier symbols */
-export const MULTIPLIER_VISUAL_SCALE = 1;
+/** Visual boost scale for multiplier symbols (applied after fit-to-box and for win pulse) */
+export const MULTIPLIER_VISUAL_SCALE = 1.2;
 
 /** Scale increase for scatter symbols during animation (1.8x = 80% larger) */
 export const SCATTER_ANIMATION_SCALE = 1.8;
@@ -162,9 +165,7 @@ export const MULTIPLIER_VALUES: Record<number, number> = {
  * Maps multiplier symbol IDs to their Spine animation base names
  */
 export const MULTIPLIER_ANIMATION_BASES: Record<string, number[]> = {
-  'Symbols11_SW': [10, 11, 12, 13, 14, 15, 16],
-  'Symbols10_SW': [17, 18, 19, 20],
-  'Symbols12_SW': [21, 22],
+  'Symbol10_BZ': [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
 } as const;
 
 // ============================================================================

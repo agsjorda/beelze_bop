@@ -65,11 +65,19 @@ export class Boot extends Scene
 
 		// Retry loading spine loader up to 5 times if not available
 		const tryLoadSpine = (scene: Scene, attempt = 1) => {
-			if (typeof (scene.load as any).spine === 'function') {
- 				(scene.load as any).spine('character1', 'assets/characters/Character1_BZ.json', 'assets/characters/Character1_BZ.atlas', true);
- 				(scene.load as any).spine('SymbolBombs_SW', 'assets/symbols/high/sugar_symbols/SymbolBombs_SW.json', 'assets/symbols/high/sugar_symbols/SymbolBombs_SW.atlas', true);
- 				console.log('[Boot] character1 and SymbolBombs_SW spine load queued');
-			} else if (attempt < 5) {
+			const loadAny = scene.load as any;
+			if (typeof loadAny.spine === 'function') {
+				loadAny.spine('character1', 'assets/characters/Character1_BZ.json', 'assets/characters/Character1_BZ.atlas', true);
+				console.log('[Boot] character1 spine load queued');
+				return;
+			}
+			if (typeof loadAny.spineJson === 'function' && typeof loadAny.spineAtlas === 'function') {
+				loadAny.spineAtlas('character1-atlas', 'assets/characters/Character1_BZ.atlas');
+				loadAny.spineJson('character1', 'assets/characters/Character1_BZ.json');
+				console.log('[Boot] character1 spine load queued (separate)');
+				return;
+			}
+			if (attempt < 5) {
 				console.warn(`[Boot] spine loader not available, retrying (${attempt})...`);
 				setTimeout(() => tryLoadSpine(scene, attempt + 1), 100 * attempt); // Exponential backoff
 			} else {

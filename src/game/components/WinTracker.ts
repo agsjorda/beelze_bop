@@ -174,9 +174,9 @@ export class WinTracker {
         }
       }
     } catch {}
-    // Do not show multiplier icons in WinTracker
+    // Show multiplier numeric total in WinTracker
     const multiplierIcons: Array<{ symbol: number; count: number }> = [];
-    const hasMultipliers = false;
+    const multiplierCount = multiplierSum;
 
     for (const [symbolId, data] of Array.from(summary.entries())) {
       if (data.totalWin > 0 && data.lines > 0) {
@@ -184,9 +184,9 @@ export class WinTracker {
       } else {
         data.baseValue = 0;
       }
-      // Do not attach multiplier icons/count to the row
+      // Attach multiplier count to the row (numeric total)
       data.multiplierIcons = multiplierIcons;
-      data.multiplierCount = 0;
+      data.multiplierCount = multiplierCount > 0 ? multiplierCount : 0;
       summary.set(symbolId, data);
     }
 
@@ -223,7 +223,26 @@ export class WinTracker {
     countLabel.setOrigin(0.5, 0.5);
     //countLabel.setShadow(1, .5, '#E7441E', 1, true, true);
 
-    // We no longer display the numeric "x multiplier" section; keep only multiplier icons if present
+    // Display multiplier numeric total when present
+    const hasMultiplierText = Number.isFinite(data.multiplierCount) && (data.multiplierCount as number) > 0;
+    const multiplierLabel = hasMultiplierText
+      ? this.scene.add.text(
+          0,
+          0,
+          `x${data.multiplierCount}`,
+          {
+            fontSize: `${this.labelFontSize}px`,
+            color: '#ffffff',
+            fontFamily: this.labelFontFamily,
+            stroke: '#99030A',
+            strokeThickness: 4,
+            align: 'center'
+          }
+        )
+      : null;
+    if (multiplierLabel) {
+      multiplierLabel.setOrigin(0.5, 0.5);
+    }
 
     const eqLabel = this.scene.add.text(
       0,
@@ -294,6 +313,7 @@ export class WinTracker {
       gap +
       iconDW +
       (hasMulIcons && mulIconsWidth > 0 ? (gap + mulIconsWidth) : 0) +
+      (multiplierLabel ? (gap + multiplierLabel.displayWidth) : 0) +
       gap +
       eqLabel.displayWidth +
       gap +
@@ -319,6 +339,12 @@ export class WinTracker {
       }
     }
 
+    if (multiplierLabel) {
+      cursor += gap;
+      multiplierLabel.setPosition(cursor + multiplierLabel.displayWidth * 0.5, y);
+      cursor += multiplierLabel.displayWidth;
+    }
+
     cursor += gap;
 
     eqLabel.setPosition(cursor + eqLabel.displayWidth * 0.5, y);
@@ -332,6 +358,7 @@ export class WinTracker {
     this.container.add(icon);
     this.container.add(countLabel);
     for (const img of mulIcons) { this.container.add(img); }
+    if (multiplierLabel) { this.container.add(multiplierLabel); }
     this.container.add(eqLabel);
     this.container.add(valueLabel);
   }
@@ -378,14 +405,14 @@ export class WinTracker {
         }
       }
     } catch {}
-    // Do not show multiplier icons in WinTracker
+    // Show multiplier numeric total in WinTracker
     const multiplierIcons: Array<{ symbol: number; count: number }> = [];
-    const hasMultipliers = false;
+    const multiplierCount = multiplierSum;
 
     for (const [symbolId, data] of Array.from(summary.entries())) {
       data.baseValue = data.totalWin > 0 && data.lines > 0 ? (data.totalWin / data.lines) : 0;
       data.multiplierIcons = multiplierIcons;
-      data.multiplierCount = 0;
+      data.multiplierCount = multiplierCount > 0 ? multiplierCount : 0;
       summary.set(symbolId, data);
     }
     return summary;
@@ -426,11 +453,11 @@ export class WinTracker {
       }
     } catch {}
 
-    // Try multipliers (10–22) using shared skeleton
+    // Try multipliers (10–22) using Symbol10_BZ spine
     try {
       if (symbolId >= 10 && symbolId <= 22) {
         if (ensureSpineFactory(this.scene, 'WinTracker')) {
-          const multiKey = `symbol_bombs_sw`;
+          const multiKey = `symbol_10_sugar_spine`;
           const multiAtlasKey = `${multiKey}-atlas`;
           const go: any = (this.scene.add as any).spine?.(0, 0, multiKey, multiAtlasKey);
           if (go) {
@@ -438,7 +465,7 @@ export class WinTracker {
             try { go.setScale?.(this.iconScale); } catch {}
             try {
               const base = this.getMultiplierAnimationBase(symbolId);
-              const idle = base ? `${base}_Idle` : null;
+              const idle = base ? `${base}_idle` : null;
               if (idle && go.animationState?.setAnimation) {
                 const entry = go.animationState.setAnimation(0, idle, true);
                 try {
@@ -468,10 +495,7 @@ export class WinTracker {
   }
 
   private getMultiplierAnimationBase(value: number): string | null {
-    if (value >= 10 && value <= 16) return 'Symbols11_SW';
-    if (value >= 17 && value <= 20) return 'Symbols10_SW';
-    if (value >= 21 && value <= 22) return 'Symbols12_SW';
-    return null;
+    return (value >= 10 && value <= 22) ? 'Symbol10_BZ' : null;
   }
 
   private getPaylineMultiplier(payline: any): number {

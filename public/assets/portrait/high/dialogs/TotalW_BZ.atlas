@@ -1,79 +1,80 @@
 TotalW_BZ.webp
-size:221,884
+size:1916,1544
 filter:Linear,Linear
 pma:false
-scale:0.1
+scale:0.4
 CATS
-bounds:154,531,99,65
-rotate:90
+bounds:605,443,396,261
 MEOW
-bounds:151,124,107,66
-offsets:11,0,118,66
+bounds:492,11,429,262
+offsets:44,0,473,262
 rotate:90
 NOTE 1
-bounds:168,265,12,9
+bounds:1244,1171,46,36
 NOTE 3
-bounds:168,265,12,9
+bounds:1244,1171,46,36
 NOTE 2
-bounds:200,687,12,15
+bounds:1274,13,47,60
+offsets:0,0,48,60
 rotate:90
 NOTE 4
-bounds:198,678,7,15
-rotate:90
+bounds:1303,1434,28,62
 NOTE 5
-bounds:200,701,7,16
-rotate:90
+bounds:1303,1145,27,62
 NOTE 6
-bounds:168,254,9,10
+bounds:1303,62,34,42
 rotate:90
 NOTE 7
-bounds:154,632,7,11
-rotate:90
+bounds:1303,1498,30,44
 SAX LINE
-bounds:2,233,150,144
-TOTAL SACKS ARM 1
-bounds:200,710,21,19
+bounds:1336,941,601,578
 rotate:90
+TOTAL SACKS ARM 1
+bounds:1201,1466,84,76
 TOTAL SACKS ARM 2
-bounds:197,632,14,12
+bounds:1123,4,56,50
+rotate:90
 TOTAL SACKS BEEL
-bounds:126,2,120,93
+bounds:1303,98,481,371
 rotate:90
 TOTAL SACKS BG
-bounds:2,379,150,275
+bounds:2,442,601,1100
 TOTAL SACKS BODY
-bounds:164,674,22,32
+bounds:1201,1209,86,129
 rotate:90
 TOTAL SACKS CACTUS
-bounds:154,306,59,114
+bounds:1676,124,237,455
 TOTAL SACKS FACE
-bounds:164,641,31,31
+bounds:1201,1021,122,122
 TOTAL SACKS FEET 1
-bounds:164,698,34,33
-offsets:20,0,54,48
+bounds:1201,1297,135,129
+offsets:81,0,216,193
+rotate:90
 TOTAL SACKS FEET 2
-bounds:198,646,14,30
+bounds:1002,3,57,119
+offsets:0,0,58,119
+rotate:90
 TOTAL SACKS LIGHT
-bounds:2,30,122,109
+bounds:2,2,488,438
 TOTAL SACKS PUPILS
-bounds:154,264,12,10
+bounds:1201,1161,46,41
+offsets:0,0,46,42
+rotate:90
 TOTAL SACKS RAT
-bounds:2,656,75,160
-rotate:90
+bounds:1003,62,298,642
 TOTAL SACKS SAX
-bounds:154,276,29,28
+bounds:1201,909,115,110
 TOTAL SACKS STAGE
-bounds:2,733,149,209
-rotate:90
+bounds:605,706,594,836
 TOTAL SACKS TAIL
-bounds:185,264,24,13
+bounds:1175,8,97,52
 TOTAL SACKS TUX
-bounds:185,279,25,27
+bounds:1201,806,101,106
 rotate:90
 curtain 1
-bounds:154,422,61,107
-offsets:0,20,61,127
+bounds:756,16,244,425
+offsets:0,82,244,507
 curtain 2
-bounds:2,141,90,147
-offsets:0,42,90,189
+bounds:1318,581,358,590
+offsets:0,168,359,758
 rotate:90

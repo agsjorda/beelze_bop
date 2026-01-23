@@ -162,21 +162,25 @@ export class SpinDataUtils {
    * Check if this spin triggered free spins
    */
   static hasFreeSpins(spinData: SpinData): boolean {
-    return spinData.slot.freespin?.count > 0;
+    return !!(spinData && spinData.slot && spinData.slot.freespin && spinData.slot.freespin.count > 0);
   }
   
   /**
    * Get total win amount from all free spins
    */
   static getFreespinTotalWin(spinData: SpinData): number {
-    return spinData.slot.freespin?.totalWin || 0;
+    return (spinData && spinData.slot && spinData.slot.freespin && typeof spinData.slot.freespin.totalWin === 'number')
+      ? spinData.slot.freespin.totalWin
+      : 0;
   }
   
   /**
    * Get the number of free spins remaining
    */
   static getFreespinCount(spinData: SpinData): number {
-    return spinData.slot.freespin?.count || 0;
+    return (spinData && spinData.slot && spinData.slot.freespin && typeof spinData.slot.freespin.count === 'number')
+      ? spinData.slot.freespin.count
+      : 0;
   }
   
   /**

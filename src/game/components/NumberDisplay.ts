@@ -5,6 +5,7 @@ import { ScreenModeManager } from '../../managers/ScreenModeManager';
 export interface NumberDisplayConfig {
 	x: number;
 	y: number;
+	offsetY?: number;
 	scale?: number;
 	spacing?: number;
 	alignment?: 'left' | 'center' | 'right';
@@ -56,6 +57,7 @@ export class NumberDisplay {
 			suffix: '',
 			commaYOffset: 0,
 			dotYOffset: 0,
+			offsetY: 0,
 			...config
 		};
 	}
@@ -69,7 +71,8 @@ export class NumberDisplay {
 		this.scene = scene;
 		
 		// Create container for all number sprites
-		this.container = scene.add.container(this.config.x, this.config.y);
+		const offsetY = Number(this.config.offsetY) || 0;
+		this.container = scene.add.container(this.config.x, this.config.y + offsetY);
 		this.container.setDepth(50); // Adjust depth as needed
 		
 		this.isInitialized = true;

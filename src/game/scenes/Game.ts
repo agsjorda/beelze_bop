@@ -249,7 +249,7 @@ export class Game extends Scene {
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: ` | Sugar Wonderland${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
+			suffixText: ` | Beelze_Bop${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 5,
 			additionalTextOffsetY: 0,
@@ -386,33 +386,32 @@ export class Game extends Scene {
 			console.warn('[Game] Failed to create FreeRoundManager from initialization data:', e);
 		}
 
-		// Create symbol explosion transition component and play at scene start
-		this.candyTransition = new SymbolExplosionTransition(this);
+		// Create symbol explosion transition component and play at scene start (DISABLED for dimmer transition)
+		// this.candyTransition = new SymbolExplosionTransition(this);
 
-		// Limit explosion symbols to the ones currently present on the grid (if available)
-		let allowedSymbols: number[] | undefined;
-		try {
-			const grid: any = (this.symbols as any)?.currentSymbolData;
-			if (Array.isArray(grid)) {
-				const set = new Set<number>();
-				for (const col of grid) {
-					if (!Array.isArray(col)) continue;
-					for (const val of col) {
-						const num = Number(val);
-						if (!isNaN(num)) {
-							set.add(num);
-						}
-					}
-				}
-				if (set.size > 0) {
-					allowedSymbols = Array.from(set);
-				}
-			}
-		} catch {
-			// If anything goes wrong, fall back to using all available symbol spines
-		}
+		// let allowedSymbols: number[] | undefined;
+		// try {
+		//     const grid: any = (this.symbols as any)?.currentSymbolData;
+		//     if (Array.isArray(grid)) {
+		//         const set = new Set<number>();
+		//         for (const col of grid) {
+		//             if (!Array.isArray(col)) continue;
+		//             for (const val of col) {
+		//                 const num = Number(val);
+		//                 if (!isNaN(num)) {
+		//                     set.add(num);
+		//                 }
+		//             }
+		//         }
+		//         if (set.size > 0) {
+		//             allowedSymbols = Array.from(set);
+		//         }
+		//     }
+		// } catch {
+		//     // If anything goes wrong, fall back to using all available symbol spines
+		// }
 
-		this.candyTransition.play(undefined, { allowedSymbols });
+		// this.candyTransition.play(undefined, { allowedSymbols });
 
 		// Create scatter anticipation component inside background container to avoid symbol mask and stay behind symbols
 		this.scatterAnticipation.create(this, this.background.getContainer());
@@ -562,13 +561,12 @@ export class Game extends Scene {
 			// Get the current spin data from the Symbols component
 			if (this.symbols && this.symbols.currentSpinData) {
 				const spinData = this.symbols.currentSpinData;
-				const tumbleResult = this.calculateTotalWinFromTumbles(spinData.slot?.tumbles || []);
-				let totalWin = tumbleResult.totalWin;
-				const hasCluster = tumbleResult.hasCluster;
+				let freeSpinItem: any | null = null;
+				let totalWin = 0;
 				const betAmount = parseFloat(spinData.bet);
 
-				// During free spins, prefer the totalWin coming from the matching freespin item
-				// so win dialogs reflect the backend's per-spin total directly.
+				// During free spins, try to resolve the current item (by area match) so we can
+				// use its totalWin and tumbles for accurate win dialog gating.
 				if (gameStateManager.isBonus) {
 					try {
 						const slotAny: any = spinData.slot || {};
@@ -577,19 +575,22 @@ export class Game extends Scene {
 						const area = slotAny.area;
 
 						if (items.length > 0 && Array.isArray(area)) {
-							// Find the freespin item whose area matches the current board
 							const areaJson = JSON.stringify(area);
-							const currentItem = items.find((item: any) =>
+							freeSpinItem = items.find((item: any) =>
 								Array.isArray(item?.area) && JSON.stringify(item.area) === areaJson
-							);
+							) || null;
+						}
 
-							if (currentItem) {
-								const itemTotalWinRaw = (currentItem as any).totalWin ?? (currentItem as any).subTotalWin ?? 0;
-								const itemTotalWin = Number(itemTotalWinRaw);
-								if (!isNaN(itemTotalWin) && itemTotalWin > 0) {
-									console.log(`[Game] WIN_STOP: Overriding tumble totalWin with freespin item totalWin=${itemTotalWin}`);
-									totalWin = itemTotalWin;
-								}
+						if (!freeSpinItem && items.length > 0) {
+							freeSpinItem = items[0];
+						}
+
+						if (freeSpinItem) {
+							const itemTotalWinRaw = (freeSpinItem as any).totalWin ?? (freeSpinItem as any).subTotalWin ?? 0;
+							const itemTotalWin = Number(itemTotalWinRaw);
+							if (!isNaN(itemTotalWin) && itemTotalWin > 0) {
+								console.log(`[Game] WIN_STOP: Using freespin item totalWin=${itemTotalWin}`);
+								totalWin = itemTotalWin;
 							}
 						}
 					} catch (e) {
@@ -597,12 +598,24 @@ export class Game extends Scene {
 					}
 				}
 
-				console.log(`[Game] WIN_STOP: totalWin used for win dialog=$${totalWin}, hasCluster>=8=${hasCluster}`);
-				if (hasCluster && totalWin > 0) {
-					this.checkAndShowWinDialog(totalWin, betAmount);
-				} else {
-					console.log('[Game] WIN_STOP: No qualifying cluster wins (>=8) detected');
+				const slotTumbles = spinData.slot?.tumbles || [];
+				const bonusTumbles = freeSpinItem?.tumbles;
+				const tumblesToUse = (Array.isArray(slotTumbles) && slotTumbles.length > 0)
+					? slotTumbles
+					: (Array.isArray(bonusTumbles) ? bonusTumbles : []);
+				const tumbleResult = this.calculateTotalWinFromTumbles(tumblesToUse);
+				if (totalWin === 0) {
+					totalWin = tumbleResult.totalWin;
 				}
+				const hasCluster = tumbleResult.hasCluster;
+
+
+				   console.log(`[Game] WIN_STOP: totalWin used for win dialog=$${totalWin}, hasCluster>=8=${hasCluster}`);
+				   if (hasCluster && totalWin > 0) {
+					   this.checkAndShowWinDialog(totalWin, betAmount);
+				   } else {
+					   console.log('[Game] WIN_STOP: No qualifying cluster wins (>=8) detected');
+				   }
 
 				const isDemo = this.gameAPI.getDemoState();
 				if (isDemo && !gameStateManager.isScatter && !gameStateManager.isBonus) {
@@ -617,6 +630,20 @@ export class Game extends Scene {
 				this.updateBalanceAfterWinStop();
 			} else {
 				console.log('[Game] Skipping balance update on WIN_STOP (scatter/bonus active)');
+			}
+		});
+
+		// Play character win animations whenever a win sequence starts
+		gameEventManager.on(GameEventType.WIN_START, () => {
+			try {
+				if (this.character1) {
+					this.character1.playAnimation('Character1_BZ_win', false, true);
+				}
+				if (this.character2) {
+					this.character2.playAnimation('Character2_BZ_win', false, true);
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to play character win animations on WIN_START:', e);
 			}
 		});
 
@@ -818,6 +845,7 @@ export class Game extends Scene {
 		}
 		let totalWin = 0;
 		let hasCluster = false;
+		let triggeredWinAnim = false;
 		for (const tumble of tumbles) {
 			const w = Number(tumble?.win || 0);
 			totalWin += isNaN(w) ? 0 : w;
@@ -825,7 +853,20 @@ export class Game extends Scene {
 			if (Array.isArray(outs)) {
 				for (const out of outs) {
 					const c = Number(out?.count || 0);
-					if (c >= 8) { hasCluster = true; break; }
+					if (c >= 8) {
+						hasCluster = true;
+						// Only trigger win animation for normal game (not bonus)
+						if (!this.gameStateManager.isBonus && !triggeredWinAnim) {
+							if (this.character1) {
+								   this.character1.playAnimation('Character1_BZ_win', false, true);
+							}
+							if (this.character2) {
+								   this.character2.playAnimation('Character2_BZ_win', false, true);
+							}
+							triggeredWinAnim = true;
+						}
+						break;
+					}
 				}
 			}
 		}
@@ -1153,7 +1194,7 @@ export class Game extends Scene {
 			// Switch to bonus background music when background changes to bonus
 			if (this.audioManager) {
 				this.audioManager.playBackgroundMusic(MusicType.BONUS);
-				console.log('[Game] Switched to bonus background music (bonusbg_ka)');
+				console.log('[Game] Switched to bonus background music (bonusbg_bz)');
 			}
 
 			console.log('[Game] ===== BONUS BACKGROUND EVENT HANDLED =====');

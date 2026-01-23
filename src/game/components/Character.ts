@@ -86,13 +86,68 @@ export class Character {
         }
     }
 
-    public playAnimation(animationName: string, loop: boolean = true): void {
+
+    private idleListenerObj?: any;
+    private idleTimeout?: any;
+    private getIdleAnimationName(): string {
+        // Use the correct idle animation name for each character
+        // Accepts both 'character1'/'character2' and 'Character1_BZ'/'Character2_BZ' as keys
+        // Note: idle animations in assets are lowercase (character1_BZ_idle, character2_BZ_idle)
+        const key = this.options.characterKey;
+        if (/character1/i.test(key)) return 'character1_BZ_idle';
+        if (/character2/i.test(key)) return 'character2_BZ_idle';
+        // fallback: try key + '_idle'
+        return key + '_idle';
+    }
+
+    public playAnimation(animationName: string, loop: boolean = true, revertToIdle: boolean = false): void {
         if (this.spineObject) {
             try {
                 const animState = (this.spineObject as any).animationState;
                 if (animState) {
+                    // Remove previous idle listener and timeout if they exist
+                    if (this.idleListenerObj) {
+                        animState.removeListener(this.idleListenerObj);
+                        this.idleListenerObj = undefined;
+                    }
+                    if (this.idleTimeout) {
+                        clearTimeout(this.idleTimeout);
+                        this.idleTimeout = undefined;
+                    }
                     animState.setAnimation(0, animationName, loop);
                     console.log(`[Character] Playing animation '${animationName}' (loop: ${loop})`);
+                    if (revertToIdle && !loop) {
+                        const idleAnim = this.getIdleAnimationName();
+                        console.log(`[Character] Will revert to idle animation '${idleAnim}' after '${animationName}' completes.`);
+                        // Listen for animation complete
+                        const listenerObj = {
+                            complete: (trackIndex: number, animation: any) => {
+                                console.log(`[Character] Animation complete event: trackIndex=${trackIndex}, animation=${animation && animation.name}`);
+                                if (animation && animation.name === animationName) {
+                                    console.log(`[Character] Reverting to idle animation '${idleAnim}' after '${animationName}' complete event.`);
+                                    animState.setAnimation(0, idleAnim, true);
+                                    animState.removeListener(listenerObj);
+                                    this.idleListenerObj = undefined;
+                                    if (this.idleTimeout) {
+                                        clearTimeout(this.idleTimeout);
+                                        this.idleTimeout = undefined;
+                                    }
+                                }
+                            }
+                        };
+                        this.idleListenerObj = listenerObj;
+                        animState.addListener(listenerObj);
+                        // Fallback: force idle after 1.5s if complete event is missed
+                        this.idleTimeout = setTimeout(() => {
+                            if (this.idleListenerObj) {
+                                console.log(`[Character] Fallback: Forcing idle animation '${idleAnim}' after 1.5s timeout.`);
+                                animState.removeListener(this.idleListenerObj);
+                                this.idleListenerObj = undefined;
+                            }
+                            animState.setAnimation(0, idleAnim, true);
+                            this.idleTimeout = undefined;
+                        }, 1500);
+                    }
                 } else {
                     console.warn(`[Character] animationState not available for playAnimation`);
                 }
