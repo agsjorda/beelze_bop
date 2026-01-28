@@ -7,7 +7,6 @@
 
 import type { Scene } from 'phaser';
 import { gameEventManager, GameEventType } from '../../../event/EventManager';
-import { gameStateManager } from '../../../managers/GameStateManager';
 import { ensureSpineFactory } from '../../../utils/SpineGuard';
 import { Logger } from '../../../utils/Logger';
 
@@ -53,7 +52,6 @@ export class BetController {
   
   // State
   private baseBetAmount: number = 0.2;
-  private isInternalBetChange: boolean = false;
 
   constructor(
     scene: Scene,
@@ -198,19 +196,9 @@ export class BetController {
   public adjustBetByStep(direction: 1 | -1): void {
     try {
       const currentBaseBet = this.callbacks.getBaseBetAmount() || 0.2;
-      
-      // Find current index in ladder
-      let idx = 0;
-      let bestDiff = Number.POSITIVE_INFINITY;
-      for (let i = 0; i < BET_LEVELS.length; i++) {
-        const diff = Math.abs(BET_LEVELS[i] - currentBaseBet);
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          idx = i;
-        }
-      }
 
-      const newIdx = Math.max(0, Math.min(BET_LEVELS.length - 1, idx + direction));
+      const currentIdx = this.getClosestBetIndex(currentBaseBet);
+      const newIdx = Math.max(0, Math.min(BET_LEVELS.length - 1, currentIdx + direction));
       const previousBet = currentBaseBet;
       const newBet = BET_LEVELS[newIdx];
 
@@ -237,15 +225,7 @@ export class BetController {
     }
 
     // Find closest bet level index
-    let idx = 0;
-    let bestDiff = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < BET_LEVELS.length; i++) {
-      const diff = Math.abs(BET_LEVELS[i] - currentBet);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        idx = i;
-      }
-    }
+    const idx = this.getClosestBetIndex(currentBet);
 
     const minBet = BET_LEVELS[0] ?? 0.2;
     const isAtMin = idx === 0 || currentBet <= minBet + 1e-6;
@@ -455,5 +435,18 @@ export class BetController {
    */
   public getBetAmountText(): Phaser.GameObjects.Text | null {
     return this.betAmountText;
+  }
+
+  private getClosestBetIndex(currentBet: number): number {
+    let idx = 0;
+    let bestDiff = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < BET_LEVELS.length; i++) {
+      const diff = Math.abs(BET_LEVELS[i] - currentBet);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        idx = i;
+      }
+    }
+    return idx;
   }
 }

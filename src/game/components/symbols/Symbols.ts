@@ -181,6 +181,7 @@ export class Symbols {
   private reelDropInProgress: boolean = false;
   private tumbleDropInProgress: boolean = false;
   private readonly skipTweenTimeScale: number = 1;
+  private explosionVfxInProgress: number = 0;
 
   // Free spin autoplay state - delegate to controller
   public get freeSpinAutoplayActive(): boolean {
@@ -381,7 +382,23 @@ export class Symbols {
         }
 
         try {
-          this.scatterAnimationManager?.showRetriggerFreeSpinsDialog(5);
+          const currentRemaining = this.freeSpinController?.getSpinsRemaining?.() ?? 0;
+          const retriggerInfo = this.freeSpinController?.getRetriggerIncrementFromSpinData?.(this.currentSpinData) ?? {
+            added: 0,
+            spinsLeft: 0
+          };
+          const retriggerSpins = Math.max(0, retriggerInfo.added);
+          const newRemaining = retriggerSpins > 0 ? (currentRemaining + retriggerSpins) : Math.max(currentRemaining, retriggerInfo.spinsLeft);
+          if (newRemaining !== currentRemaining) {
+            this.freeSpinController?.setSpinsRemaining?.(newRemaining);
+          }
+          console.log('[Symbols] Retrigger spin count derived', {
+            currentRemaining,
+            retriggerSpins,
+            newRemaining,
+            spinsLeftFromSpinData: retriggerInfo.spinsLeft
+          });
+          this.scatterAnimationManager?.showRetriggerFreeSpinsDialog(retriggerSpins);
         } catch (e) {
           console.warn('[Symbols] Failed to show retrigger dialog:', e);
           this.scatterRetriggerAnimationInProgress = false;
@@ -936,15 +953,16 @@ export class Symbols {
     console.log('[Symbols] Retrigger animation completed');
   }
 
-  private showCongratsDialogAfterDelay(): void {
+  private async showCongratsDialogAfterDelay(): Promise<void> {
     console.log('[Symbols] Showing congrats dialog');
 
-    if (this.multiplierAnimationsInProgress) {
-      gameEventManager.once(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => {
-        this.showCongratsDialogAfterDelay();
-      });
+    if (this.hasPendingScatterRetrigger() || this.scatterRetriggerAnimationInProgress) {
+      console.log('[Symbols] Retrigger pending/in progress - skipping total win dialog');
+      try { gameStateManager.isBonusFinished = false; } catch { }
       return;
     }
+
+    await this.waitForAnimationsAndTumblesToFinish();
 
     const gameScene = this.scene as any;
     // If a win dialog is active, let it finish before showing total win.
@@ -954,7 +972,9 @@ export class Symbols {
       const winDialogShowing = dialogShowing && typeof dialogs.isWinDialog === 'function' && dialogs.isWinDialog();
       if (gameStateManager.isShowingWinDialog || winDialogShowing) {
         console.log('[Symbols] Win dialog active - deferring total win dialog until it closes');
-        return;
+        await new Promise<void>((resolve) => {
+          this.scene.events.once('dialogAnimationsComplete', () => resolve());
+        });
       }
     } catch { }
     if (gameScene.dialogs?.hideDialog && gameScene.dialogs.isDialogShowing()) {
@@ -3918,6 +3938,8 @@ export class Symbols {
       return;
     }
     if (!vfx) return;
+    this.explosionVfxInProgress += 1;
+    let explosionTracked = true;
 
     try { vfx.setOrigin?.(0.5, 0.5); } catch { }
     try { this.animationsModule.fitSpineToSymbolBox(vfx); } catch { }
@@ -3938,6 +3960,10 @@ export class Symbols {
       try {
         if (vfx && !vfx.destroyed) vfx.destroy();
       } catch { }
+      if (explosionTracked) {
+        explosionTracked = false;
+        this.explosionVfxInProgress = Math.max(0, this.explosionVfxInProgress - 1);
+      }
     };
 
     try {
@@ -4053,6 +4079,57 @@ export class Symbols {
     }
     if (typeof x !== 'number' || typeof y !== 'number') return null;
     return { x, y };
+  }
+
+  private async waitForAnimationsAndTumblesToFinish(maxWaitMs: number = 6000): Promise<void> {
+    if (!this.scene) return;
+    const isBusy = () =>
+      this.multiplierAnimationsInProgress ||
+      this.scatterRetriggerAnimationInProgress ||
+      this.tumbleInProgress ||
+      this.reelDropInProgress ||
+      this.tumbleDropInProgress ||
+      this.explosionVfxInProgress > 0;
+
+    if (!isBusy()) return;
+
+    await new Promise<void>((resolve) => {
+      const start = (this.scene.time as any)?.now ?? Date.now();
+      const poll = () => {
+        const now = (this.scene.time as any)?.now ?? Date.now();
+        if (now - start >= maxWaitMs) {
+          console.warn('[Symbols] waitForAnimationsAndTumblesToFinish timed out - continuing');
+          resolve();
+          return;
+        }
+        if (!isBusy()) {
+          resolve();
+          return;
+        }
+        this.scene.time.delayedCall(100, poll);
+      };
+      poll();
+    });
+  }
+
+  private getSpinsLeftFromSpinData(spinData: any): number {
+    try {
+      const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+      const items = Array.isArray(fs?.items) ? fs.items : [];
+      const positiveItem = items.find((it: any) => typeof it?.spinsLeft === 'number' && it.spinsLeft > 0);
+      const firstItemSpinsLeft = items.length > 0 && typeof items[0]?.spinsLeft === 'number'
+        ? items[0].spinsLeft
+        : 0;
+      const maxItemSpinsLeft = items.reduce((m: number, it: any) => {
+        const v = Number(it?.spinsLeft || 0);
+        return v > m ? v : m;
+      }, 0);
+      const countValue = typeof fs?.count === 'number' ? fs.count : 0;
+      const derivedSpinsLeft = Math.max(positiveItem?.spinsLeft ?? 0, firstItemSpinsLeft, maxItemSpinsLeft, 0);
+      return derivedSpinsLeft > 0 ? derivedSpinsLeft : Math.max(countValue, 0);
+    } catch {
+      return 0;
+    }
   }
 
   private showMultiplierOverlayAfterExplosion(baseObj: any): void {

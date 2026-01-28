@@ -2,28 +2,41 @@ Old_Filter_Overlay.webp
 size:1860,1860
 filter:Linear,Linear
 pma:false
-Old_Filter_00000
+Game Window2_00001
 bounds:2,930,428,926
-Old_Filter_00001
+Game Window2_00002
 bounds:2,2,428,926
-Old_Filter_00002
+Game Window2_00003
 bounds:432,930,428,926
-Old_Filter_00003
+Game Window2_00004
 bounds:432,2,428,926
-Old_Filter_00004
+Game Window2_00005
 bounds:862,930,428,926
-Old_Filter_00005
+Game Window2_00006
 bounds:862,2,428,926
-Old_Filter_00006
+Game Window2_00009
 bounds:1292,930,428,926
-Old_Filter_00007
+Game Window2_00010
 bounds:1292,2,428,926
 
 Old_Filter_Overlay_2.webp
-size:932,932
+size:1860,1860
 filter:Linear,Linear
 pma:false
-Old_Filter_00008
+Game Window2_00000
+bounds:862,930,427,926
+offsets:0,0,428,926
+Game Window2_00007
+bounds:1291,931,428,925
+offsets:0,1,428,926
+Game Window2_00008
+bounds:862,9,428,919
+offsets:0,6,428,926
+Game Window2_00011
+bounds:2,930,428,926
+Game Window2_00012
 bounds:2,2,428,926
-Old_Filter_00009
+Game Window2_00013
+bounds:432,930,428,926
+Game Window2_00014
 bounds:432,2,428,926

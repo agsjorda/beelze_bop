@@ -133,7 +133,6 @@ export class AutoplayController {
    */
   public createSpinsRemainingText(
     spinButton: Phaser.GameObjects.Image,
-    assetScale: number,
     primaryControllers: Phaser.GameObjects.Container
   ): void {
     this.autoplaySpinsRemainingText = this.scene.add.text(
@@ -157,8 +156,8 @@ export class AutoplayController {
    */
   public createStopIcon(
     spinButton: Phaser.GameObjects.Image,
-    assetScale: number,
-    primaryControllers: Phaser.GameObjects.Container
+    primaryControllers: Phaser.GameObjects.Container,
+    assetScale: number
   ): Phaser.GameObjects.Image {
     this.autoplayStopIcon = this.scene.add.image(
       spinButton.x,

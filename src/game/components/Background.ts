@@ -1,7 +1,6 @@
 import { Scene } from "phaser";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
-import { AssetConfig } from "../../config/AssetConfig";
 import { gameStateManager } from "../../managers/GameStateManager";
 import { ensureSpineFactory } from "../../utils/SpineGuard";
 
@@ -11,7 +10,6 @@ export class Background {
 	private screenModeManager: ScreenModeManager;
 	private normalBgCover: Phaser.GameObjects.Image | null = null;
 	private bgDefault: Phaser.GameObjects.Image | null = null;
-	private scene: Scene | null = null;
 	// ADJUST HERE (Spine background): manual scale multipliers.
 	// These affect the Spine background ONLY (NormalGame_BZ).
 	// The Spine now scales to fit WIDTH (no left/right cropping, same as BG-Default).
@@ -61,9 +59,6 @@ export class Background {
 	create(scene: Scene): void {
 		console.log("[Background] Creating background elements");
 
-		// Store scene reference
-		this.scene = scene;
-
 		// Create main container for all background elements
 		this.bgContainer = scene.add.container(0, 0);
 
@@ -109,12 +104,6 @@ export class Background {
 		this.createNormalGameSpine(scene, assetScale);
 		// Foreground overlay (Old Filter) sits above playfield
 		this.createForegroundOverlay(scene, assetScale);
-	}
-
-	private scaleImageToWidth(image: Phaser.GameObjects.Image, targetWidth: number): void {
-		const sourceWidth = image.width;
-		if (!sourceWidth) return;
-		image.setScale(targetWidth / sourceWidth);
 	}
 
 	/**
@@ -186,65 +175,16 @@ export class Background {
 			console.log('[Background] NormalGame_BZ Spine animation created successfully');
 		} catch (error) {
 			console.error('[Background] Error creating NormalGame_BZ Spine animation:', error);
-		// If Spine fails, keep the BG-Default fallback visible.
-		if (this.bgDefault) {
-			this.bgDefault.setVisible(true);
+			// If Spine fails, keep the BG-Default fallback visible.
+			if (this.bgDefault) {
+				this.bgDefault.setVisible(true);
+			}
+			this.normalGameSpine = null;
 		}
-		this.normalGameSpine = null;
 	}
-}
 
-private fitSpineContain(scene: Scene, spineObj: any, targetWidth: number, targetHeight: number): void {
-	try {
-		console.log(`[Background] fitSpineContain called, targetWidth=${targetWidth}, targetHeight=${targetHeight}`);
-		
-		if (!spineObj || typeof spineObj.getBounds !== 'function') {
-			console.warn('[Background] fitSpineContain: Spine object invalid or no getBounds');
-			return;
-		}
 
-		// RESET to scale 1 first to get true bounds, then calculate target scale.
-		spineObj.setScale(1, 1);
-		const baseBounds = spineObj.getBounds();
-		const baseWidth = Number(baseBounds?.width ?? 0);
-		const baseHeight = Number(baseBounds?.height ?? 0);
-		console.log(`[Background] Spine base bounds at scale 1: width=${baseWidth.toFixed(1)}, height=${baseHeight.toFixed(1)}`);
-		
-		if (!Number.isFinite(baseWidth) || baseWidth <= 0) {
-			console.warn('[Background] fitSpineContain: Invalid base width:', baseWidth);
-			return;
-		}
-		if (!Number.isFinite(baseHeight) || baseHeight <= 0) {
-			console.warn('[Background] fitSpineContain: Invalid base height:', baseHeight);
-			return;
-		}
-
-		// FIT TO WIDTH: scale the Spine to match screen width (preserves aspect, no left/right crop).
-		// ADJUST HERE (Spine background): change `spineContainFitMultiplier` at the top to zoom in/out.
-		// Values < 1 zoom out (show more), > 1 zoom in (may crop top/bottom).
-		const scaleFactor = targetWidth / baseWidth; // Fit to width only
-		if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
-			console.warn('[Background] fitSpineContain: Invalid scale factor:', scaleFactor);
-			return;
-		}
-		const tweak = Phaser.Math.Clamp(this.spineContainFitMultiplier, 0.25, 2);
-		const finalScale = scaleFactor * tweak;
-		spineObj.setScale(finalScale, finalScale);
-
-		// Recenter using bounds (more reliable than origin for Spine).
-		const boundsAfterScale = spineObj.getBounds();
-		const dx = (targetWidth * 0.5) - Number(boundsAfterScale?.centerX ?? targetWidth * 0.5);
-		const dy = (targetHeight * 0.5) - Number(boundsAfterScale?.centerY ?? targetHeight * 0.5);
-		if (Number.isFinite(dx)) spineObj.x += dx;
-		if (Number.isFinite(dy)) spineObj.y += dy;
-
-		console.log(`[Background] Spine final scale: ${finalScale.toFixed(3)} (width-fit: ${scaleFactor.toFixed(3)} * multiplier: ${tweak})`);
-	} catch (e) {
-		console.warn('[Background] fitSpineContain failed:', e);
-	}
-}
-
-	//adjustments for the background layout
+	// adjustments for the background layout
 	private layout(scene: Scene): void {
 		const width = scene.scale.width;
 		const height = scene.scale.height;
@@ -262,15 +202,16 @@ private fitSpineContain(scene: Scene, spineObj: any, targetWidth: number, target
 		}
 
 		if (this.normalGameSpine) {
-		this.normalGameSpine.setPosition(width * 0.5, 0);
-		// ADJUST HERE (Spine background): Direct width-based scaling.
-		// The Spine reference width is 428px (full canvas width at 1x asset scale).
-		// Change `spineContainFitMultiplier` at the top to zoom in/out (0.8 = 80% of width).
-		const referenceWidth = 428; // Known reference width for this Spine at scale 1
-		const baseScale = width / referenceWidth; // Scale to fit current canvas width
-		const finalScale = baseScale * Phaser.Math.Clamp(this.spineContainFitMultiplier, 0.1, 3);
-		this.normalGameSpine.setScale(finalScale);
-		console.log(`[Background] Spine scaled to ${finalScale.toFixed(3)} (base: ${baseScale.toFixed(3)} * multiplier: ${this.spineContainFitMultiplier})`);	}
+			this.normalGameSpine.setPosition(width * 0.5, 0);
+			// ADJUST HERE (Spine background): Direct width-based scaling.
+			// The Spine reference width is 428px (full canvas width at 1x asset scale).
+			// Change `spineContainFitMultiplier` at the top to zoom in/out (0.8 = 80% of width).
+			const referenceWidth = 428; // Known reference width for this Spine at scale 1
+			const baseScale = width / referenceWidth; // Scale to fit current canvas width
+			const finalScale = baseScale * Phaser.Math.Clamp(this.spineContainFitMultiplier, 0.1, 3);
+			this.normalGameSpine.setScale(finalScale);
+			console.log(`[Background] Spine scaled to ${finalScale.toFixed(3)} (base: ${baseScale.toFixed(3)} * multiplier: ${this.spineContainFitMultiplier})`);
+		}
 		if (this.normalBgCover) {
 			// Height adjuster (percentage): change `coverHeightPercentOfScene` above.
 			// this.coverHeightPercentOfScene = 0.45; //adjust normal bg cover height
@@ -323,7 +264,7 @@ private fitSpineContain(scene: Scene, spineObj: any, targetWidth: number, target
 			try {
 				const state: any = this.oldFilterOverlay.animationState;
 				if (state && typeof state.setAnimation === 'function') {
-					state.setAnimation(0, 'Overlay', true);
+					state.setAnimation(0, 'Old_Filter_Overlay', true);
 					state.timeScale = 0.2; // Adjust speed overlay animation speed
 					console.log('[Background] Playing Old_Filter_Overlay animation');
 				}
