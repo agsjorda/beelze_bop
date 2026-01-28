@@ -11,7 +11,7 @@ import { UI_CONFIG, WIN_THRESHOLDS, TIMING_CONFIG } from '../../config/GameConfi
 import { Logger } from '../../utils/Logger';
 
 export interface DialogConfig {
-	type: 'Congrats_BZ' | 'FreeSpin_BZ' | 'BigW_BZ' | 'MegaW_BZ' | 'EpicW_BZ' | 'SuperW_BZ' | 'TotalW_BZ';
+	type: 'Congrats_BZ' | 'FreeSpin_BZ' | 'FreeSpinRetri_BZ' | 'BigW_BZ' | 'MegaW_BZ' | 'EpicW_BZ' | 'SuperW_BZ' | 'TotalW_BZ';
 	position?: { x: number; y: number };
 	scale?: number;
 	// Non-uniform scale/offsets are intended for TotalW_BZ only.
@@ -54,8 +54,10 @@ export class Dialogs {
 
 	// Current dialog state
 	private currentDialog: any = null; // Spine object type
+	private currentDialogOverlay: any = null; // Optional overlay spine (e.g., TotalW_BZ notes)
 	private isDialogActive: boolean = false;
 	private currentDialogType: string | null = null;
+	private currentDialogAssetType: DialogConfig['type'] | null = null;
 	private isRetriggerFreeSpin: boolean = false; // Tracks if current FreeSpinDialog is a retrigger
 
 	// Auto-close timer for win dialogs during autoplay
@@ -86,6 +88,7 @@ export class Dialogs {
 	private dialogScales: Record<string, number> = {
 		'Congrats_BZ': 0.45,
 		'FreeSpin_BZ': 0.45,
+		'FreeSpinRetri_BZ': 0.45,
 		'BigW_BZ': 0.45,
 		'MegaW_BZ': 0.45,
 		'EpicW_BZ': 0.45,
@@ -102,11 +105,12 @@ export class Dialogs {
 	private dialogPositions: Record<string, { x: number; y: number }> = {
 		'Congrats_BZ': { x: 0.5, y: 0.4 },
 		'FreeSpin_BZ': { x: 0.5, y: 0.4 },
+		'FreeSpinRetri_BZ': { x: 0.5, y: 0.4 },
 		'BigW_BZ': { x: 0.5, y: 0.4 },
 		'MegaW_BZ': { x: 0.5, y: 0.4 },
 		'EpicW_BZ': { x: 0.5, y: 0.4 },
 		'SuperW_BZ': { x: 0.5, y: 0.4 },
-		'TotalW_BZ': { x: 0.5, y: 0.33 }
+		'TotalW_BZ': { x: 0.5, y: 0.4 }
 	};
 
 	// Adjust TotalW_BZ XY offset
@@ -122,6 +126,7 @@ export class Dialogs {
 	private dialogLoops: Record<string, boolean> = {
 		'Congrats_BZ': true,
 		'FreeSpin_BZ': true,
+		'FreeSpinRetri_BZ': true,
 		'BigW_BZ': true,
 		'MegaW_BZ': true,
 		'EpicW_BZ': true,
@@ -189,6 +194,9 @@ export class Dialogs {
 
 		const dialogType = this.normalizeDialogType(config.type);
 		const normalizedConfig: DialogConfig = { ...config, type: dialogType };
+		if (normalizedConfig.type === 'FreeSpin_BZ' && normalizedConfig.isRetrigger) {
+			normalizedConfig.type = 'FreeSpinRetri_BZ';
+		}
 		if (dialogType !== config.type) {
 			console.log(`[Dialogs] Normalized dialog type: ${config.type} -> ${dialogType}`);
 		}
@@ -202,7 +210,9 @@ export class Dialogs {
 		// Track current dialog type for bonus mode detection
 		this.currentDialogType = normalizedConfig.type;
 		// Track retrigger state only for Free Spin dialog
-		this.isRetriggerFreeSpin = (normalizedConfig.type === 'FreeSpin_BZ') ? !!normalizedConfig.isRetrigger : false;
+		this.isRetriggerFreeSpin = (normalizedConfig.type === 'FreeSpin_BZ' || normalizedConfig.type === 'FreeSpinRetri_BZ')
+			? !!normalizedConfig.isRetrigger || normalizedConfig.type === 'FreeSpinRetri_BZ'
+			: false;
 
 		// If this is a win dialog, mark global state so autoplay systems can wait
 		try {
@@ -213,7 +223,7 @@ export class Dialogs {
 
 		// Debug dialog type detection
 		console.log(`[Dialogs] Dialog type: ${normalizedConfig.type}, isWinDialog(): ${this.isWinDialog()}`);
-		if (this.currentDialogType === 'FreeSpin_BZ') {
+		if (this.currentDialogType === 'FreeSpin_BZ' || this.currentDialogType === 'FreeSpinRetri_BZ') {
 			console.log('[Dialogs] FreeSpinDialog retrigger state:', this.isRetriggerFreeSpin);
 		}
 
@@ -230,7 +240,7 @@ export class Dialogs {
 		}
 
 		// If free spin dialog is appearing, clear any prior suppression to allow showing again
-		if (normalizedConfig.type === 'FreeSpin_BZ') {
+		if (normalizedConfig.type === 'FreeSpin_BZ' || normalizedConfig.type === 'FreeSpinRetri_BZ') {
 			try {
 				const gameSceneAny = scene as any;
 				const slotController = gameSceneAny?.slotController;
@@ -375,7 +385,7 @@ export class Dialogs {
 
 		// Play win dialog SFX at the correct time (after staged setup decides the first tier)
 		try {
-			if (this.isWinDialog()) {
+			if (this.isWinDialog() || this.currentDialogType === 'TotalW_BZ') {
 				const audioManager = (window as any).audioManager;
 				// Always duck background while a win dialog is visible
 				if (audioManager && typeof audioManager.duckBackground === 'function') {
@@ -429,6 +439,13 @@ export class Dialogs {
 		return { intro: idleName, idle: idleName };
 	}
 
+	private getOverlayAnimationNameForDialogType(dialogType: string): string | null {
+		if (dialogType === 'TotalW_BZ') {
+			return 'animation';
+		}
+		return null;
+	}
+
 	/**
 	 * Create the main dialog content (FreeSpin_BZ, EpicW_BZ, etc.)
 	 */
@@ -437,6 +454,10 @@ export class Dialogs {
 		if (this.currentDialog) {
 			this.currentDialog.destroy();
 			this.currentDialog = null;
+		}
+		if (this.currentDialogOverlay) {
+			this.currentDialogOverlay.destroy();
+			this.currentDialogOverlay = null;
 		}
 
 		const isTotalWinDialog = this.isTotalWinDialogType(config.type);
@@ -478,6 +499,7 @@ export class Dialogs {
 				assetKey,
 				atlasKey
 			);
+			this.currentDialogAssetType = config.type;
 			this.currentDialog.setOrigin(0.5, 0.5);
 
 			if (isTotalWinDialog) {
@@ -544,6 +566,39 @@ export class Dialogs {
 
 		// Add directly to dialog overlay so it shares the same layer as number display
 		this.dialogOverlay.add(this.currentDialog);
+		if (isTotalWinDialog) {
+			const overlayAnimation = this.getOverlayAnimationNameForDialogType(config.type);
+			if (overlayAnimation) {
+				try {
+					const overlayKey = 'TotalW_BZ_meow';
+					const overlayAtlasKey = 'TotalW_BZ-atlas';
+					this.currentDialogOverlay = scene.add.spine(
+						position.x,
+						position.y,
+						overlayKey,
+						overlayAtlasKey
+					);
+					this.currentDialogOverlay.setOrigin(0.5, 0.5);
+					this.currentDialogOverlay.setScale(scaleX, scaleY);
+					this.currentDialogOverlay.setDepth(104);
+					if (this.currentDialogOverlay.animationState) {
+						this.currentDialogOverlay.animationState.setAnimation(0, overlayAnimation, true);
+					}
+					this.dialogOverlay.add(this.currentDialogOverlay);
+					this.dialogOverlay.bringToTop(this.currentDialogOverlay);
+				} catch (overlayError) {
+					console.warn('[Dialogs] Failed to create TotalW_BZ overlay animation', overlayError);
+					this.currentDialogOverlay = null;
+				}
+			}
+		}
+		// Ensure number displays stay above dialog content even if we recreate the dialog (staged wins)
+		if (this.numberDisplayContainer) {
+			this.dialogOverlay.bringToTop(this.numberDisplayContainer);
+		}
+		if (this.congratsFreeSpinsContainer) {
+			this.dialogOverlay.bringToTop(this.congratsFreeSpinsContainer);
+		}
 
 		console.log(`[Dialogs] Created dialog content: ${config.type}`);
 	}
@@ -584,7 +639,7 @@ export class Dialogs {
 		}
 
 		// Also auto-close FreeSpinDialog when it's a retrigger during bonus mode
-		const isRetriggerFreeSpinDialog = (this.currentDialogType === 'FreeSpin_BZ') && this.isRetriggerFreeSpin;
+		const isRetriggerFreeSpinDialog = (this.currentDialogType === 'FreeSpin_BZ' || this.currentDialogType === 'FreeSpinRetri_BZ') && this.isRetriggerFreeSpin;
 		const shouldAutoClose = (this.isWinDialog() && (gameStateManager.isAutoPlaying || isFreeSpinAutoplay || gameStateManager.isScatter))
 			|| isRetriggerFreeSpinDialog;
 
@@ -728,6 +783,20 @@ export class Dialogs {
 		numberDisplay.create(scene);
 		// Display free spins if provided, otherwise display win amount
 		const displayValue = freeSpins !== undefined ? freeSpins : winAmount;
+		// Pre-measure for Total Win so the value doesn't overflow the screen
+		numberDisplay.displayValue(displayValue);
+		if (isTotalWinDialog) {
+			try {
+				const bounds = numberDisplay.getContainer().getBounds();
+				const maxWidth = scene.scale.width * 0.82;
+				if (bounds.width > maxWidth) {
+					const baseScale = numberConfig.scale ?? 0.3;
+					const scaleFactor = maxWidth / bounds.width;
+					const newScale = Math.max(0.18, baseScale * scaleFactor);
+					numberDisplay.setScale(newScale);
+				}
+			} catch { }
+		}
 		// Start from 0 (or current) and animate on fade-in
 		numberDisplay.displayValue(0);
 		this.numberDisplay = numberDisplay;
@@ -735,14 +804,16 @@ export class Dialogs {
 
 		// Create container for number display
 		this.numberDisplayContainer = scene.add.container(0, 0);
-		this.numberDisplayContainer.setDepth(103);
+		this.numberDisplayContainer.setDepth((this.dialogOverlay?.depth ?? 12000) + 10);
 		this.numberDisplayContainer.add(numberDisplay.getContainer());
 
 		// Start with alpha 0 (invisible) - will be faded in after delay
 		this.numberDisplayContainer.setAlpha(0);
 
-		// Add to dialog overlay
+		// Add to dialog overlay and ensure it's on top of dialog content
 		this.dialogOverlay.add(this.numberDisplayContainer);
+		this.dialogOverlay.bringToTop(this.numberDisplayContainer);
+		this.numberDisplayContainer.bringToTop(numberDisplay.getContainer());
 
 		console.log('[Dialogs] Created number display');
 	}
@@ -801,7 +872,7 @@ export class Dialogs {
 		const defaultY = scene.scale.height / 2 - 50;
 		if (!dialogType) return defaultY;
 
-		if (dialogType === 'FreeSpin_BZ') {
+		if (dialogType === 'FreeSpin_BZ' || dialogType === 'FreeSpinRetri_BZ') {
 			return this.numberYFreeSpin ?? defaultY;
 		}
 
@@ -997,6 +1068,13 @@ export class Dialogs {
 				console.log('[Dialogs] Current dialog Spine animation cleared');
 			}
 		}
+		if (this.currentDialogOverlay) {
+			this.currentDialogOverlay.setVisible(false);
+			this.currentDialogOverlay.setAlpha(0);
+			if (this.currentDialogOverlay.animationState) {
+				this.currentDialogOverlay.animationState.clearTracks();
+			}
+		}
 
 		// Hide continue text immediately
 		if (this.continueText) {
@@ -1143,7 +1221,7 @@ export class Dialogs {
 		}
 
 		// Check if this is a free spin dialog - use candy transition
-		if (this.currentDialogType === 'FreeSpin_BZ') {
+		if (this.currentDialogType === 'FreeSpin_BZ' || this.currentDialogType === 'FreeSpinRetri_BZ') {
 			// On retrigger, skip candy transition, use normal transition to avoid extra animation
 			if (this.isRetriggerFreeSpin) {
 				console.log('[Dialogs] Free spin dialog (retrigger) clicked - skipping all transitions and disabling immediately');
@@ -1323,7 +1401,7 @@ export class Dialogs {
 				this.cleanupDialog();
 
 				// Check if we need to trigger bonus mode while screen is black
-				if (dialogTypeBeforeCleanup === 'FreeSpin_BZ') {
+				if (dialogTypeBeforeCleanup === 'FreeSpin_BZ' || dialogTypeBeforeCleanup === 'FreeSpinRetri_BZ') {
 					console.log('[Dialogs] Triggering bonus mode during black screen');
 					this.triggerBonusMode(scene);
 
@@ -1487,6 +1565,9 @@ export class Dialogs {
 				console.log('[Dialogs] Current dialog alpha property type:', typeof this.currentDialog.alpha);
 			}
 		}
+		if (this.currentDialogOverlay) {
+			console.log('[Dialogs] Current dialog overlay found - will be controlled manually during fade-out');
+		}
 
 		// Add number display if it exists
 		if (this.numberDisplayContainer) {
@@ -1542,6 +1623,10 @@ export class Dialogs {
 					const targetAlpha = 1 - tween.progress; // Calculate target alpha based on progress
 					this.currentDialog.setAlpha(targetAlpha);
 					console.log(`[Dialogs] Manual Spine alpha update: ${targetAlpha.toFixed(2)}`);
+				}
+				if (this.currentDialogOverlay && this.currentDialogOverlay.animationState) {
+					const targetAlpha = 1 - tween.progress;
+					this.currentDialogOverlay.setAlpha(targetAlpha);
 				}
 			},
 			onComplete: () => {
@@ -1641,7 +1726,7 @@ export class Dialogs {
 	 * Check if we should trigger bonus mode based on current dialog type
 	 */
 	private shouldTriggerBonusMode(): boolean {
-		return this.currentDialogType === 'FreeSpin_BZ';
+		return this.currentDialogType === 'FreeSpin_BZ' || this.currentDialogType === 'FreeSpinRetri_BZ';
 	}
 
 	/**
@@ -1718,6 +1803,11 @@ export class Dialogs {
 			console.log('[Dialogs] Destroying current dialog');
 			this.currentDialog.destroy();
 			this.currentDialog = null;
+		}
+		if (this.currentDialogOverlay) {
+			console.log('[Dialogs] Destroying current dialog overlay');
+			this.currentDialogOverlay.destroy();
+			this.currentDialogOverlay = null;
 		}
 
 		// Clean up continue text
@@ -1957,6 +2047,14 @@ export class Dialogs {
 			const firstStage = this.stagedWinStages[0];
 			this.currentDialogType = firstStage.type;
 
+			// If we loaded the final tier asset, recreate the dialog for the first staged tier
+			if (this.currentDialogAssetType !== firstStage.type) {
+				const sceneRef = this.currentScene;
+				if (sceneRef) {
+					this.createDialogContent(sceneRef, { type: firstStage.type });
+				}
+			}
+
 			if (this.currentDialog && this.currentDialog.animationState) {
 				const animations = this.getAnimationNameForDialogType(firstStage.type);
 				if (animations) {
@@ -2041,6 +2139,18 @@ export class Dialogs {
 
 		this.stagedWinCurrentStageIndex = index;
 		const stage = this.stagedWinStages[index];
+
+		// Ensure the staged tier uses the correct dialog asset (BZ uses separate Spine assets per tier)
+		if (!this.currentDialog || this.currentDialogAssetType !== stage.type) {
+			try {
+				this.currentDialogType = stage.type;
+				this.createDialogContent(scene, { type: stage.type });
+			} catch (e) {
+				console.warn('[Dialogs] Staged win: failed to recreate dialog content for stage', stage.type, e);
+			}
+		} else {
+			this.currentDialogType = stage.type;
+		}
 
 		console.log('[Dialogs] Staged win: running stage', {
 			index,

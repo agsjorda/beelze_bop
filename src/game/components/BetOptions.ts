@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
+import { ensureSpineFactory } from "../../utils/SpineGuard";
 
 export interface BetOptionsConfig {
 	position?: { x: number; y: number };
@@ -8,6 +9,8 @@ export interface BetOptionsConfig {
 	onClose?: () => void;
 	onConfirm?: (betAmount: number) => void;
 	currentBet?: number;
+	currentBetDisplay?: number;
+	isEnhancedBet?: boolean;
 }
 
 export class BetOptions {
@@ -17,6 +20,8 @@ export class BetOptions {
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentBet: number = 240.00;
+	private isEnhancedBet: boolean = false;
+	private betDisplayMultiplier: number = 1;
 	private betOptions: number[] = [
 		0.2, 0.4, 0.6, 0.8, 1,
 		1.2, 1.6, 2, 2.4, 2.8,
@@ -32,6 +37,7 @@ export class BetOptions {
 	private betDisplay: Phaser.GameObjects.Text;
 	private minusButton: Phaser.GameObjects.Text;
 	private plusButton: Phaser.GameObjects.Text;
+	private enhanceBetIdleAnimation: any = null;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (betAmount: number) => void;
 
@@ -58,6 +64,9 @@ export class BetOptions {
 		
 		// Create bet input section
 		this.createBetInput(scene);
+		
+		// Create enhanced bet animation
+		this.createEnhanceBetAnimation(scene);
 		
 		// Create confirm button
 		this.createConfirmButton(scene);
@@ -166,15 +175,17 @@ export class BetOptions {
 		(container as any).buttonBg = buttonBg;
 		(container as any).buttonValue = value;
 		(container as any).buttonIndex = index;
+		(container as any).buttonWidth = width;
 		
 		// Button text
 		const buttonText = scene.add.text(width/2, height/2, value.toString(), {
-			fontSize: '24px',
+			fontSize: '22px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		});
 		buttonText.setOrigin(0.5, 0.5);
 		container.add(buttonText);
+		(container as any).buttonText = buttonText;
 		
 		// Make interactive
 		container.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
@@ -244,6 +255,63 @@ export class BetOptions {
 			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
+	}
+
+	private createEnhanceBetAnimation(scene: Scene): void {
+		try {
+			if (!ensureSpineFactory(scene, '[BetOptions] createEnhanceBetAnimation')) {
+				return;
+			}
+
+			if (!scene.cache.json.has('enhance_bet_idle_on')) {
+				console.warn('[BetOptions] enhance_bet_idle_on spine assets not loaded');
+				return;
+			}
+
+			const betX = scene.scale.width * 0.5;
+			const betY = scene.scale.height * 0.5 + 240;
+			const animationOffsetX = -10;
+			const animationOffsetY = 0;
+
+			this.enhanceBetIdleAnimation = scene.add.spine(
+				betX + animationOffsetX,
+				betY + animationOffsetY,
+				'enhance_bet_idle_on',
+				'enhance_bet_idle_on-atlas'
+			);
+			this.enhanceBetIdleAnimation.setOrigin(0.5, 0.5);
+			this.enhanceBetIdleAnimation.setScale(2.94, 1.35);
+			this.enhanceBetIdleAnimation.setDepth(2001);
+			this.enhanceBetIdleAnimation.setVisible(false);
+
+			this.container.add(this.enhanceBetIdleAnimation);
+		} catch (error) {
+			console.error('[BetOptions] Failed to create enhance bet idle animation:', error);
+		}
+	}
+
+	private showEnhanceBetIdleLoop(): void {
+		if (!this.enhanceBetIdleAnimation) {
+			return;
+		}
+		this.enhanceBetIdleAnimation.setVisible(true);
+		const idleName = 'animation';
+		if (this.enhanceBetIdleAnimation.skeleton?.data.findAnimation(idleName)) {
+			this.enhanceBetIdleAnimation.animationState.setAnimation(0, idleName, true);
+		} else {
+			const animations = this.enhanceBetIdleAnimation.skeleton?.data.animations || [];
+			if (animations.length > 0) {
+				this.enhanceBetIdleAnimation.animationState.setAnimation(0, animations[0].name, true);
+			}
+		}
+	}
+
+	private hideEnhanceBetIdleLoop(): void {
+		if (!this.enhanceBetIdleAnimation) {
+			return;
+		}
+		this.enhanceBetIdleAnimation.animationState.clearTracks();
+		this.enhanceBetIdleAnimation.setVisible(false);
 	}
 
 	private createConfirmButton(scene: Scene): void {
@@ -316,9 +384,75 @@ export class BetOptions {
 
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
+			const multiplier = Number.isFinite(this.betDisplayMultiplier) && this.betDisplayMultiplier > 0 ? this.betDisplayMultiplier : 1;
+			const displayBet = this.currentBet * multiplier;
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencySymbol = isDemo ? '' : '$';
-			this.betDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
+			this.betDisplay.setText(`${currencySymbol}${displayBet.toFixed(2)}`);
+		}
+	}
+
+	private updateBetOptionButtonLabels(): void {
+		const multiplier = Number.isFinite(this.betDisplayMultiplier) && this.betDisplayMultiplier > 0
+			? this.betDisplayMultiplier
+			: 1;
+		const isEnhanced = multiplier > 1.0001;
+		const baseFontSize = 22;
+		const minFontSizeAllowed = 14;
+		const horizontalPadding = 8;
+		let smallestFontSize = baseFontSize;
+
+		for (const container of this.betButtons) {
+			const baseValue = (container as any).buttonValue as number | undefined;
+			const textObj = (container as any).buttonText as Phaser.GameObjects.Text | undefined;
+			if (!textObj || typeof baseValue !== 'number') continue;
+			const displayValue = baseValue * multiplier;
+			textObj.setText(this.formatBetValue(displayValue));
+
+			if (!isEnhanced) {
+				continue;
+			}
+
+			const buttonWidth = (container as any).buttonWidth as number | undefined;
+			const maxTextWidth = Math.max(0, (buttonWidth ?? 60) - horizontalPadding);
+			let size = baseFontSize;
+			textObj.setFontSize(size);
+			while (textObj.width > maxTextWidth && size > minFontSizeAllowed) {
+				size -= 1;
+				textObj.setFontSize(size);
+			}
+			if (size < smallestFontSize) {
+				smallestFontSize = size;
+			}
+		}
+
+		if (isEnhanced) {
+			for (const container of this.betButtons) {
+				const textObj = (container as any).buttonText as Phaser.GameObjects.Text | undefined;
+				if (!textObj) continue;
+				textObj.setFontSize(smallestFontSize);
+			}
+		}
+	}
+
+	private formatBetValue(value: number): string {
+		const rounded = Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+		return Number.isFinite(rounded) ? rounded.toString() : value.toString();
+	}
+
+	public setEnhancedBetState(isEnhanced: boolean, displayBet?: number, baseBet?: number): void {
+		this.isEnhancedBet = isEnhanced;
+		if (typeof displayBet === 'number' && typeof baseBet === 'number' && baseBet > 0) {
+			this.betDisplayMultiplier = displayBet / baseBet;
+		} else {
+			this.betDisplayMultiplier = isEnhanced ? 1.25 : 1;
+		}
+		this.updateBetOptionButtonLabels();
+		this.updateBetDisplay();
+		if (this.isEnhancedBet) {
+			this.showEnhanceBetIdleLoop();
+		} else {
+			this.hideEnhanceBetIdleLoop();
 		}
 	}
 
@@ -339,9 +473,23 @@ export class BetOptions {
 			if (config.currentBet !== undefined) {
 				this.currentBet = config.currentBet;
 			}
+			if (config.currentBetDisplay !== undefined && this.currentBet > 0) {
+				this.betDisplayMultiplier = config.currentBetDisplay / this.currentBet;
+			} else {
+				this.betDisplayMultiplier = 1;
+			}
+			if (config.isEnhancedBet !== undefined) {
+				this.isEnhancedBet = config.isEnhancedBet;
+			}
 			this.onCloseCallback = config.onClose;
 			this.onConfirmCallback = config.onConfirm;
 		}
+
+		if (this.betDisplayMultiplier === 1 && this.isEnhancedBet) {
+			this.betDisplayMultiplier = 1.25;
+		}
+
+		this.updateBetOptionButtonLabels();
 		
 		// Find and select the button that matches the current bet
 		const matchingIndex = this.betOptions.findIndex(option => Math.abs(option - this.currentBet) < 0.01);
@@ -363,6 +511,11 @@ export class BetOptions {
 		}
 		
 		this.updateBetDisplay();
+		if (this.isEnhancedBet) {
+			this.showEnhanceBetIdleLoop();
+		} else {
+			this.hideEnhanceBetIdleLoop();
+		}
 		
 		// Start positioned below the screen for slide-up effect
 		this.container.setY(this.container.scene.scale.height);
@@ -387,6 +540,7 @@ export class BetOptions {
 
 	hide(): void {
 		this.container.setVisible(false);
+		this.hideEnhanceBetIdleLoop();
 		
 		// Hide the mask when the panel is hidden
 		if (this.confirmButtonMask) {

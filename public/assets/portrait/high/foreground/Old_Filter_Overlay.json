@@ -1,0 +1,69 @@
+{
+    "skeleton": {
+        "hash": "bLmdtVIvKx0",
+        "spine": "4.2.43",
+        "x": -214,
+        "y": -463,
+        "width": 428,
+        "height": 926,
+        "images": "./PNG Sequencer/Game Window/",
+        "audio": "./audio"
+    },
+    "bones": [
+        {
+            "name": "root"
+        },
+        {
+            "name": "Old_Filter_Overlay",
+            "parent": "root"
+        }
+    ],
+    "slots": [
+        {
+            "name": "Old_Filter_Overlay",
+            "bone": "Old_Filter_Overlay",
+            "attachment": "Game Window2_"
+        }
+    ],
+    "skins": [
+        {
+            "name": "default",
+            "attachments": {
+                "Old_Filter_Overlay": {
+                    "Game Window2_": {
+                        "width": 428,
+                        "height": 926,
+                        "sequence": {
+                            "count": 15,
+                            "start": 0,
+                            "digits": 5
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "animations": {
+        "Old_Filter_Overlay": {
+            "attachments": {
+                "default": {
+                    "Old_Filter_Overlay": {
+                        "Game Window2_": {
+                            "sequence": [
+                                {
+                                    "mode": "loop",
+                                    "delay": 0.0417
+                                },
+                                {
+                                    "time": 0.6,
+                                    "mode": "loop",
+                                    "index": 14
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -7242,6 +7242,11 @@
                     ]
                 },
                 "PAW SIGN": {
+                    "attachment": [
+                        {
+                            "name": "PAW SIGN"
+                        }
+                    ],
                     "rgba": [
                         {
                             "color": "ffffff00",

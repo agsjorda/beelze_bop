@@ -275,12 +275,10 @@ export class SymbolFactory {
       // Fit to symbol box then apply multiplier visual boost
       this.animations.fitSpineToSymbolBox(spineObj);
       try {
-        if (!gameStateManager.isBonus && !gameStateManager.isBuyFeatureSpin) {
-          const baseX = (spineObj as any)?.scaleX ?? 1;
-          const baseY = (spineObj as any)?.scaleY ?? 1;
-          if (typeof spineObj.setScale === 'function') {
-            spineObj.setScale(baseX * MULTIPLIER_VISUAL_SCALE, baseY * MULTIPLIER_VISUAL_SCALE);
-          }
+        const baseX = (spineObj as any)?.scaleX ?? 1;
+        const baseY = (spineObj as any)?.scaleY ?? 1;
+        if (typeof spineObj.setScale === 'function') {
+          spineObj.setScale(baseX * MULTIPLIER_VISUAL_SCALE, baseY * MULTIPLIER_VISUAL_SCALE);
         }
       } catch { /* ignore */ }
       

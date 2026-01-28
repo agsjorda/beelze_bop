@@ -31,12 +31,17 @@ export class AutoplayController {
   private autoplayButtonAnimation: any = null;
   private autoplaySpinsRemainingText: Phaser.GameObjects.Text | null = null;
   private autoplayStopIcon: Phaser.GameObjects.Image | null = null;
+  private autoplayButtonTextureOn: string | null = null;
+  private autoplayButtonTextureOff: string | null = null;
+  private uiContainer: Phaser.GameObjects.Container | null = null;
   
   // State
   private autoplaySpinsRemaining: number = 0;
   private autoplayTimer: Phaser.Time.TimerEvent | null = null;
   private isFreeRoundAutoplay: boolean = false;
   private hasDecrementedAutoplayForCurrentSpin: boolean = false;
+  private isManagingAutoplay: boolean = false;
+  private showBaseUi: boolean = true;
 
   constructor(
     scene: Scene,
@@ -93,11 +98,41 @@ export class AutoplayController {
   }
 
   /**
+   * Attach already-created UI elements (SlotController-managed)
+   */
+  public attachUiElements(options: {
+    button?: Phaser.GameObjects.Image | null;
+    stopIcon?: Phaser.GameObjects.Image | null;
+    spinsText?: Phaser.GameObjects.Text | null;
+    buttonTextureOn?: string;
+    buttonTextureOff?: string;
+    uiContainer?: Phaser.GameObjects.Container | null;
+  }): void {
+    if (options.button !== undefined) {
+      this.autoplayButton = options.button;
+    }
+    if (options.stopIcon !== undefined) {
+      this.autoplayStopIcon = options.stopIcon;
+    }
+    if (options.spinsText !== undefined) {
+      this.autoplaySpinsRemainingText = options.spinsText;
+    }
+    if (options.buttonTextureOn) {
+      this.autoplayButtonTextureOn = options.buttonTextureOn;
+    }
+    if (options.buttonTextureOff) {
+      this.autoplayButtonTextureOff = options.buttonTextureOff;
+    }
+    if (options.uiContainer !== undefined) {
+      this.uiContainer = options.uiContainer;
+    }
+  }
+
+  /**
    * Create autoplay spins remaining text
    */
   public createSpinsRemainingText(
     spinButton: Phaser.GameObjects.Image,
-    assetScale: number,
     primaryControllers: Phaser.GameObjects.Container
   ): void {
     this.autoplaySpinsRemainingText = this.scene.add.text(
@@ -121,8 +156,8 @@ export class AutoplayController {
    */
   public createStopIcon(
     spinButton: Phaser.GameObjects.Image,
-    assetScale: number,
-    primaryControllers: Phaser.GameObjects.Container
+    primaryControllers: Phaser.GameObjects.Container,
+    assetScale: number
   ): Phaser.GameObjects.Image {
     this.autoplayStopIcon = this.scene.add.image(
       spinButton.x,
@@ -138,10 +173,12 @@ export class AutoplayController {
   /**
    * Start autoplay with specified number of spins
    */
-  public startAutoplay(spins: number): void {
+  public startAutoplay(spins: number, options?: { showBaseUi?: boolean }): void {
     log.debug(`Starting autoplay with ${spins} spins`);
     
     this.autoplaySpinsRemaining = spins;
+    this.isManagingAutoplay = true;
+    this.showBaseUi = options?.showBaseUi !== false;
     gameStateManager.isAutoPlaying = true;
     gameStateManager.isAutoPlaySpinRequested = true;
     
@@ -152,10 +189,16 @@ export class AutoplayController {
     }
     
     // Show autoplay UI
-    this.showSpinsRemainingText();
-    this.updateSpinsRemainingText(spins);
-    this.showStopIcon();
-    this.startAutoplayAnimation();
+    if (this.showBaseUi) {
+      this.setButtonTextureState(true);
+      this.showSpinsRemainingText();
+      this.updateSpinsRemainingText(spins);
+      this.showStopIcon();
+      this.startAutoplayAnimation();
+    } else {
+      this.hideSpinsRemainingText();
+      this.hideStopIcon();
+    }
     
     // Notify
     this.callbacks.onAutoplayStarted();
@@ -167,7 +210,7 @@ export class AutoplayController {
   /**
    * Stop autoplay
    */
-  public stopAutoplay(): void {
+  public stopAutoplay(emitAutoStop: boolean = true): void {
     log.debug('Stopping autoplay');
     
     // Clear timer
@@ -180,12 +223,15 @@ export class AutoplayController {
     this.autoplaySpinsRemaining = 0;
     this.isFreeRoundAutoplay = false;
     this.hasDecrementedAutoplayForCurrentSpin = false;
+    this.isManagingAutoplay = false;
+    this.showBaseUi = true;
     
     // Update global state
     gameStateManager.isAutoPlaying = false;
     gameStateManager.isAutoPlaySpinRequested = false;
     
     // Hide autoplay UI
+    this.setButtonTextureState(false);
     this.hideSpinsRemainingText();
     this.hideStopIcon();
     this.stopAutoplayAnimation();
@@ -196,8 +242,10 @@ export class AutoplayController {
       symbols.setTurboMode(false);
     }
     
-    // Emit event
-    gameEventManager.emit(GameEventType.AUTO_STOP);
+    // Emit event when requested (autoplay finished naturally)
+    if (emitAutoStop) {
+      gameEventManager.emit(GameEventType.AUTO_STOP);
+    }
     
     // Notify
     this.callbacks.onAutoplayStopped();
@@ -207,7 +255,7 @@ export class AutoplayController {
    * Decrement autoplay counter (called on REELS_START)
    */
   public decrementSpinsIfNeeded(): void {
-    if (!gameStateManager.isAutoPlaying || this.hasDecrementedAutoplayForCurrentSpin) {
+    if (!this.isManagingAutoplay || !gameStateManager.isAutoPlaying || this.hasDecrementedAutoplayForCurrentSpin) {
       return;
     }
     
@@ -228,10 +276,11 @@ export class AutoplayController {
    * Continue autoplay after current spin completes
    */
   public continueAutoplayIfNeeded(): void {
-    if (!gameStateManager.isAutoPlaying || this.autoplaySpinsRemaining <= 0) {
-      if (gameStateManager.isAutoPlaying) {
-        this.stopAutoplay();
-      }
+    if (!this.isManagingAutoplay || !gameStateManager.isAutoPlaying) {
+      return;
+    }
+    if (this.autoplaySpinsRemaining <= 0) {
+      this.stopAutoplay(true);
       return;
     }
     
@@ -291,19 +340,21 @@ export class AutoplayController {
   private setupEventListeners(): void {
     // REELS_START - decrement counter
     gameEventManager.on(GameEventType.REELS_START, () => {
-      this.decrementSpinsIfNeeded();
+      if (this.isManagingAutoplay) {
+        this.decrementSpinsIfNeeded();
+      }
     });
     
     // WIN_STOP - continue autoplay
     gameEventManager.on(GameEventType.WIN_STOP, () => {
-      if (gameStateManager.isAutoPlaying && !gameStateManager.isShowingWinDialog) {
+      if (this.isManagingAutoplay && gameStateManager.isAutoPlaying && !gameStateManager.isShowingWinDialog) {
         this.continueAutoplayIfNeeded();
       }
     });
     
     // WIN_DIALOG_CLOSED - continue autoplay after dialog
     gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => {
-      if (gameStateManager.isAutoPlaying) {
+      if (this.isManagingAutoplay && gameStateManager.isAutoPlaying) {
         this.continueAutoplayIfNeeded();
       }
     });
@@ -404,9 +455,21 @@ export class AutoplayController {
     }
   }
 
+  private setButtonTextureState(isOn: boolean): void {
+    if (!this.autoplayButton) return;
+    const key = isOn ? this.autoplayButtonTextureOn : this.autoplayButtonTextureOff;
+    if (key) {
+      this.autoplayButton.setTexture(key);
+    }
+  }
+
   private showSpinsRemainingText(): void {
     if (this.autoplaySpinsRemainingText) {
       this.autoplaySpinsRemainingText.setVisible(true);
+      const parent = (this.autoplaySpinsRemainingText as any).parentContainer || this.uiContainer || this.container;
+      if (parent && parent.bringToTop) {
+        parent.bringToTop(this.autoplaySpinsRemainingText);
+      }
     }
   }
 
@@ -445,6 +508,10 @@ export class AutoplayController {
   private showStopIcon(): void {
     if (this.autoplayStopIcon) {
       this.autoplayStopIcon.setVisible(true);
+      const parent = (this.autoplayStopIcon as any).parentContainer || this.uiContainer || this.container;
+      if (parent && parent.bringToTop) {
+        parent.bringToTop(this.autoplayStopIcon);
+      }
     }
   }
 

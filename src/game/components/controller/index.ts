@@ -17,3 +17,11 @@ export type { AutoplayCallbacks } from './AutoplayController';
 
 export { SpinButtonController } from './SpinButtonController';
 export type { SpinButtonCallbacks } from './SpinButtonController';
+
+export { AmplifyBetController } from './AmplifyBetController';
+export { TurboButtonController } from './TurboButtonController';
+export { MenuButtonController } from './MenuButtonController';
+export { BuyFeatureController } from './BuyFeatureController';
+export type { BuyFeatureCallbacks } from './BuyFeatureController';
+export { BalanceController } from './BalanceController';
+export type { BalanceControllerCallbacks } from './BalanceController';

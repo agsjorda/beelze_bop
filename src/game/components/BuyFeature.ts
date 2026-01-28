@@ -46,6 +46,7 @@ export class BuyFeature {
 	private scatterSpine?: any;
 	private scatterFallbackSprite?: Phaser.GameObjects.Image;
 	private scatterRetryCount: number = 0;
+	private scatterShouldLoopWin: boolean = false;
 	private readonly SCATTER_MAX_RETRIES: number = 5;
 
 	// ============================================
@@ -242,7 +243,7 @@ export class BuyFeature {
 
 				// Scale relative to the logo width so it looks good on different resolutions
 				try {
-					const targetWidth = this.featureLogo.displayWidth * 0.4;
+					const targetWidth = this.featureLogo.displayWidth * 0.32;
 					const baseWidth = (this.scatterSpine.width || 1);
 					// Increase scale by 40% over the base size
 					const scale = (targetWidth / baseWidth) * 1.8;
@@ -257,18 +258,33 @@ export class BuyFeature {
 					this.container.add(this.scatterSpine);
 				}
 
-				// Play continuous "win" loop for the scatter sugar symbol
+				// Play continuous "idle" loop (or win loop if requested) for the scatter symbol (BZ assets)
 				try {
 					const symbolValue = 0;
-					const winAnimationName = `Symbol${symbolValue}_SW_Win`;
+					const preferredIdle = `Symbol${symbolValue}_BZ_idle`;
+					const fallbackIdle = `Symbol${symbolValue}_SW_Idle`;
+					const preferredWin = `Symbol${symbolValue}_BZ_win`;
+					const fallbackWin = `Symbol${symbolValue}_SW_Win`;
 					const state: any = this.scatterSpine.animationState;
+					const skeleton: any = this.scatterSpine.skeleton;
+					const hasAnimation = (name: string) =>
+						!!(skeleton?.data && typeof skeleton.data.findAnimation === 'function' && skeleton.data.findAnimation(name));
+					const idleAnimationName = hasAnimation(preferredIdle)
+						? preferredIdle
+						: (hasAnimation(fallbackIdle) ? fallbackIdle : preferredIdle);
+					const winAnimationName = hasAnimation(preferredWin)
+						? preferredWin
+						: (hasAnimation(fallbackWin) ? fallbackWin : null);
+					const animationName = this.scatterShouldLoopWin && winAnimationName
+						? winAnimationName
+						: idleAnimationName;
 					if (state && typeof state.setAnimation === 'function') {
 						try { if (typeof state.clearTracks === 'function') state.clearTracks(); } catch {}
-						state.setAnimation(0, winAnimationName, true);
-						console.log(`[BuyFeature] Playing scatter Spine win loop: ${winAnimationName}`);
+						state.setAnimation(0, animationName, true);
+						console.log(`[BuyFeature] Playing scatter Spine loop: ${animationName}`);
 					}
 				} catch (e) {
-					console.warn('[BuyFeature] Failed to start scatter Spine win animation:', e);
+					console.warn('[BuyFeature] Failed to start scatter Spine idle animation:', e);
 				}
 			} catch (error) {
 				console.error('[BuyFeature] Error creating scatter Spine animation:', error);
@@ -309,7 +325,7 @@ export class BuyFeature {
 
 			// Scale relative to logo width
 			try {
-				const targetWidth = this.featureLogo.displayWidth * 0.4;
+				const targetWidth = this.featureLogo.displayWidth * 0.28;
 				const baseWidth = this.scatterFallbackSprite.width || 1;
 				// Increase scale by 40% over the base size
 				const scale = (targetWidth / baseWidth) * 1.4;
@@ -401,7 +417,11 @@ export class BuyFeature {
 		// Use long_button image to match other confirm buttons
 		const buttonImage = scene.add.image(x, y, 'long_button');
 		buttonImage.setOrigin(0.5, 0.5);
-		buttonImage.setDisplaySize(364, 62);
+		const targetWidth = 364;
+		const targetHeight = 62;
+		const scale = Math.min(targetWidth / buttonImage.width, targetHeight / buttonImage.height);
+		buttonImage.setScale(scale);
+		buttonImage.setSize(buttonImage.displayWidth, buttonImage.displayHeight);
 		this.container.add(buttonImage);
 		
 		// Button label
@@ -715,12 +735,53 @@ export class BuyFeature {
 		this.updatePriceDisplay();
 		this.updateBetDisplay();
 		this.animateIn();
+		this.scatterShouldLoopWin = true;
+		this.playLogoWinAnimation();
 		
 		// Show the mask when the panel is shown (same as BetOptions)
 		if (this.confirmButtonMask) {
 			this.confirmButtonMask.setVisible(true);
 			this.confirmButtonMask.setAlpha(1);
 		}
+	}
+
+	private playLogoWinAnimation(): void {
+		const scatter = this.scatterSpine;
+		if (!scatter) {
+			this.scatterShouldLoopWin = true;
+			return;
+		}
+
+		const state: any = scatter.animationState;
+		const skeleton: any = scatter.skeleton;
+		if (!state || typeof state.setAnimation !== 'function') {
+			return;
+		}
+
+		const hasAnimation = (name: string) =>
+			!!(skeleton?.data && typeof skeleton.data.findAnimation === 'function' && skeleton.data.findAnimation(name));
+
+		const symbolValue = 0;
+		const preferredWin = `Symbol${symbolValue}_BZ_win`;
+		const fallbackWin = `Symbol${symbolValue}_SW_Win`;
+		const preferredIdle = `Symbol${symbolValue}_BZ_idle`;
+		const fallbackIdle = `Symbol${symbolValue}_SW_Idle`;
+		const winName = hasAnimation(preferredWin)
+			? preferredWin
+			: (hasAnimation(fallbackWin) ? fallbackWin : null);
+		const idleName = hasAnimation(preferredIdle)
+			? preferredIdle
+			: (hasAnimation(fallbackIdle) ? fallbackIdle : preferredIdle);
+
+		if (!winName) {
+			try { state.setAnimation(0, idleName, true); } catch {}
+			return;
+		}
+
+		try { if (typeof state.clearTracks === 'function') state.clearTracks(); } catch {}
+
+		// Loop the win animation instead of returning to idle.
+		try { state.setAnimation(0, winName, true); } catch {}
 	}
 
 	public hide(): void {

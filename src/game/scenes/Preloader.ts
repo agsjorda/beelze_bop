@@ -114,7 +114,7 @@ export class Preloader extends Scene
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: `${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
+			suffixText: ` | Beelze_Bop${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 5,
 			additionalTextOffsetY: 0,
@@ -326,6 +326,7 @@ export class Preloader extends Scene
 		this.assetLoader.loadButtonAssets(this);
 		this.assetLoader.loadFontAssets(this);
 		this.assetLoader.loadDialogAssets(this);
+		this.assetLoader.loadForegroundAssets(this);
 		// Load Scatter Anticipation spine (portrait/high only asset paths)
 		this.assetLoader.loadScatterAnticipationAssets(this);
 		this.assetLoader.loadBonusBackgroundAssets(this);

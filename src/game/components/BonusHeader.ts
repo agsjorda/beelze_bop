@@ -110,6 +110,10 @@ export class BonusHeader {
 		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
 		// Don't add to container - add directly to scene so depth works correctly
 		
+		// Store winbar center for multiplier flight target
+		(this as any).multiplierTargetY = y + 18;
+		(this as any).multiplierTargetX = x;
+		
 		// Hide by default - only show when bonus is triggered
 		this.youWonText.setVisible(false);
 		this.amountText.setVisible(false);
@@ -364,6 +368,29 @@ export class BonusHeader {
 	}
 
 	/**
+	 * Format base spin total for multiplier display (no currency).
+	 */
+	private formatMultiplierAmount(amount: number): string {
+		if (Number.isFinite(amount) && Math.abs(amount - Math.round(amount)) < 1e-6) {
+			return Math.round(amount).toString();
+		}
+		const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		// For values under 1, drop the leading zero to match ".08" style.
+		return amount > 0 && amount < 1 ? formatted.replace(/^0/, '') : formatted;
+	}
+
+	/**
+	 * Format multiplied total without currency.
+	 * Drop decimals if the value is a whole number.
+	 */
+	private formatMultiplierTotal(amount: number): string {
+		if (Number.isFinite(amount) && Math.abs(amount - Math.round(amount)) < 1e-6) {
+			return Math.round(amount).toString();
+		}
+		return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+
+	/**
 	 * Get current winnings amount
 	 */
 	public getCurrentWinnings(): number {
@@ -514,6 +541,45 @@ export class BonusHeader {
 				if (!(spinTotal > 0)) {
 					// Fallback to primed value from MULTIPLIERS_TRIGGERED
 					spinTotal = this.multiplierSpinTotal || 0;
+				}
+				// Final fallback: derive from current spin data if still missing
+				if (!(spinTotal > 0)) {
+					try {
+						const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
+						const spinData = symbolsComponent?.currentSpinData;
+						const slotAny: any = spinData?.slot || {};
+						const fs = slotAny.freespin || slotAny.freeSpin;
+						const items = Array.isArray(fs?.items) ? fs.items : [];
+						const area = slotAny.area;
+						let derived = 0;
+						if (items.length > 0 && Array.isArray(area)) {
+							const areaJson = JSON.stringify(area);
+							const currentFreeSpinItem = items.find((item: any) =>
+								Array.isArray(item?.area) && JSON.stringify(item.area) === areaJson
+							);
+							if (currentFreeSpinItem) {
+								const rawItemTotal =
+									(currentFreeSpinItem as any).totalWin ??
+									(currentFreeSpinItem as any).subTotalWin ??
+									0;
+								const itemTotal = Number(rawItemTotal);
+								if (!isNaN(itemTotal) && itemTotal > 0) {
+									derived = itemTotal;
+								}
+							}
+						}
+						if (derived === 0) {
+							if (slotAny?.paylines && Array.isArray(slotAny.paylines)) {
+								derived += this.calculateTotalWinFromPaylines(slotAny.paylines);
+							}
+							if (Array.isArray(slotAny?.tumbles)) {
+								derived += this.calculateTotalWinFromTumbles(slotAny.tumbles);
+							}
+						}
+						if (derived > 0) {
+							spinTotal = derived;
+						}
+					} catch { }
 				} else {
 					// Keep a consistent spin total if not primed yet
 					if (this.multiplierSpinTotal === 0) this.multiplierSpinTotal = spinTotal;
@@ -521,9 +587,9 @@ export class BonusHeader {
 				if (weight > 0 && spinTotal > 0) {
 					this.multiplierCumulative += weight;
 					if (this.youWonText) this.youWonText.setText('YOU WON');
-					const formatted = this.formatCurrency(spinTotal);
+					const formatted = this.formatMultiplierAmount(spinTotal);
 					const total = spinTotal * this.multiplierCumulative;
-					const formattedTotal = this.formatCurrency(total);
+					const formattedTotal = this.formatMultiplierTotal(total);
 					if (this.amountText && this.youWonText) {
 						// Stop any existing tweens
 						if (this.scene) {
@@ -533,7 +599,7 @@ export class BonusHeader {
 						
 						this.youWonText.setVisible(true);
 						this.amountText.setVisible(true);
-						this.amountText.setText(`${formatted} x ${this.multiplierCumulative} = ${formattedTotal}`);
+						this.amountText.setText(`${formatted} x${this.multiplierCumulative} = ${formattedTotal}`);
 						
 						// Pulse animation when updating multiplier display
 						if (this.scene) {
