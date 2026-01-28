@@ -247,7 +247,8 @@ export class BetController {
       }
     }
 
-    const isAtMin = idx === 0;
+    const minBet = BET_LEVELS[0] ?? 0.2;
+    const isAtMin = idx === 0 || currentBet <= minBet + 1e-6;
     const isAtMax = idx === BET_LEVELS.length - 1;
 
     // Update decrease button
@@ -438,6 +439,10 @@ export class BetController {
       this.amplifyBetAnimation.animationState.addListener({
         complete: () => {
           this.amplifyBetAnimation.setVisible(false);
+          const gameData = this.callbacks.getGameData?.();
+          if (gameData && gameData.isEnhancedBet) {
+            this.showEnhanceBetIdleLoop();
+          }
         }
       });
     } catch (error) {

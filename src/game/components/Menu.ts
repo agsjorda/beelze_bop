@@ -819,11 +819,6 @@ export class Menu {
         musicToggleBg.setDepth(10);
         musicToggleCircle.setDepth(11);
         let musicOn = scene.audioManager.getVolume() > 0;
-        if (!musicOn) {
-            // Default should be ON
-            musicOn = true;
-            scene.audioManager.setVolume(1);
-        }
         drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
         const musicToggleArea = scene.add.zone(toggleX, startY + 70 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         musicToggleArea.setInteractive();
@@ -844,11 +839,6 @@ export class Menu {
         sfxToggleBg.setDepth(10);
         sfxToggleCircle.setDepth(11);
         let sfxOn = scene.audioManager.getSfxVolume() > 0;
-        if (!sfxOn) {
-            // Default should be ON
-            sfxOn = true;
-            scene.audioManager.setSfxVolume(1);
-        }
         drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
         const sfxToggleArea = scene.add.zone(toggleX, startY + 170 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         sfxToggleArea.setInteractive();
@@ -897,7 +887,8 @@ export class Menu {
         musicSlider.fillStyle(0xffffff, 1);
         // Draw knob at local origin and position the graphics instead of drawing at world coords
         musicSlider.fillCircle(0, 0, 12 * scaleFactor);
-        musicSlider.setPosition(sliderStartX + 0.75 * widthSlider * scaleFactor, musicSliderY + 4);
+        const initialMusicVol = scene.audioManager.getVolume();
+        musicSlider.setPosition(sliderStartX + initialMusicVol * widthSlider * scaleFactor, musicSliderY + 4);
         // Enlarge interactive hit area and keep it local to the graphics
         musicSlider.setInteractive(
             new Geom.Circle(0, 0, 22 * scaleFactor),
@@ -906,7 +897,7 @@ export class Menu {
         contentArea.add(musicSlider);
 
         // Music value text
-        const musicValue = scene.add.text(sliderStartX , musicSliderY + 25, '75%', {
+        const musicValue = scene.add.text(sliderStartX , musicSliderY + 25, Math.round(initialMusicVol * 100) + '%', {
             fontSize: '16px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Regular'
@@ -1317,7 +1308,12 @@ export class Menu {
             const btnCenterX = this.padding + sectionAreaWidth2 / 2;
             const featureBg = scene.add.image(btnCenterX, btnY, 'feature') as ButtonImage;
             featureBg.setOrigin(0.5, 0.5);
-            featureBg.setScale(1.3);
+            const featureBgScale = Math.min(
+                sectionAreaWidth2 / featureBg.width,
+                (scaledSymbolSize * 2.8) / featureBg.height
+            );
+            featureBg.setScale(featureBgScale);
+            featureBg.setSize(featureBg.displayWidth, featureBg.displayHeight);
             buyFeatContainer.add(featureBg);
 
             const btnCenterY = featureBg.y;

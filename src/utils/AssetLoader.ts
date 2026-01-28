@@ -128,6 +128,12 @@ export class AssetLoader {
 		console.log('[AssetLoader] Dialog assets loaded');
 	}
 
+	loadForegroundAssets(scene: Scene): void {
+		console.log('[AssetLoader] Loading foreground assets...');
+		this.loadAssetGroup(scene, this.assetConfig.getForegroundAssets());
+		console.log('[AssetLoader] Foreground assets loaded');
+	}
+
 
 	loadScatterAnticipationAssets(scene: Scene): void {
 		console.log('[AssetLoader] Loading scatter anticipation assets...');

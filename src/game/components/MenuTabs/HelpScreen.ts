@@ -744,7 +744,12 @@ export class HelpScreen {
         const btnCenterX = this.padding + sectionAreaWidth2 / 2;
         const featureBg = scene.add.image(btnCenterX, btnY, 'feature') as ButtonImage;
         featureBg.setOrigin(0.5, 0.5);
-        featureBg.setScale(1.3);
+        const featureBgScale = Math.min(
+            sectionAreaWidth2 / featureBg.width,
+            (this.scaledSymbolSize * 2.8) / featureBg.height
+        );
+        featureBg.setScale(featureBgScale);
+        featureBg.setSize(featureBg.displayWidth, featureBg.displayHeight);
         buyFeatContainer.add(featureBg);
 
         const btnCenterY = featureBg.y;

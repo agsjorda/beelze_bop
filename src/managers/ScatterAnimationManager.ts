@@ -275,7 +275,7 @@ export class ScatterAnimationManager {
     }
 
     // Get free spins count from the current spinData
-    let freeSpins = 0; // Default to 0, will be set from spinData
+    let freeSpins = 0; // Default to 0, will be set from spinData or fallback
     
     // Get free spins from the current spinData directly from symbols (support new and legacy formats)
     if (this.scene) {
@@ -285,11 +285,15 @@ export class ScatterAnimationManager {
         if (currentSpinData.slot) {
           const fsData = currentSpinData.slot.freeSpin || currentSpinData.slot.freespin;
           if (fsData) {
-            // Use strictly the first freeSpin item's spinsLeft
             const items = Array.isArray(fsData.items) ? fsData.items : [];
             const firstItemSpinsLeft = items.length > 0 && typeof items[0]?.spinsLeft === 'number' ? items[0].spinsLeft : 0;
-            freeSpins = firstItemSpinsLeft;
-            console.log(`[ScatterAnimationManager] Using first freeSpin item's spinsLeft for dialog: ${freeSpins}`);
+            const positiveItem = items.find((it: any) => typeof it?.spinsLeft === 'number' && it.spinsLeft > 0);
+            const countValue = typeof fsData.count === 'number' ? fsData.count : 0;
+            freeSpins = (positiveItem?.spinsLeft ?? firstItemSpinsLeft ?? 0);
+            if (freeSpins <= 0 && countValue > 0) {
+              freeSpins = countValue;
+            }
+            console.log(`[ScatterAnimationManager] Derived free spins from spinData: ${freeSpins}`);
           } else {
             console.warn(`[ScatterAnimationManager] No freeSpin/freespin data in current spinData`);
           }
@@ -299,6 +303,12 @@ export class ScatterAnimationManager {
       } else {
         console.warn(`[ScatterAnimationManager] Symbols or currentSpinData not available`);
       }
+    }
+
+    // Fallback to backend-provided Data.freeSpins if spinData is missing or zero
+    if (freeSpins <= 0 && typeof data?.freeSpins === 'number' && data.freeSpins > 0) {
+      freeSpins = data.freeSpins;
+      console.log(`[ScatterAnimationManager] Fallback to Data.freeSpins for dialog: ${freeSpins}`);
     }
     
     // If we couldn't get freeSpins from spinData, log error and use 0
@@ -382,7 +392,7 @@ export class ScatterAnimationManager {
     
     try {
       this.dialogsComponent.showDialog(this.scene, {
-        type: 'FreeSpin_BZ',
+        type: 'FreeSpinRetri_BZ',
         freeSpins: spins,
         isRetrigger: true
       });

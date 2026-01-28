@@ -16,6 +16,7 @@ export enum SoundEffectType {
 	MENU_CLICK = 'menu_click',
 	SPIN_CLICK = 'spin_click',
 	MULTIPLIER_TRIGGER = 'multitrigger',
+	TRANSITION_BZ = 'transition_bz',
 	SCATTER = 'scatter',
 	// Tumble-driven symbol-win SFX (play per tumble index)
 	SYMBOL_WIN_1 = 'symbol_win_1',
@@ -29,7 +30,8 @@ export enum SoundEffectType {
 	WIN_MEGA = 'win_mega',
 	WIN_SUPER = 'win_super',
 	WIN_EPIC = 'win_epic',
-	DIALOG_CONGRATS = 'dialog_congrats'
+	DIALOG_CONGRATS = 'dialog_congrats',
+	TUMBLE_BOMB = 'tumble_bomb'
 }
 
 export class AudioManager {
@@ -78,9 +80,11 @@ export class AudioManager {
 		this.scene.load.audio('reelroll_bz', 'assets/sounds/SFX/reelroll_BB.ogg');
 		this.scene.load.audio('reeldrop_bz', 'assets/sounds/SFX/reeldrop_BB.ogg');
 		this.scene.load.audio('turbodrop_bz', 'assets/sounds/SFX/turbodrop_ka.ogg');
+		this.scene.load.audio('tbomb_bz', 'assets/sounds/SFX/tbomb_BB.ogg');
 		this.scene.load.audio('nomnom_bz', 'assets/sounds/SFX/nomnom_sw.ogg');
 		this.scene.load.audio('coin_throw_bz', 'assets/sounds/SFX/coin_throw_ka.ogg');
 		this.scene.load.audio('coin_drop_bz', 'assets/sounds/SFX/coin_drop_ka.ogg');
+		this.scene.load.audio('ghost_whisper_bz', 'assets/sounds/SFX/ghost-whisper.mp3');
 		
 		console.log('[AudioManager] Audio files preloaded successfully');
 	}
@@ -213,6 +217,24 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create bomb_bz SFX instance:', e);
 			}
 
+			// Tumble explosion SFX (after twin sounds)
+			try {
+				const tbombSfx = this.scene.sound.add('tbomb_bz', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.TUMBLE_BOMB, tbombSfx);
+				console.log('[AudioManager] Tumble bomb (tbomb_bz) SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create tbomb_bz SFX instance:', e);
+			}
+
+			// Transition_BZ whisper SFX instance
+			try {
+				const whisperSfx = this.scene.sound.add('ghost_whisper_bz', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.TRANSITION_BZ, whisperSfx);
+				console.log('[AudioManager] Transition_BZ whisper SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create ghost_whisper_bz SFX instance:', e);
+			}
+
 			// Create scatter SFX instance
 			try {
 				const scatter = this.scene.sound.add('scatter_bz', { volume: this.sfxVolume, loop: false });
@@ -267,7 +289,7 @@ export class AudioManager {
 
 	/**
 	 * Play tumble-indexed symbol-win SFX.
-	 * 1 -> twin1_sw, 2 -> twin2_sw, 3 -> twin3_sw, 4+ -> twin4_sw
+	 * 1 -> twin1_bz, 2 -> twin2_bz, 3 -> twin3_bz, 4+ -> twin4_bz
 	 */
 	playSymbolWinByTumble(tumbleIndex: number): void {
 		if (this.isMuted) {
@@ -275,12 +297,10 @@ export class AudioManager {
 			return;
 		}
 		const clamped = Math.max(1, Math.min(4, Math.floor(tumbleIndex || 1)));
-		// Custom succession per request:
-		// 1 -> twin4, 2 -> twin2, 3 -> twin3, 4+ -> twin1
-		let pick: SoundEffectType = SoundEffectType.SYMBOL_WIN_4; // default for 1
+		let pick: SoundEffectType = SoundEffectType.SYMBOL_WIN_1; // default for 1
 		if (clamped === 2) pick = SoundEffectType.SYMBOL_WIN_2;
 		else if (clamped === 3) pick = SoundEffectType.SYMBOL_WIN_3;
-		else if (clamped >= 4) pick = SoundEffectType.SYMBOL_WIN_1;
+		else if (clamped >= 4) pick = SoundEffectType.SYMBOL_WIN_4;
 		console.log(`[AudioManager] playSymbolWinByTumble: tumbleIndex=${tumbleIndex}, clamped=${clamped}, playing=${pick}`);
 		this.playSoundEffect(pick);
 	}
@@ -836,6 +856,16 @@ export class AudioManager {
 				effect = SoundEffectType.WIN_SUPER; break;
 			case 'superw_ka':
 				effect = SoundEffectType.WIN_EPIC; break;
+			case 'bigw_bz':
+				effect = SoundEffectType.WIN_BIG; break;
+			case 'megaw_bz':
+				effect = SoundEffectType.WIN_MEGA; break;
+			case 'superw_bz':
+				effect = SoundEffectType.WIN_SUPER; break;
+			case 'epicw_bz':
+				effect = SoundEffectType.WIN_EPIC; break;
+			case 'totalw_bz':
+				effect = SoundEffectType.DIALOG_CONGRATS; break;
 			default:
 				break;
 		}

@@ -304,6 +304,21 @@ export class FreeSpinController {
       console.log('[FreeSpinController] Waiting for WIN_STOP');
       this.waitingForWinlines = true;
     } else {
+      // If a scatter retrigger is pending, keep autoplay active until retrigger flow completes.
+      try {
+        const symbolsAny: any = this.scene as any;
+        const symbols = symbolsAny?.symbols;
+        if (
+          gameStateManager.isBonus &&
+          symbols &&
+          typeof symbols.hasPendingScatterRetrigger === 'function' &&
+          symbols.hasPendingScatterRetrigger()
+        ) {
+          console.log('[FreeSpinController] Retrigger pending - deferring stop until retrigger sequence completes');
+          return;
+        }
+      } catch { }
+
       console.log('[FreeSpinController] All spins completed');
       this.stop();
     }

@@ -1,7 +1,7 @@
 BonusGame_BZ.webp
 size:1127,480
 filter:Linear,Linear
-pma:false
+pma:true
 scale:0.2
 BONUS PEOPLE6
 bounds:874,2,40,85

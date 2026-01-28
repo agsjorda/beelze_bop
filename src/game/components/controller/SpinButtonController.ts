@@ -36,7 +36,9 @@ export class SpinButtonController {
   
   // State
   private isDisabled: boolean = false;
-  private readonly DISABLED_ALPHA: number = 0.7;
+  private readonly DISABLED_ALPHA: number = 0.5;
+  private lastClickAt: number = 0;
+  private readonly clickDebounceMs: number = 250;
 
   constructor(
     scene: Scene,
@@ -119,13 +121,10 @@ export class SpinButtonController {
     this.isDisabled = true; // Set flag first
     if (this.spinButton) {
       this.spinButton.disableInteractive();
-      this.spinButton.setAlpha(0.3); // Match feature button style - make it semi-transparent/greyed out
-      this.spinButton.setTint(0x444444); // Darker gray tint
-      log.debug(`Spin button alpha set to 0.3 (disabled)`);
+      this.spinButton.setTint(0x666666); // Gray out the button (match thats_bait)
     }
     if (this.spinIcon) {
-      this.spinIcon.setAlpha(0.3); // Match feature button style - dim the icon
-      log.debug(`Spin icon alpha set to 0.3 (disabled)`);
+      this.spinIcon.setAlpha(this.DISABLED_ALPHA); // Dim icon (match thats_bait)
     }
     if (this.spinIconTween) {
       this.spinIconTween.pause(); // Pause icon animation
@@ -253,7 +252,17 @@ export class SpinButtonController {
 
   private async handleSpinButtonClick(): Promise<void> {
     log.debug('Spin button clicked');
-    
+    if (this.isDisabled) {
+      log.debug('Spin button click ignored - disabled');
+      return;
+    }
+    const now = Date.now();
+    if (now - this.lastClickAt < this.clickDebounceMs) {
+      log.debug('Spin button click ignored - debounce');
+      return;
+    }
+    this.lastClickAt = now;
+
     // If autoplay is active, clicking spin stops it
     if (this.callbacks.isAutoplayActive()) {
       log.debug('Stopping autoplay via spin button');

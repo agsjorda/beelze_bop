@@ -296,7 +296,7 @@ export class SymbolOverlay {
       overlay.setVisible(false);
       
       // Scale overlay relative to symbol box (+50% larger)
-      const desiredWidth = Math.max(3, displayWidth * 1.3);
+      const desiredWidth = Math.max(3, displayWidth * .9);
       const textureWidth = Math.max(1, overlay.width);
       const scale = desiredWidth / textureWidth;
       overlay.setScale(scale);

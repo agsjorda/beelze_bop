@@ -46,6 +46,7 @@ export class Background {
 	private readonly MAX_SHINES: number = 5;
 	private shineTimer: Phaser.Time.TimerEvent | null = null;
 	private normalGameSpine: any = null; // Spine animation for NormalGame_BZ
+	private oldFilterOverlay: any = null; // Foreground overlay spine
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -106,6 +107,8 @@ export class Background {
 
 		// Create Spine animation background if needed (will be layered between the two if visible)
 		this.createNormalGameSpine(scene, assetScale);
+		// Foreground overlay (Old Filter) sits above playfield
+		this.createForegroundOverlay(scene, assetScale);
 	}
 
 	private scaleImageToWidth(image: Phaser.GameObjects.Image, targetWidth: number): void {
@@ -283,6 +286,81 @@ private fitSpineContain(scene: Scene, spineObj: any, targetWidth: number, target
 			const y = height - coverHalfHeight - this.coverBottomOffsetPx;
 			this.normalBgCover.setPosition(width * 0.5, y);
 		}
+
+		if (this.oldFilterOverlay) {
+			this.fitSpineCover(scene, this.oldFilterOverlay, width, height);
+			this.oldFilterOverlay.setDepth(9000);
+		}
+	}
+
+	private createForegroundOverlay(scene: Scene, assetScale: number): void {
+		try {
+			if (!ensureSpineFactory(scene, '[Background] createForegroundOverlay')) {
+				console.warn('[Background] Spine factory not available for foreground overlay; will retry shortly');
+				scene.time.delayedCall(250, () => this.createForegroundOverlay(scene, assetScale));
+				return;
+			}
+
+			if (!scene.cache.json.has('Old_Filter_Overlay')) {
+				console.warn('[Background] Old_Filter_Overlay spine assets not loaded yet, will retry later');
+				scene.time.delayedCall(1000, () => {
+					this.createForegroundOverlay(scene, assetScale);
+				});
+				return;
+			}
+
+			const centerX = scene.scale.width * 0.5;
+			const centerY = scene.scale.height * 0.5;
+
+			this.oldFilterOverlay = scene.add.spine(
+				centerX,
+				centerY,
+				'Old_Filter_Overlay',
+				'Old_Filter_Overlay-atlas'
+			);
+			this.oldFilterOverlay.setOrigin(0.5, 0.5);
+			this.oldFilterOverlay.setDepth(9000);
+			try {
+				const state: any = this.oldFilterOverlay.animationState;
+				if (state && typeof state.setAnimation === 'function') {
+					state.setAnimation(0, 'Overlay', true);
+					state.timeScale = 0.2; // Adjust speed overlay animation speed
+					console.log('[Background] Playing Old_Filter_Overlay animation');
+				}
+			} catch (e) {
+				console.warn('[Background] Failed to start Old_Filter_Overlay animation:', e);
+			}
+
+			scene.time.delayedCall(50, () => {
+				this.layout(scene);
+			});
+		} catch (error) {
+			console.error('[Background] Error creating foreground overlay:', error);
+		}
+	}
+
+	private fitSpineCover(scene: Scene, spineObj: any, targetWidth: number, targetHeight: number): void {
+		try {
+			if (!spineObj || typeof spineObj.getBounds !== 'function') return;
+			spineObj.setScale(1, 1);
+			const baseBounds = spineObj.getBounds();
+			const baseWidth = Number(baseBounds?.width ?? 0);
+			const baseHeight = Number(baseBounds?.height ?? 0);
+			if (!Number.isFinite(baseWidth) || baseWidth <= 0) return;
+			if (!Number.isFinite(baseHeight) || baseHeight <= 0) return;
+
+			const scaleFactor = Math.max(targetWidth / baseWidth, targetHeight / baseHeight);
+			if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) return;
+			spineObj.setScale(scaleFactor, scaleFactor);
+
+			const boundsAfterScale = spineObj.getBounds();
+			const dx = (targetWidth * 0.5) - Number(boundsAfterScale?.centerX ?? targetWidth * 0.5);
+			const dy = (targetHeight * 0.5) - Number(boundsAfterScale?.centerY ?? targetHeight * 0.5);
+			if (Number.isFinite(dx)) spineObj.x += dx;
+			if (Number.isFinite(dy)) spineObj.y += dy;
+		} catch (e) {
+			console.warn('[Background] fitSpineCover failed:', e);
+		}
 	}
 
 	// Shine effect creation
@@ -413,6 +491,14 @@ private fitSpineContain(scene: Scene, spineObj: any, targetWidth: number, target
 				console.warn('[Background] Error destroying Spine animation:', e);
 			}
 			this.normalGameSpine = null;
+		}
+		if (this.oldFilterOverlay) {
+			try {
+				this.oldFilterOverlay.destroy();
+			} catch (e) {
+				console.warn('[Background] Error destroying foreground overlay:', e);
+			}
+			this.oldFilterOverlay = null;
 		}
 	}
 

@@ -241,111 +241,6 @@
                   "win": 2.50
                 }
               ]
-            },
-            {
-              "spinsLeft": 3,
-              "totalWin": 6.00,
-              "subTotalWin": 6.00,
-              "area": [
-                [1,1,5,5,8],
-                [7,7,9,9,5],
-                [9,9,6,6,8],
-                [8,5,5,9,9],
-                [9,9,7,7,5],
-                [4,4,7,7,8]
-              ],
-              "payline": [
-                { "lineKey": 2, "symbol": 7, "count": 10, "win": 6.00, "multipliers": [ { "symbol": 12, "count": 1 } ] }
-              ],
-              "multipliers": [12, 10],
-              "tumbles": [
-                {
-                  "symbols": {
-                    "in": [
-                      [],
-                      [7,7],
-                      [5,5],
-                      [7,7],
-                      [5,5],
-                      []
-                    ],
-                    "out": [
-                      { "symbol": 7, "count": 10, "win": 6.00 }
-                    ]
-                  },
-                  "win": 6.00
-                }
-              ]
-            },
-            {
-              "spinsLeft": 2,
-              "totalWin": 12.50,
-              "subTotalWin": 12.50,
-              "area": [
-                [5,5,8,8,7],
-                [8,10,1,1,9],
-                [7,7,9,9,5],
-                [10,8,8,5,5],
-                [9,9,7,7,13],
-                [8,11,8,8,2]
-              ],
-              "payline": [
-                { "lineKey": 3, "symbol": 8, "count": 9, "win": 12.50, "multipliers": [ { "symbol": 20, "count": 1 } ] }
-              ],
-              "multipliers": [20, 10, 11],
-              "tumbles": [
-                {
-                  "symbols": {
-                    "in": [
-                      [2,20],
-                      [4],
-                      [],
-                      [9,2],
-                      [],
-                      [8,9,9]
-                    ],
-                    "out": [
-                      { "symbol": 8, "count": 9, "win": 12.50 }
-                    ]
-                  },
-                  "win": 12.50
-                }
-              ]
-            },
-            {
-              "spinsLeft": 1,
-              "totalWin": 25.00,
-              "subTotalWin": 25.00,
-              "area": [
-                [7,7,4,4,8],
-                [9,9,6,6,1],
-                [9,9,6,6,8],
-                [8,5,5,2,2],
-                [7,7,3,3,9],
-                [1,18,9,9,5]
-              ],
-              "payline": [
-                { "lineKey": 4, "symbol": 9, "count": 9, "win": 25.00, "multipliers": [ { "symbol": 18, "count": 1 } ] }
-              ],
-              "multipliers": [18],
-              "tumbles": [
-                {
-                  "symbols": {
-                    "in": [
-                      [9,9,8],
-                      [7,7],
-                      [9,9],
-                      [7,7,10],
-                      [20,7,7],
-                      [8,5,5]
-                    ],
-                    "out": [
-                      { "symbol": 9, "count": 9, "win": 25.00 }
-                    ]
-                  },
-                  "win": 25.00
-                }
-              ]
             }
           ]
         },
@@ -387,7 +282,29 @@
                   "win": 2.50
                 }
               ]
-            },
+            }
+          ]
+        },
+        "tumbles": []
+      }
+    },
+    {
+      "playerId": "demo-player",
+      "bet": "0.20",
+      "slot": {
+        "area": [
+          [1,1,5,5,8],
+          [7,7,9,9,5],
+          [9,9,6,6,8],
+          [8,5,5,9,9],
+          [9,9,7,7,5],
+          [4,4,7,7,8]
+        ],
+        "paylines": [],
+        "freespin": {
+          "count": 4,
+          "totalWin": 46.00,
+          "items": [
             {
               "spinsLeft": 3,
               "totalWin": 6.00,
@@ -422,7 +339,70 @@
                   "win": 6.00
                 }
               ]
-            },
+            }
+          ]
+        },
+        "freeSpin": {
+          "count": 4,
+          "totalWin": 46.00,
+          "items": [
+            {
+              "spinsLeft": 3,
+              "totalWin": 6.00,
+              "subTotalWin": 6.00,
+              "area": [
+                [1,1,5,5,8],
+                [7,7,9,9,5],
+                [9,9,6,6,8],
+                [8,5,5,9,9],
+                [9,9,7,7,5],
+                [4,4,7,7,8]
+              ],
+              "payline": [
+                { "lineKey": 2, "symbol": 7, "count": 10, "win": 6.00, "multipliers": [ { "symbol": 12, "count": 1 } ] }
+              ],
+              "multipliers": [12, 10],
+              "tumbles": [
+                {
+                  "symbols": {
+                    "in": [
+                      [],
+                      [7,7],
+                      [5,5],
+                      [7,7],
+                      [5,5],
+                      []
+                    ],
+                    "out": [
+                      { "symbol": 7, "count": 10, "win": 6.00 }
+                    ]
+                  },
+                  "win": 6.00
+                }
+              ]
+            }
+          ]
+        },
+        "tumbles": []
+      }
+    },
+    {
+      "playerId": "demo-player",
+      "bet": "0.20",
+      "slot": {
+        "area": [
+          [5,5,8,8,7],
+          [8,10,1,1,9],
+          [7,7,9,9,5],
+          [10,8,8,5,5],
+          [9,9,7,7,13],
+          [8,11,8,8,2]
+        ],
+        "paylines": [],
+        "freespin": {
+          "count": 4,
+          "totalWin": 46.00,
+          "items": [
             {
               "spinsLeft": 2,
               "totalWin": 12.50,
@@ -457,7 +437,111 @@
                   "win": 12.50
                 }
               ]
-            },
+            }
+          ]
+        },
+        "freeSpin": {
+          "count": 4,
+          "totalWin": 46.00,
+          "items": [
+            {
+              "spinsLeft": 2,
+              "totalWin": 12.50,
+              "subTotalWin": 12.50,
+              "area": [
+                [5,5,8,8,7],
+                [8,10,1,1,9],
+                [7,7,9,9,5],
+                [10,8,8,5,5],
+                [9,9,7,7,13],
+                [8,11,8,8,2]
+              ],
+              "payline": [
+                { "lineKey": 3, "symbol": 8, "count": 9, "win": 12.50, "multipliers": [ { "symbol": 20, "count": 1 } ] }
+              ],
+              "multipliers": [20, 10, 11],
+              "tumbles": [
+                {
+                  "symbols": {
+                    "in": [
+                      [2,20],
+                      [4],
+                      [],
+                      [9,2],
+                      [],
+                      [8,9,9]
+                    ],
+                    "out": [
+                      { "symbol": 8, "count": 9, "win": 12.50 }
+                    ]
+                  },
+                  "win": 12.50
+                }
+              ]
+            }
+          ]
+        },
+        "tumbles": []
+      }
+    },
+    {
+      "playerId": "demo-player",
+      "bet": "0.20",
+      "slot": {
+        "area": [
+          [7,7,4,4,8],
+          [9,9,6,6,1],
+          [9,9,6,6,8],
+          [8,5,5,2,2],
+          [7,7,3,3,9],
+          [1,18,9,9,5]
+        ],
+        "paylines": [],
+        "freespin": {
+          "count": 4,
+          "totalWin": 46.00,
+          "items": [
+            {
+              "spinsLeft": 1,
+              "totalWin": 25.00,
+              "subTotalWin": 25.00,
+              "area": [
+                [7,7,4,4,8],
+                [9,9,6,6,1],
+                [9,9,6,6,8],
+                [8,5,5,2,2],
+                [7,7,3,3,9],
+                [1,18,9,9,5]
+              ],
+              "payline": [
+                { "lineKey": 4, "symbol": 9, "count": 9, "win": 25.00, "multipliers": [ { "symbol": 18, "count": 1 } ] }
+              ],
+              "multipliers": [18],
+              "tumbles": [
+                {
+                  "symbols": {
+                    "in": [
+                      [9,9,8],
+                      [7,7],
+                      [9,9],
+                      [7,7,10],
+                      [20,7,7],
+                      [8,5,5]
+                    ],
+                    "out": [
+                      { "symbol": 9, "count": 9, "win": 25.00 }
+                    ]
+                  },
+                  "win": 25.00
+                }
+              ]
+            }
+          ]
+        },
+        "freeSpin": {
+          "count": 4,
+          "totalWin": 46.00,
+          "items": [
             {
               "spinsLeft": 1,
               "totalWin": 25.00,

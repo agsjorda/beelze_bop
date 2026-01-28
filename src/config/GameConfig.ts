@@ -105,13 +105,13 @@ export const UI_CONFIG = {
 // =============================================================================
 export const WIN_THRESHOLDS = {
   /** Threshold for "Big Win" dialog */
-  BIG_WIN: 10,
+  BIG_WIN: 20,
   /** Threshold for "Mega Win" dialog */
-  MEGA_WIN: 25,
+  MEGA_WIN: 30,
   /** Threshold for "Epic Win" dialog */
-  EPIC_WIN: 50,
+  EPIC_WIN: 45,
   /** Threshold for "Super Win" dialog */
-  SUPER_WIN: 100,
+  SUPER_WIN: 60,
 } as const;
 
 // Winline Configuration

@@ -496,12 +496,15 @@ export class Game extends Scene {
 		EventBus.on('show-bet-options', () => {
 			console.log('[Game] Showing bet options with fade-in effect');
 
-			// Get the current bet from the slot controller display
-			const currentBetText = this.slotController.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+			// Use base bet for selection; use display bet for enhanced multiplier if active
+			const currentBaseBet = this.slotController.getBaseBetAmount() || 0.20;
+			const currentDisplayText = this.slotController.getBetAmountText();
+			const currentDisplayBet = currentDisplayText ? parseFloat(currentDisplayText) : currentBaseBet;
 
 			this.betOptions.show({
-				currentBet: currentBet,
+				currentBet: currentBaseBet,
+				currentBetDisplay: currentDisplayBet,
+				isEnhancedBet: this.gameData?.isEnhancedBet,
 				onClose: () => {
 					console.log('[Game] Bet options closed');
 				},
@@ -510,9 +513,20 @@ export class Game extends Scene {
 					// Update the bet display in the slot controller
 					this.slotController.updateBetAmount(betAmount);
 					// Update the bet amount in the backend
-					gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: betAmount, previousBet: currentBet });
+					gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: betAmount, previousBet: currentBaseBet });
 				}
 			});
+		});
+
+		EventBus.on('amplify', (isEnhanced: boolean) => {
+			try {
+				if (this.betOptions && this.betOptions.isVisible()) {
+					const baseBet = this.slotController.getBaseBetAmount() || 0.20;
+					const displayText = this.slotController.getBetAmountText();
+					const displayBet = displayText ? parseFloat(displayText) : baseBet;
+					this.betOptions.setEnhancedBetState(!!isEnhanced, displayBet, baseBet);
+				}
+			} catch { }
 		});
 
 		// Listen for autoplay button click
@@ -531,6 +545,7 @@ export class Game extends Scene {
 				currentAutoplayCount: 10,
 				currentBet: currentBet,
 				currentBalance: currentBalance,
+				isEnhancedBet: this.gameData?.isEnhancedBet,
 				onClose: () => {
 					console.log('[Game] Autoplay options closed');
 				},

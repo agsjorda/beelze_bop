@@ -177,7 +177,7 @@ export class AssetConfig {
 		Object.entries(overlayMap).forEach(([valueStr, label]) => {
 			const value = Number(valueStr);
 			const key = `multiplier_overlay_${value}`;
-			const path = `assets/symbols/high/beezle_bop_symbols/multiplier_symbols/${label}.png`;
+			const path = `assets/symbols/high/beezle_bop_symbols/multiplier_symbols/${label}.webp`;
 			symbolImages[key] = path;
 			console.log(`[AssetConfig] Multiplier overlay ${value}: ${path}`);
 		});
@@ -336,6 +336,11 @@ export class AssetConfig {
 					atlas: `${prefix}/dialogs/TotalW_BZ.atlas`,
 					json: `${prefix}/dialogs/TotalW_BZ.json`
 				},
+				// Total win overlay notes animation (uses TotalW_BZ atlas pages)
+				'TotalW_BZ_meow': {
+					atlas: `${prefix}/dialogs/TotalW_BZ.atlas`,
+					json: `${prefix}/dialogs/cats meow.json`
+				},
 				'FreeSpin_BZ': {
 					atlas: `${prefix}/dialogs/FreeSpin_BZ.atlas`,
 					json: `${prefix}/dialogs/FreeSpin_BZ.json`
@@ -347,6 +352,18 @@ export class AssetConfig {
 				'Transition_BZ': {
 					atlas: `${prefix}/dialogs/Transition_BZ.atlas`,
 					json: `${prefix}/dialogs/Transition_BZ.json`
+				}
+			}
+		};
+	}
+
+	getForegroundAssets(): AssetGroup {
+		const prefix = this.getAssetPrefix();
+		return {
+			spine: {
+				'Old_Filter_Overlay': {
+					atlas: `${prefix}/foreground/Old_Filter_Overlay.atlas`,
+					json: `${prefix}/foreground/Old_Filter_Overlay.json`
 				}
 			}
 		};
@@ -442,6 +459,9 @@ export class AssetConfig {
 				'coin_drop_bz': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
 				'bomb_bz': 'assets/sounds/SFX/bomb_sw.ogg',
+				'tbomb_bz': 'assets/sounds/SFX/tbomb_BB.ogg',
+				// Transition_BZ whisper SFX
+				'ghost_whisper_bz': 'assets/sounds/SFX/ghost-whisper.mp3',
 				'scatter_bz': 'assets/sounds/SFX/scatter_BB.ogg',
 				// Tumble symbol-win SFX (play per tumble index)
 				'twin1_bz': 'assets/sounds/SFX/symbol_win/twin1_BB.ogg',

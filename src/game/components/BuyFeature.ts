@@ -257,18 +257,25 @@ export class BuyFeature {
 					this.container.add(this.scatterSpine);
 				}
 
-				// Play continuous "win" loop for the scatter sugar symbol
+				// Play continuous "idle" loop for the scatter symbol (BZ assets)
 				try {
 					const symbolValue = 0;
-					const winAnimationName = `Symbol${symbolValue}_SW_Win`;
+					const preferredIdle = `Symbol${symbolValue}_BZ_idle`;
+					const fallbackIdle = `Symbol${symbolValue}_SW_Idle`;
 					const state: any = this.scatterSpine.animationState;
+					const skeleton: any = this.scatterSpine.skeleton;
+					const hasAnimation = (name: string) =>
+						!!(skeleton?.data && typeof skeleton.data.findAnimation === 'function' && skeleton.data.findAnimation(name));
+					const idleAnimationName = hasAnimation(preferredIdle)
+						? preferredIdle
+						: (hasAnimation(fallbackIdle) ? fallbackIdle : preferredIdle);
 					if (state && typeof state.setAnimation === 'function') {
 						try { if (typeof state.clearTracks === 'function') state.clearTracks(); } catch {}
-						state.setAnimation(0, winAnimationName, true);
-						console.log(`[BuyFeature] Playing scatter Spine win loop: ${winAnimationName}`);
+						state.setAnimation(0, idleAnimationName, true);
+						console.log(`[BuyFeature] Playing scatter Spine idle loop: ${idleAnimationName}`);
 					}
 				} catch (e) {
-					console.warn('[BuyFeature] Failed to start scatter Spine win animation:', e);
+					console.warn('[BuyFeature] Failed to start scatter Spine idle animation:', e);
 				}
 			} catch (error) {
 				console.error('[BuyFeature] Error creating scatter Spine animation:', error);
@@ -401,7 +408,11 @@ export class BuyFeature {
 		// Use long_button image to match other confirm buttons
 		const buttonImage = scene.add.image(x, y, 'long_button');
 		buttonImage.setOrigin(0.5, 0.5);
-		buttonImage.setDisplaySize(364, 62);
+		const targetWidth = 364;
+		const targetHeight = 62;
+		const scale = Math.min(targetWidth / buttonImage.width, targetHeight / buttonImage.height);
+		buttonImage.setScale(scale);
+		buttonImage.setSize(buttonImage.displayWidth, buttonImage.displayHeight);
 		this.container.add(buttonImage);
 		
 		// Button label
