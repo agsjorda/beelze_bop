@@ -92,7 +92,7 @@ export interface HistoryItem {
 }
 
 export class GameAPI {  
-    private static readonly GAME_ID: string = '00030525';
+    private static readonly GAME_ID: string = '00120925';
     private static DEMO_BALANCE: number = 15000;
 
     gameData: GameData;
