@@ -172,6 +172,7 @@ export class Symbols {
   private mergeLeadSymbol: SymbolObject | null = null;
   private scatterResetInProgress: boolean = false;
   private dialogListenerSetup: boolean = false;
+  private scatterResetHandledForBonusStart: boolean = false;
   private skipReelDropsActive: boolean = false;
   private skipReelDropsPending: boolean = false;
   private skipInputEnabled: boolean = false;
@@ -309,141 +310,170 @@ export class Symbols {
 
   private setupDialogEventListeners(): void {
     // Enable symbols after dialog
-    this.scene.events.on('enableSymbols', () => {
-      console.log('[Symbols] Re-enabling symbols after dialog');
-      this.grid.restoreVisibility();
-      this.resetSymbolsState();
-      this.resetScatterSymbolsToGrid(true).catch((e) => {
-        console.warn('[Symbols] Failed to reset scatter symbols on dialog close:', e);
-      });
-    });
+    this.scene.events.on('enableSymbols', () => this.handleEnableSymbolsAfterDialog());
 
     // Scatter bonus activated
     this.scene.events.on('scatterBonusActivated', (data: PendingFreeSpinsData) => {
-      console.log(`[Symbols] Scatter bonus activated: ${data.actualFreeSpins} free spins`);
-      this.freeSpinController.setPendingFreeSpinsData(data);
+      this.handleScatterBonusActivated(data);
     });
 
     // Scatter bonus completed
-    this.scene.events.on('scatterBonusCompleted', () => {
-      console.log('[Symbols] Scatter bonus completed');
-      this.restoreSymbolVisibility();
-      this.ensureScatterSymbolsVisible();
-      let dialogShowing = false;
-      try {
-        const gameSceneAny: any = this.scene as any;
-        const dialogs = gameSceneAny?.dialogs;
-        dialogShowing = !!(dialogs && typeof dialogs.isDialogShowing === 'function' && dialogs.isDialogShowing());
-      } catch { /* ignore */ }
-      const resetImmediate = dialogShowing || gameStateManager.isShowingWinDialog;
-      const resetPromise = this.resetScatterSymbolsToGrid(resetImmediate).catch((e) => {
-        console.warn('[Symbols] Failed to reset scatter symbol scale after bonus dialog:', e);
-      });
-
-      if (this.dialogListenerSetup) {
-        return;
-      }
-      this.dialogListenerSetup = true;
-
-      const triggerAutoplay = () => {
-        console.log('[Symbols] Triggering free spin autoplay');
-        resetPromise.finally(() => {
-          this.scene.time.delayedCall(1000, () => {
-            this.freeSpinController.triggerAutoplay();
-          });
-        });
-      };
-
-      if (dialogShowing || gameStateManager.isShowingWinDialog) {
-        this.scene.events.once('dialogAnimationsComplete', () => {
-          console.log('[Symbols] Dialog complete - triggering free spin autoplay');
-          triggerAutoplay();
-        });
-      } else {
-        triggerAutoplay();
-      }
-    });
+    this.scene.events.on('scatterBonusCompleted', () => this.handleScatterBonusCompleted());
 
     // WIN_STOP - handle scatter retrigger
-    gameEventManager.on(GameEventType.WIN_STOP, async () => {
-      if (gameStateManager.isBonus && this.pendingScatterRetrigger?.scatterGrids) {
-        const retrigger = this.pendingScatterRetrigger;
-        this.pendingScatterRetrigger = null;
-        console.log('[Symbols] WIN_STOP: Running scatter retrigger sequence');
-
-        this.scatterRetriggerAnimationInProgress = true;
-        try {
-          const liveGrids = this.getLiveScatterGrids();
-          await this.playScatterRetriggerSequence(liveGrids);
-          gameEventManager.emit(GameEventType.SCATTER_RETRIGGER_ANIMATION_COMPLETE);
-        } catch (e) {
-          console.warn('[Symbols] Retrigger sequence failed:', e);
-          gameEventManager.emit(GameEventType.SCATTER_RETRIGGER_ANIMATION_COMPLETE);
-        }
-
-        try {
-          const currentRemaining = this.freeSpinController?.getSpinsRemaining?.() ?? 0;
-          const retriggerInfo = this.freeSpinController?.getRetriggerIncrementFromSpinData?.(this.currentSpinData) ?? {
-            added: 0,
-            spinsLeft: 0
-          };
-          const retriggerSpins = Math.max(0, retriggerInfo.added);
-          const newRemaining = retriggerSpins > 0 ? (currentRemaining + retriggerSpins) : Math.max(currentRemaining, retriggerInfo.spinsLeft);
-          if (newRemaining !== currentRemaining) {
-            this.freeSpinController?.setSpinsRemaining?.(newRemaining);
-          }
-          console.log('[Symbols] Retrigger spin count derived', {
-            currentRemaining,
-            retriggerSpins,
-            newRemaining,
-            spinsLeftFromSpinData: retriggerInfo.spinsLeft
-          });
-          this.scatterAnimationManager?.showRetriggerFreeSpinsDialog(retriggerSpins);
-        } catch (e) {
-          console.warn('[Symbols] Failed to show retrigger dialog:', e);
-          this.scatterRetriggerAnimationInProgress = false;
-        }
-
-        this.scene.events.once('dialogAnimationsComplete', () => {
-          this.scatterRetriggerAnimationInProgress = false;
-          // Ensure autoplay flags stay enabled after retrigger dialog closes
-          try {
-            gameStateManager.isAutoPlaying = true;
-            gameStateManager.isAutoPlaySpinRequested = true;
-            if (this.scene?.gameData) this.scene.gameData.isAutoPlaying = true;
-          } catch { }
-          this.freeSpinController.waitForAllDialogsToCloseThenResume();
-        });
-        return;
-      }
-    });
+    gameEventManager.on(GameEventType.WIN_STOP, () => { void this.handleWinStopScatterRetrigger(); });
 
     // WIN_DIALOG_CLOSED
-    gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => {
-      console.log('[Symbols] WIN_DIALOG_CLOSED');
-      gameStateManager.isShowingWinDialog = false;
-
-      if (gameStateManager.isBonusFinished) {
-        if (this.multiplierAnimationsInProgress) {
-          gameEventManager.once(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => {
-            this.showCongratsDialogAfterDelay();
-            gameStateManager.isBonusFinished = false;
-          });
-        } else {
-          this.showCongratsDialogAfterDelay();
-          gameStateManager.isBonusFinished = false;
-        }
-      }
-    });
+    gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => this.handleWinDialogClosed());
 
     // Track multiplier animations
-    gameEventManager.on(GameEventType.MULTIPLIERS_TRIGGERED, () => {
-      this.multiplierAnimationsInProgress = true;
-    });
+    gameEventManager.on(GameEventType.MULTIPLIERS_TRIGGERED, () => this.handleMultiplierTriggered());
 
-    gameEventManager.on(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => {
-      this.multiplierAnimationsInProgress = false;
+    gameEventManager.on(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => this.handleMultiplierAnimationsComplete());
+  }
+
+  private handleEnableSymbolsAfterDialog(): void {
+    console.log('[Symbols] Re-enabling symbols after dialog');
+    this.grid.restoreVisibility();
+    this.resetSymbolsState();
+    if (gameStateManager.isBonus) {
+      this.scatterResetHandledForBonusStart = true;
+    }
+    this.resetScatterSymbolsToGrid(true).catch((e) => {
+      console.warn('[Symbols] Failed to reset scatter symbols on dialog close:', e);
     });
+  }
+
+  private handleScatterBonusActivated(data: PendingFreeSpinsData): void {
+    console.log(`[Symbols] Scatter bonus activated: ${data.actualFreeSpins} free spins`);
+    this.freeSpinController.setPendingFreeSpinsData(data);
+  }
+
+  private handleScatterBonusCompleted(): void {
+    console.log('[Symbols] Scatter bonus completed');
+    this.restoreSymbolVisibility();
+    this.ensureScatterSymbolsVisible();
+    let dialogShowing = false;
+    try {
+      const gameSceneAny: any = this.scene as any;
+      const dialogs = gameSceneAny?.dialogs;
+      dialogShowing = !!(dialogs && typeof dialogs.isDialogShowing === 'function' && dialogs.isDialogShowing());
+    } catch { /* ignore */ }
+    const resetImmediate = dialogShowing || gameStateManager.isShowingWinDialog;
+    let resetPromise: Promise<void> = Promise.resolve();
+    if (this.scatterResetHandledForBonusStart) {
+      this.scatterResetHandledForBonusStart = false;
+      console.log('[Symbols] Scatter reset already handled on bonus start - skipping duplicate reset');
+    } else {
+      resetPromise = this.resetScatterSymbolsToGrid(resetImmediate).catch((e) => {
+        console.warn('[Symbols] Failed to reset scatter symbol scale after bonus dialog:', e);
+      });
+    }
+
+    if (this.dialogListenerSetup) {
+      return;
+    }
+    this.dialogListenerSetup = true;
+
+    if (dialogShowing || gameStateManager.isShowingWinDialog) {
+      this.scene.events.once('dialogAnimationsComplete', () => {
+        console.log('[Symbols] Dialog complete - triggering free spin autoplay');
+        this.triggerAutoplayAfterScatterReset(resetPromise);
+      });
+    } else {
+      this.triggerAutoplayAfterScatterReset(resetPromise);
+    }
+  }
+
+  private triggerAutoplayAfterScatterReset(resetPromise: Promise<void>): void {
+    console.log('[Symbols] Triggering free spin autoplay');
+    resetPromise.finally(() => {
+      this.scene.time.delayedCall(1000, () => {
+        this.freeSpinController.triggerAutoplay();
+      });
+    });
+  }
+
+  private async handleWinStopScatterRetrigger(): Promise<void> {
+    if (!(gameStateManager.isBonus && this.pendingScatterRetrigger?.scatterGrids)) {
+      return;
+    }
+    const retrigger = this.pendingScatterRetrigger;
+    this.pendingScatterRetrigger = null;
+    console.log('[Symbols] WIN_STOP: Running scatter retrigger sequence');
+
+    this.scatterRetriggerAnimationInProgress = true;
+    try {
+      const liveGrids = this.getLiveScatterGrids();
+      await this.playScatterRetriggerSequence(liveGrids);
+      gameEventManager.emit(GameEventType.SCATTER_RETRIGGER_ANIMATION_COMPLETE);
+    } catch (e) {
+      console.warn('[Symbols] Retrigger sequence failed:', e);
+      gameEventManager.emit(GameEventType.SCATTER_RETRIGGER_ANIMATION_COMPLETE);
+    }
+
+    try {
+      this.applyScatterRetriggerDialogAndCount();
+    } catch (e) {
+      console.warn('[Symbols] Failed to show retrigger dialog:', e);
+      this.scatterRetriggerAnimationInProgress = false;
+    }
+
+    this.scene.events.once('dialogAnimationsComplete', () => {
+      this.scatterRetriggerAnimationInProgress = false;
+      // Ensure autoplay flags stay enabled after retrigger dialog closes
+      try {
+        gameStateManager.isAutoPlaying = true;
+        gameStateManager.isAutoPlaySpinRequested = true;
+        if (this.scene?.gameData) this.scene.gameData.isAutoPlaying = true;
+      } catch { }
+      this.freeSpinController.waitForAllDialogsToCloseThenResume();
+    });
+  }
+
+  private applyScatterRetriggerDialogAndCount(): void {
+    const currentRemaining = this.freeSpinController?.getSpinsRemaining?.() ?? 0;
+    const retriggerInfo = this.freeSpinController?.getRetriggerIncrementFromSpinData?.(this.currentSpinData) ?? {
+      added: 0,
+      spinsLeft: 0
+    };
+    const retriggerSpins = Math.max(0, retriggerInfo.added);
+    const newRemaining = retriggerSpins > 0 ? (currentRemaining + retriggerSpins) : Math.max(currentRemaining, retriggerInfo.spinsLeft);
+    if (newRemaining !== currentRemaining) {
+      this.freeSpinController?.setSpinsRemaining?.(newRemaining);
+    }
+    console.log('[Symbols] Retrigger spin count derived', {
+      currentRemaining,
+      retriggerSpins,
+      newRemaining,
+      spinsLeftFromSpinData: retriggerInfo.spinsLeft
+    });
+    this.scatterAnimationManager?.showRetriggerFreeSpinsDialog(retriggerSpins);
+  }
+
+  private handleWinDialogClosed(): void {
+    console.log('[Symbols] WIN_DIALOG_CLOSED');
+    gameStateManager.isShowingWinDialog = false;
+
+    if (gameStateManager.isBonusFinished) {
+      if (this.multiplierAnimationsInProgress) {
+        gameEventManager.once(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => {
+          this.showCongratsDialogAfterDelay();
+          gameStateManager.isBonusFinished = false;
+        });
+      } else {
+        this.showCongratsDialogAfterDelay();
+        gameStateManager.isBonusFinished = false;
+      }
+    }
+  }
+
+  private handleMultiplierTriggered(): void {
+    this.multiplierAnimationsInProgress = true;
+  }
+
+  private handleMultiplierAnimationsComplete(): void {
+    this.multiplierAnimationsInProgress = false;
   }
 
   // ============================================================================
@@ -766,6 +796,160 @@ export class Symbols {
     return this.grid.findScatterSymbols();
   }
 
+  private isScatterSymbol(symbol: SymbolObject): boolean {
+    return (symbol as any)?.symbolValue === SCATTER_SYMBOL_ID || symbol.texture?.key === 'symbol_0';
+  }
+
+  private getScatterBaseScaleData(symbol: SymbolObject, scatterFallbackScale: number): {
+    baseScaleX: number;
+    baseScaleY: number;
+    hasBaseScale: boolean;
+    shouldClampBaseScale: boolean;
+  } {
+    const baseScaleX = Number((symbol as any).__scatterBaseScaleX);
+    const baseScaleY = Number((symbol as any).__scatterBaseScaleY);
+    const hasBaseScale = isFinite(baseScaleX) && isFinite(baseScaleY) && baseScaleX > 0 && baseScaleY > 0;
+    const shouldClampBaseScale = isFinite(scatterFallbackScale)
+      && scatterFallbackScale > 0
+      && hasBaseScale
+      && baseScaleX > scatterFallbackScale * 1.6;
+    return {
+      baseScaleX,
+      baseScaleY,
+      hasBaseScale,
+      shouldClampBaseScale
+    };
+  }
+
+  private resetScatterIdleAnimation(symbol: SymbolObject): void {
+    const animState = (symbol as any)?.animationState;
+    if (!animState || typeof animState.setAnimation !== 'function') return;
+    try {
+      const idleName = `Symbol${SCATTER_SYMBOL_ID}_BZ_idle`;
+      const entry = animState.setAnimation(0, idleName, true);
+      if (entry && typeof (entry as any).timeScale === 'number') {
+        (entry as any).timeScale = 1;
+      }
+      if (typeof animState.timeScale === 'number') {
+        animState.timeScale = 1;
+      }
+    } catch { }
+  }
+
+  private getScatterResetTargetScale(
+    symbol: SymbolObject,
+    immediate: boolean,
+    scatterFallbackScale: number,
+    baseScaleX: number,
+    baseScaleY: number,
+    hasBaseScale: boolean,
+    shouldClampBaseScale: boolean
+  ): { scaleX: number; scaleY: number } {
+    let targetScaleX = 1;
+    let targetScaleY = 1;
+    const animState = (symbol as any)?.animationState;
+    if (animState && typeof animState.setAnimation === 'function') {
+      this.resetScatterIdleAnimation(symbol);
+      if (immediate) {
+        try {
+          this.animationsModule.fitSpineToSymbolBox(symbol);
+        } catch { }
+        const fittedX = Number((symbol as any)?.scaleX);
+        const fittedY = Number((symbol as any)?.scaleY);
+        targetScaleX = isFinite(fittedX) && fittedX > 0 ? fittedX : scatterFallbackScale;
+        targetScaleY = isFinite(fittedY) && fittedY > 0 ? fittedY : scatterFallbackScale;
+      } else {
+        targetScaleX = (!hasBaseScale || shouldClampBaseScale) ? scatterFallbackScale : baseScaleX;
+        targetScaleY = (!hasBaseScale || shouldClampBaseScale) ? scatterFallbackScale : baseScaleY;
+      }
+      return { scaleX: targetScaleX, scaleY: targetScaleY };
+    }
+
+    try {
+      const baseWidth = (symbol as any).width || this.displayWidth;
+      const fallbackScale = baseWidth > 0 ? (this.displayWidth / baseWidth) : 1;
+      if (immediate) {
+        targetScaleX = fallbackScale;
+        targetScaleY = fallbackScale;
+      } else {
+        targetScaleX = (!hasBaseScale || shouldClampBaseScale) ? fallbackScale : baseScaleX;
+        targetScaleY = (!hasBaseScale || shouldClampBaseScale) ? fallbackScale : baseScaleY;
+      }
+    } catch { }
+
+    return { scaleX: targetScaleX, scaleY: targetScaleY };
+  }
+
+  private applyImmediateScatterReset(
+    symbol: SymbolObject,
+    targetPos: { x: number; y: number },
+    targetScaleX: number,
+    targetScaleY: number
+  ): void {
+    try {
+      if (typeof (symbol as any).setAlpha === 'function') {
+        (symbol as any).setAlpha(1);
+      } else if (typeof (symbol as any).alpha === 'number') {
+        (symbol as any).alpha = 1;
+      }
+    } catch { }
+    try {
+      if (typeof (symbol as any).setScale === 'function') {
+        (symbol as any).setScale(targetScaleX, targetScaleY);
+      } else {
+        (symbol as any).scaleX = targetScaleX;
+        (symbol as any).scaleY = targetScaleY;
+      }
+    } catch { }
+    try {
+      (symbol as any).x = targetPos.x;
+      (symbol as any).y = targetPos.y;
+    } catch { }
+    try {
+      (symbol as any).__scatterBaseScaleX = targetScaleX;
+      (symbol as any).__scatterBaseScaleY = targetScaleY;
+    } catch { }
+  }
+
+  private queueScatterResetTween(
+    symbol: SymbolObject,
+    targetPos: { x: number; y: number },
+    targetScaleX: number,
+    targetScaleY: number,
+    shrinkDuration: number,
+    moveDuration: number,
+    tweenPromises: Array<Promise<void>>
+  ): void {
+    tweenPromises.push(new Promise<void>((resolve) => {
+      try {
+        if (typeof (symbol as any)?.setAlpha === 'function') {
+          (symbol as any).setAlpha(0);
+        } else if (typeof (symbol as any)?.alpha === 'number') {
+          (symbol as any).alpha = 0;
+        }
+      } catch { }
+      this.scene.tweens.add({
+        targets: symbol,
+        scaleX: targetScaleX,
+        scaleY: targetScaleY,
+        x: targetPos.x,
+        y: targetPos.y,
+        duration: Math.max(shrinkDuration, moveDuration),
+        ease: 'Sine.easeInOut',
+        onComplete: () => resolve()
+      });
+
+      try {
+        this.scene.tweens.add({
+          targets: symbol,
+          alpha: 1,
+          duration: Math.max(shrinkDuration, moveDuration),
+          ease: 'Sine.easeInOut'
+        });
+      } catch { }
+    }));
+  }
+
   private async resetScatterSymbolsToGrid(immediate: boolean = false): Promise<void> {
     if (!immediate && this.scatterResetInProgress) {
       return;
@@ -779,8 +963,7 @@ export class Symbols {
     const scatterFallbackScale = this.getSpineSymbolScale(SCATTER_SYMBOL_ID);
 
     this.grid.forEachSymbol((symbol, col, row) => {
-      const isScatter = (symbol as any)?.symbolValue === SCATTER_SYMBOL_ID || symbol.texture?.key === 'symbol_0';
-      if (!isScatter) return;
+      if (!this.isScatterSymbol(symbol)) return;
 
       this.scene.tweens.killTweensOf(symbol);
 
@@ -789,109 +972,32 @@ export class Symbols {
       } catch { }
 
       const targetPos = this.grid.calculateCellPosition(col, row);
-      let targetScaleX = 1;
-      let targetScaleY = 1;
-      const baseScaleX = Number((symbol as any).__scatterBaseScaleX);
-      const baseScaleY = Number((symbol as any).__scatterBaseScaleY);
-      const hasBaseScale = isFinite(baseScaleX) && isFinite(baseScaleY) && baseScaleX > 0 && baseScaleY > 0;
-      const shouldClampBaseScale = isFinite(scatterFallbackScale)
-        && scatterFallbackScale > 0
-        && hasBaseScale
-        && baseScaleX > scatterFallbackScale * 1.6;
-
-      const animState = (symbol as any)?.animationState;
-      if (animState && typeof animState.setAnimation === 'function') {
-        try {
-          const idleName = `Symbol${SCATTER_SYMBOL_ID}_BZ_idle`;
-          const entry = animState.setAnimation(0, idleName, true);
-          if (entry && typeof (entry as any).timeScale === 'number') {
-            (entry as any).timeScale = 1;
-          }
-          if (typeof animState.timeScale === 'number') {
-            animState.timeScale = 1;
-          }
-        } catch { }
-        if (immediate) {
-          try {
-            this.animationsModule.fitSpineToSymbolBox(symbol);
-          } catch { }
-          const fittedX = Number((symbol as any)?.scaleX);
-          const fittedY = Number((symbol as any)?.scaleY);
-          targetScaleX = isFinite(fittedX) && fittedX > 0 ? fittedX : scatterFallbackScale;
-          targetScaleY = isFinite(fittedY) && fittedY > 0 ? fittedY : scatterFallbackScale;
-        } else {
-          targetScaleX = (!hasBaseScale || shouldClampBaseScale) ? scatterFallbackScale : baseScaleX;
-          targetScaleY = (!hasBaseScale || shouldClampBaseScale) ? scatterFallbackScale : baseScaleY;
-        }
-      } else {
-        try {
-          const baseWidth = (symbol as any).width || this.displayWidth;
-          const fallbackScale = baseWidth > 0 ? (this.displayWidth / baseWidth) : 1;
-          if (immediate) {
-            targetScaleX = fallbackScale;
-            targetScaleY = fallbackScale;
-          } else {
-            targetScaleX = (!hasBaseScale || shouldClampBaseScale) ? fallbackScale : baseScaleX;
-            targetScaleY = (!hasBaseScale || shouldClampBaseScale) ? fallbackScale : baseScaleY;
-          }
-        } catch { }
-      }
+      const { baseScaleX, baseScaleY, hasBaseScale, shouldClampBaseScale } =
+        this.getScatterBaseScaleData(symbol, scatterFallbackScale);
+      const { scaleX: targetScaleX, scaleY: targetScaleY } = this.getScatterResetTargetScale(
+        symbol,
+        immediate,
+        scatterFallbackScale,
+        baseScaleX,
+        baseScaleY,
+        hasBaseScale,
+        shouldClampBaseScale
+      );
 
       if (immediate) {
-        try {
-          if (typeof (symbol as any).setAlpha === 'function') {
-            (symbol as any).setAlpha(1);
-          } else if (typeof (symbol as any).alpha === 'number') {
-            (symbol as any).alpha = 1;
-          }
-        } catch { }
-        try {
-          if (typeof (symbol as any).setScale === 'function') {
-            (symbol as any).setScale(targetScaleX, targetScaleY);
-          } else {
-            (symbol as any).scaleX = targetScaleX;
-            (symbol as any).scaleY = targetScaleY;
-          }
-        } catch { }
-        try {
-          (symbol as any).x = targetPos.x;
-          (symbol as any).y = targetPos.y;
-        } catch { }
-        try {
-          (symbol as any).__scatterBaseScaleX = targetScaleX;
-          (symbol as any).__scatterBaseScaleY = targetScaleY;
-        } catch { }
+        this.applyImmediateScatterReset(symbol, targetPos, targetScaleX, targetScaleY);
         return;
       }
 
-      tweenPromises.push(new Promise<void>((resolve) => {
-        try {
-          if (typeof (symbol as any)?.setAlpha === 'function') {
-            (symbol as any).setAlpha(0);
-          } else if (typeof (symbol as any)?.alpha === 'number') {
-            (symbol as any).alpha = 0;
-          }
-        } catch { }
-        this.scene.tweens.add({
-          targets: symbol,
-          scaleX: targetScaleX,
-          scaleY: targetScaleY,
-          x: targetPos.x,
-          y: targetPos.y,
-          duration: Math.max(shrinkDuration, moveDuration),
-          ease: 'Sine.easeInOut',
-          onComplete: () => resolve()
-        });
-
-        try {
-          this.scene.tweens.add({
-            targets: symbol,
-            alpha: 1,
-            duration: Math.max(shrinkDuration, moveDuration),
-            ease: 'Sine.easeInOut'
-          });
-        } catch { }
-      }));
+      this.queueScatterResetTween(
+        symbol,
+        targetPos,
+        targetScaleX,
+        targetScaleY,
+        shrinkDuration,
+        moveDuration,
+        tweenPromises
+      );
     });
 
     await Promise.all(tweenPromises);
@@ -906,15 +1012,42 @@ export class Symbols {
     console.log(`[Symbols] Playing retrigger sequence for ${scatterGrids.length} scatters`);
     const disableScaling = gameStateManager.isBonus || gameStateManager.isBuyFeatureSpin;
 
-    const winAnimName = 'Symbol0_BZ_win';
-    const idleAnimName = 'Symbol0_BZ_idle';
+    const spineKey = `symbol_${SCATTER_SYMBOL_ID}_sugar_spine`;
+    const spineAtlasKey = `${spineKey}-atlas`;
+    const winAnimName = `Symbol${SCATTER_SYMBOL_ID}_BZ_win`;
+    const idleAnimName = `Symbol${SCATTER_SYMBOL_ID}_BZ_idle`;
 
     const tweenPromises = scatterGrids.map((grid) => {
       return new Promise<void>((resolve) => {
-        const symbol = this.grid.getSymbol(grid.x, grid.y);
+        let symbol = this.grid.getSymbol(grid.x, grid.y);
         if (!symbol) {
           resolve();
           return;
+        }
+
+        // Ensure scatter uses a Spine symbol so the win animation plays.
+        const hasSpine = !!((symbol as any).animationState);
+        if (!hasSpine) {
+          try {
+            const x = (symbol as any).x;
+            const y = (symbol as any).y;
+            try { (symbol as any).destroy?.(); } catch { }
+            if (typeof (this.scene.add as any).spine === 'function') {
+              const spineSymbol = (this.scene.add as any).spine(x, y, spineKey, spineAtlasKey);
+              if (spineSymbol) {
+                spineSymbol.setOrigin?.(0.5, 0.5);
+                try { (spineSymbol as any).symbolValue = SCATTER_SYMBOL_ID; } catch { }
+                this.animationsModule.fitSpineToSymbolBox(spineSymbol);
+                this.grid.setSymbol(grid.x, grid.y, spineSymbol);
+                try { this.container.add(spineSymbol); } catch { }
+                symbol = spineSymbol;
+              }
+            }
+          } catch (e) {
+            console.warn('[Symbols] Failed to replace retrigger scatter with Spine:', e);
+          }
+        } else {
+          try { (symbol as any).symbolValue = SCATTER_SYMBOL_ID; } catch { }
         }
 
         const scaleX = (symbol as any)?.scaleX ?? 1;
@@ -1085,6 +1218,12 @@ export class Symbols {
     this.resetSymbolDepths();
     this.restoreSymbolVisibility();
 
+    const slotTumbles = spinData?.slot?.tumbles;
+    const bonusTumbles = freeSpinItem?.tumbles;
+    const pendingTumbles = (Array.isArray(slotTumbles) && slotTumbles.length > 0)
+      ? slotTumbles
+      : (Array.isArray(bonusTumbles) ? bonusTumbles : []);
+
     // Create a mock Data object to use with existing functions
     const mockData = new Data();
     mockData.symbols = symbolsToUse;
@@ -1127,17 +1266,12 @@ export class Symbols {
 
     // Apply tumbles if provided by backend
     try {
-    const slotTumbles = spinData?.slot?.tumbles;
-    const bonusTumbles = freeSpinItem?.tumbles;
-    const tumbles = (Array.isArray(slotTumbles) && slotTumbles.length > 0)
-      ? slotTumbles
-      : (Array.isArray(bonusTumbles) ? bonusTumbles : []);
-    if (Array.isArray(tumbles) && tumbles.length > 0) {
-      const source = (tumbles === bonusTumbles) ? 'FreeSpin item' : 'SpinData';
-      console.log(`[Symbols] Applying ${tumbles.length} tumble step(s) from ${source}`);
-      await this.applyTumbles(tumbles);
-      console.log('[Symbols] Tumbles applied successfully');
-    }
+      if (Array.isArray(pendingTumbles) && pendingTumbles.length > 0) {
+        const source = (pendingTumbles === bonusTumbles) ? 'FreeSpin item' : 'SpinData';
+        console.log(`[Symbols] Applying ${pendingTumbles.length} tumble step(s) from ${source}`);
+        await this.applyTumbles(pendingTumbles);
+        console.log('[Symbols] Tumbles applied successfully');
+      }
     } catch (e) {
       console.warn('[Symbols] Failed processing tumbles:', e);
     }
@@ -1150,9 +1284,11 @@ export class Symbols {
     const scatterGrids = this.symbolDetector.getScatterGrids(scatterData);
     console.log('[Symbols] ScatterGrids found:', scatterGrids.length);
 
-    const isRetrigger = gameStateManager.isBonus && scatterGrids.length >= 3;
-    if (isRetrigger || scatterGrids.length >= 4) {
-      console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
+    const scatterCount = scatterGrids.length;
+    const isRetrigger = gameStateManager.isBonus && scatterCount >= SCATTER_RETRIGGER_COUNT;
+    const isTrigger = !gameStateManager.isBonus && scatterCount >= SCATTER_TRIGGER_COUNT;
+    if (isRetrigger || isTrigger) {
+      console.log(`[Symbols] Scatter detected! Found ${scatterCount} scatter symbols`);
       gameStateManager.isScatter = true;
 
       // Animate and handle scatter
@@ -1757,6 +1893,13 @@ export class Symbols {
     idleAnimName: string
   ): Promise<void> {
     this.isBuyFeatureTransitionComplete = false;
+    // Hide win tracker + win bar text before merge/transition begins
+    try {
+      const gameScene: any = this.scene as any;
+      gameScene?.winTracker?.hideWithFade?.(150);
+      gameScene?.header?.hideWinningsDisplay?.();
+      gameScene?.bonusHeader?.hideWinningsDisplay?.();
+    } catch {}
     await this.playBuyFeatureScatterMerge(scatterSymbols, winAnimName, idleAnimName);
     // Transition_BZ already started immediately after explosion in playBuyFeatureScatterMerge
     // await this.playTransitionBzWinAnimation({ holdOverlay: false });
@@ -2148,15 +2291,14 @@ export class Symbols {
     gameEventManager.on(GameEventType.REELS_START, enable);
     gameEventManager.on(GameEventType.REELS_STOP, disable);
     const handler = () => {
-      if (!this.skipInputEnabled && !this.tumbleInProgress) return;
+      if (this.tumbleInProgress) return;
+      if (!this.skipInputEnabled) return;
       if (gameStateManager.isShowingWinDialog) return;
+      if (gameStateManager.isShowingWinlines) return;
       if (gameStateManager.isTurbo) return;
       if (gameStateManager.isReelSpinning && this.reelDropInProgress) {
         this.requestSkipReelDrops();
         return;
-      }
-      if (this.tumbleInProgress && this.tumbleDropInProgress) {
-        this.requestSkipTumbles();
       }
     };
     this.skipPointerHandler = handler;
@@ -2272,9 +2414,41 @@ export class Symbols {
   }
 
   public startPreSpinDrop(): void {
-    // In the new implementation, old symbols are dropped as part of dropReels
-    // This method is kept for compatibility but does nothing
-    console.log('[Symbols] startPreSpinDrop called (no-op in new implementation)');
+    // Immediately destroy all old symbols when a new spin starts
+    // This prevents symbols from lingering on screen if the spin button is pressed quickly
+    console.log('[Symbols] startPreSpinDrop: clearing old symbols immediately');
+    
+    if (!this.symbols || this.symbols.length === 0) {
+      return;
+    }
+
+    let destroyedCount = 0;
+    for (let col = 0; col < this.symbols.length; col++) {
+      const column = this.symbols[col];
+      if (!Array.isArray(column)) continue;
+      
+      for (let row = 0; row < column.length; row++) {
+        const symbol = column[row];
+        if (symbol && !(symbol as any).destroyed) {
+          // Kill any active tweens on this symbol
+          try {
+            this.scene.tweens.killTweensOf(symbol);
+          } catch { }
+          
+          // Destroy the symbol and its overlay if it exists
+          try {
+            const overlayObj = (symbol as any)?.__overlayImage;
+            if (overlayObj && !overlayObj.destroyed) {
+              overlayObj.destroy();
+            }
+            symbol.destroy();
+            destroyedCount++;
+          } catch { }
+        }
+      }
+    }
+    
+    console.log(`[Symbols] startPreSpinDrop destroyed ${destroyedCount} old symbols immediately`);
   }
 
   // Helper methods for symbol processing
@@ -2345,42 +2519,66 @@ export class Symbols {
       this.skipReelDropsPending = false;
       this.skipReelDropsActive = true;
     }
-
-    const reelPromises: Promise<void>[] = [];
+    const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
 
     // Drop symbols row by row from bottom to top
-    for (let step = 0; step < numRows; step++) {
-      const actualRow = (numRows - 1) - step;
-      const isLastReel = actualRow === 0;
-
-      // In bonus mode, add small pre-drop delay
+    if (isSkip) {
+      // Enforce strict bottom-left to top-right order during skip.
       const bonusPreDropDelay = gameStateManager.isBonus
         ? (this.scene.gameData.winUpDuration * 2)
         : 0.5;
+      const preDelay = bonusPreDropDelay * 0.2;
+      const rowDelay = this.scene.gameData.dropReelsDelay * 0.2;
 
-      // In turbo mode, remove row stagger so all drop together
-      const startDelay = bonusPreDropDelay +
-        ((isTurbo || this.skipReelDropsActive) ? 0 : this.scene.gameData.dropReelsDelay * step);
-
-      const p = (async () => {
-        await this.delayOrSkip(startDelay);
+      for (let step = 0; step < numRows; step++) {
+        const actualRow = (numRows - 1) - step;
+        const startDelay = step === 0 ? preDelay : rowDelay;
+        await this.delay(startDelay);
         console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
-
-        // Drop old symbols first with same animation as new symbols
         await this.dropOldSymbols(actualRow);
-
-        // Then drop new symbols
         await this.dropNewSymbols(actualRow, false);
-      })();
-      reelPromises.push(p);
-    }
+      }
 
-    try {
-      await Promise.all(reelPromises);
       console.log('[Symbols] All reels completed');
       this.clearSkipReelDrops();
-    } finally {
       this.reelDropInProgress = false;
+    } else {
+      const reelPromises: Promise<void>[] = [];
+
+      for (let step = 0; step < numRows; step++) {
+        const actualRow = (numRows - 1) - step;
+        const isLastReel = actualRow === 0;
+
+        // In bonus mode, add small pre-drop delay
+        const bonusPreDropDelay = gameStateManager.isBonus
+          ? (this.scene.gameData.winUpDuration * 2)
+          : 0.5;
+
+        // In turbo mode, remove row stagger so all drop together
+        const rowDelayFactor = isTurbo ? 0 : 1;
+        const startDelay = bonusPreDropDelay +
+          (this.scene.gameData.dropReelsDelay * step * rowDelayFactor);
+
+        const p = (async () => {
+          await this.delayOrSkip(startDelay);
+          console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
+
+          // Drop old symbols first with same animation as new symbols
+          await this.dropOldSymbols(actualRow);
+
+          // Then drop new symbols
+          await this.dropNewSymbols(actualRow, false);
+        })();
+        reelPromises.push(p);
+      }
+
+      try {
+        await Promise.all(reelPromises);
+        console.log('[Symbols] All reels completed');
+        this.clearSkipReelDrops();
+      } finally {
+        this.reelDropInProgress = false;
+      }
     }
 
     // Turbo mode: play turbo drop sound effect
@@ -2407,7 +2605,7 @@ export class Symbols {
       const symbolHop = this.scene.gameData.winUpHeight * 0.5;
       const isTurbo = !!this.scene.gameData?.isTurbo;
       const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
-      const speed = isSkip ? 0.45 : 1;
+      const speed = isSkip ? 0.5 : 1;
 
       // Calculate drop distance to move off screen
       const gridBottomY = this.slotY + this.totalGridHeight * 0.5;
@@ -2472,6 +2670,11 @@ export class Symbols {
 
   private async dropNewSymbols(index: number, extendDuration: boolean = false): Promise<void> {
     return new Promise<void>((resolve) => {
+      if (!this.newSymbols || this.newSymbols.length === 0) {
+        resolve();
+        return;
+      }
+
       if (!this.symbols || !this.symbols[0] || !this.symbols[0][0]) {
         console.warn('[Symbols] dropNewSymbols: invalid symbols array');
         resolve();
@@ -2487,7 +2690,7 @@ export class Symbols {
       const symbolHop = this.scene.gameData.winUpHeight * 0.5;
       const isTurbo = !!this.scene.gameData?.isTurbo;
       const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
-      const speed = isSkip ? 0.45 : 1;
+      const speed = isSkip ? 0.2 : 1;
 
       console.log(`[Symbols] dropNewSymbols row ${index}: ${totalAnimations} columns, isTurbo=${isTurbo}, STAGGER_MS=${STAGGER_MS}`);
 
@@ -3288,7 +3491,7 @@ export class Symbols {
     }
 
     if (skipTumble) {
-      // Fast-path: remove symbols immediately without animations
+      // Fast-path: remove symbols immediately but still play win animations at fast speed
       try {
         const w = Number((tumble as any)?.win ?? 0);
         const outsArr = Array.isArray((tumble as any)?.symbols?.out) ? (tumble as any).symbols.out as Array<{ win?: number }> : [];
@@ -3298,20 +3501,52 @@ export class Symbols {
           notifyFirstWinIfNeeded();
         }
       } catch { }
+      
+      // Still apply animations but at high speed
+      const removalPromises: Promise<void>[] = [];
+      const TurboConfig = (window as any)?.TurboConfig || { TURBO_SPEED_MULTIPLIER: 0.25 };
+      const speedMultiplier = TurboConfig.TURBO_SPEED_MULTIPLIER || 0.25;
+      const animationDuration = Math.max(100, (self.scene?.gameData?.winUpDuration || 400) * speedMultiplier);
+      
       for (let col = 0; col < numCols; col++) {
         for (let row = 0; row < numRows; row++) {
           if (!removeMask[col][row]) continue;
           const obj = self.symbols[col][row];
           if (obj) {
-            try { this.destroySymbolOverlays(obj); } catch { }
-            try { obj.destroy(); } catch { }
-          }
-          self.symbols[col][row] = null as any;
-          if (self.currentSymbolData && self.currentSymbolData[row]) {
-            (self.currentSymbolData[row] as any)[col] = null;
+            removalPromises.push(new Promise<void>((resolve) => {
+              try {
+                // Apply fast fade animation
+                self.scene.tweens.killTweensOf(obj);
+                const tweenTargets: any = this.getSymbolTweenTargets(obj);
+                self.scene.tweens.add({
+                  targets: tweenTargets,
+                  alpha: 0,
+                  duration: animationDuration,
+                  ease: Phaser.Math.Easing.Cubic.In,
+                  onComplete: () => {
+                    try { this.destroySymbolOverlays(obj); } catch { }
+                    try { obj.destroy(); } catch { }
+                    self.symbols[col][row] = null as any;
+                    if (self.currentSymbolData && self.currentSymbolData[row]) {
+                      (self.currentSymbolData[row] as any)[col] = null;
+                    }
+                    resolve();
+                  }
+                });
+              } catch {
+                try { obj.destroy(); } catch { }
+                self.symbols[col][row] = null as any;
+                if (self.currentSymbolData && self.currentSymbolData[row]) {
+                  (self.currentSymbolData[row] as any)[col] = null;
+                }
+                resolve();
+              }
+            }));
           }
         }
       }
+      
+      await Promise.all(removalPromises);
     } else {
       for (let col = 0; col < numCols; col++) {
         for (let row = 0; row < numRows; row++) {
@@ -3885,7 +4120,7 @@ export class Symbols {
 
       if (gameStateManager.isBonus) {
         // Bonus mode: check for retrigger (3+ scatters)
-        if (count >= 3) {
+        if (count >= SCATTER_RETRIGGER_COUNT) {
           console.log(`[Symbols] Scatter detected during tumble in bonus: ${count} scatter(s)`);
           // Defer retrigger to run after all wins/tumbles/multipliers complete (WIN_STOP)
           if (!(self as any).pendingScatterRetrigger) {
@@ -3897,7 +4132,7 @@ export class Symbols {
         }
       } else {
         // Normal mode: check for scatter trigger (4+ scatters)
-        if (count >= 4 && !gameStateManager.isScatter) {
+        if (count >= SCATTER_TRIGGER_COUNT && !gameStateManager.isScatter) {
           console.log(`[Symbols] Scatter detected during tumble in normal mode: ${count} scatter(s)`);
           // Mark scatter as detected - the final scatter check after all tumbles will handle the animation
           gameStateManager.isScatter = true;
@@ -4112,25 +4347,6 @@ export class Symbols {
     });
   }
 
-  private getSpinsLeftFromSpinData(spinData: any): number {
-    try {
-      const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
-      const items = Array.isArray(fs?.items) ? fs.items : [];
-      const positiveItem = items.find((it: any) => typeof it?.spinsLeft === 'number' && it.spinsLeft > 0);
-      const firstItemSpinsLeft = items.length > 0 && typeof items[0]?.spinsLeft === 'number'
-        ? items[0].spinsLeft
-        : 0;
-      const maxItemSpinsLeft = items.reduce((m: number, it: any) => {
-        const v = Number(it?.spinsLeft || 0);
-        return v > m ? v : m;
-      }, 0);
-      const countValue = typeof fs?.count === 'number' ? fs.count : 0;
-      const derivedSpinsLeft = Math.max(positiveItem?.spinsLeft ?? 0, firstItemSpinsLeft, maxItemSpinsLeft, 0);
-      return derivedSpinsLeft > 0 ? derivedSpinsLeft : Math.max(countValue, 0);
-    } catch {
-      return 0;
-    }
-  }
 
   private showMultiplierOverlayAfterExplosion(baseObj: any): void {
     if ((baseObj as any)?.__overlayHidden) {

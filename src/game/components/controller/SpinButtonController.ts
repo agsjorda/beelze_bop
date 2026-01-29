@@ -38,7 +38,7 @@ export class SpinButtonController {
   private isDisabled: boolean = false;
   private readonly DISABLED_ALPHA: number = 0.5;
   private lastClickAt: number = 0;
-  private readonly clickDebounceMs: number = 250;
+  private readonly clickDebounceMs: number = 500;
 
   constructor(
     scene: Scene,
@@ -106,6 +106,7 @@ export class SpinButtonController {
     }
     if (this.spinIcon) {
       this.spinIcon.setAlpha(1.0);
+      this.spinIcon.clearTint();
     }
     if (this.spinIconTween) {
       this.spinIconTween.resume();
@@ -121,10 +122,11 @@ export class SpinButtonController {
     this.isDisabled = true; // Set flag first
     if (this.spinButton) {
       this.spinButton.disableInteractive();
-      this.spinButton.setTint(0x666666); // Gray out the button (match thats_bait)
+      this.spinButton.setTint(0x666666); // Gray out the button
     }
     if (this.spinIcon) {
-      this.spinIcon.setAlpha(this.DISABLED_ALPHA); // Dim icon (match thats_bait)
+      this.spinIcon.setAlpha(0.5);
+      this.spinIcon.setTint(0x666666);
     }
     if (this.spinIconTween) {
       this.spinIconTween.pause(); // Pause icon animation

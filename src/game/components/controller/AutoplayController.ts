@@ -305,6 +305,7 @@ export class AutoplayController {
   public disableButton(): void {
     if (this.autoplayButton) {
       this.autoplayButton.setAlpha(0.5);
+      this.autoplayButton.setTint(0x555555);
       this.autoplayButton.disableInteractive();
     }
   }
@@ -315,6 +316,7 @@ export class AutoplayController {
   public enableButton(): void {
     if (this.autoplayButton) {
       this.autoplayButton.setAlpha(1.0);
+      this.autoplayButton.clearTint();
       this.autoplayButton.setInteractive();
     }
   }

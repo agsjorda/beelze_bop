@@ -19,11 +19,13 @@ export interface BuyFeatureCallbacks {
   enableFeatureButton: () => void;
   enableBetButtons: () => void;
   enableAmplifyButton: () => void;
+  enableTurboButton: () => void;
   disableSpinButton: () => void;
   disableAutoplayButton: () => void;
   disableFeatureButton: () => void;
   disableBetButtons: () => void;
   disableAmplifyButton: () => void;
+  disableTurboButton: () => void;
   enableBetBackgroundInteraction: (reason: string) => void;
   disableBetBackgroundInteraction: (reason: string) => void;
   showOutOfBalancePopup: () => void;
@@ -58,6 +60,26 @@ export class BuyFeatureController {
     this.buyFeatureSpinLock = locked;
   }
 
+  private lockControls(reason: string): void {
+    this.callbacks.disableSpinButton();
+    this.callbacks.disableAutoplayButton();
+    this.callbacks.disableFeatureButton();
+    this.callbacks.disableBetButtons();
+    this.callbacks.disableAmplifyButton();
+    this.callbacks.disableTurboButton();
+    this.callbacks.disableBetBackgroundInteraction(reason);
+  }
+
+  private unlockControls(reason: string): void {
+    this.callbacks.enableSpinButton();
+    this.callbacks.enableAutoplayButton();
+    this.callbacks.enableFeatureButton();
+    this.callbacks.enableBetButtons();
+    this.callbacks.enableAmplifyButton();
+    this.callbacks.enableTurboButton();
+    this.callbacks.enableBetBackgroundInteraction(reason);
+  }
+
   public showDrawer(): void {
     if (!this.buyFeature) {
       console.warn('[SlotController] Buy feature component not initialized');
@@ -72,12 +94,7 @@ export class BuyFeatureController {
       onConfirm: () => {
         console.log('[SlotController] Buy feature confirmed');
         this.buyFeatureSpinLock = true;
-        this.callbacks.disableSpinButton();
-        this.callbacks.disableAutoplayButton();
-        this.callbacks.disableFeatureButton();
-        this.callbacks.disableBetButtons();
-        this.callbacks.disableAmplifyButton();
-        this.callbacks.disableBetBackgroundInteraction('buy feature confirmed');
+        this.lockControls('buy feature confirmed');
         this.handleBuyFeature();
       }
     });
@@ -89,6 +106,8 @@ export class BuyFeatureController {
     const gameAPI = this.callbacks.getGameAPI();
     if (!this.buyFeature || !gameAPI) {
       console.error('[SlotController] Buy feature or GameAPI not available');
+      this.buyFeatureSpinLock = false;
+      this.unlockControls('buy feature unavailable');
       return;
     }
 
@@ -104,12 +123,8 @@ export class BuyFeatureController {
       const currentBalance = this.callbacks.getBalanceAmount();
       if (currentBalance < calculatedPrice) {
         console.error(`[SlotController] Insufficient balance: $${currentBalance.toFixed(2)} < $${calculatedPrice.toFixed(2)}`);
-        this.callbacks.enableSpinButton();
-        this.callbacks.enableAutoplayButton();
-        this.callbacks.enableFeatureButton();
-        this.callbacks.enableBetButtons();
-        this.callbacks.enableAmplifyButton();
-        this.callbacks.enableBetBackgroundInteraction('buy feature insufficient balance');
+        this.buyFeatureSpinLock = false;
+        this.unlockControls('buy feature insufficient balance');
         this.callbacks.showOutOfBalancePopup();
         return;
       }
@@ -121,17 +136,7 @@ export class BuyFeatureController {
       this.callbacks.updateBalanceAmount(newBalance);
       console.log(`[SlotController] Balance deducted: $${currentBalance.toFixed(2)} -> $${newBalance.toFixed(2)}`);
 
-      try {
-        const scene = this.callbacks.getScene();
-        const gameScene: any = scene as any;
-        const symbolsComponent = gameScene?.symbols;
-        if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
-          console.log('[SlotController] Triggering pre-spin symbol drop for buy feature spin');
-          symbolsComponent.startPreSpinDrop();
-        }
-      } catch (e) {
-        console.warn('[SlotController] Failed to start pre-spin symbol drop for buy feature spin:', e);
-      }
+      // Avoid pre-spin symbol clearing; only run this on explicit skip to prevent flicker.
 
       console.log('[SlotController] Calling doSpin for buy feature...');
       gameStateManager.isBuyFeatureSpin = true;
@@ -184,12 +189,8 @@ export class BuyFeatureController {
     } catch (error) {
       console.error('[SlotController] Error processing buy feature purchase:', error);
       gameStateManager.isBuyFeatureSpin = false;
-      this.callbacks.enableSpinButton();
-      this.callbacks.enableAutoplayButton();
-      this.callbacks.enableFeatureButton();
-      this.callbacks.enableBetButtons();
-      this.callbacks.enableAmplifyButton();
-      this.callbacks.enableBetBackgroundInteraction('buy feature error');
+      this.buyFeatureSpinLock = false;
+      this.unlockControls('buy feature error');
     }
   }
 }

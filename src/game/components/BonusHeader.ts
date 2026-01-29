@@ -375,8 +375,7 @@ export class BonusHeader {
 			return Math.round(amount).toString();
 		}
 		const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-		// For values under 1, drop the leading zero to match ".08" style.
-		return amount > 0 && amount < 1 ? formatted.replace(/^0/, '') : formatted;
+		return formatted;
 	}
 
 	/**

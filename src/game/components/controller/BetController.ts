@@ -52,6 +52,8 @@ export class BetController {
   
   // State
   private baseBetAmount: number = 0.2;
+  private isButtonsDisabled: boolean = false;
+  private disabledAlpha: number = 0.5;
 
   constructor(
     scene: Scene,
@@ -141,6 +143,10 @@ export class BetController {
       .setInteractive();
     
     this.decreaseBetButton.on('pointerdown', () => {
+      if (this.isButtonsDisabled) {
+        console.log('[BetController] Decrease bet clicked but buttons are disabled');
+        return;
+      }
       log.debug('Decrease bet clicked');
       this.adjustBetByStep(-1);
     });
@@ -154,6 +160,10 @@ export class BetController {
       .setInteractive();
     
     this.increaseBetButton.on('pointerdown', () => {
+      if (this.isButtonsDisabled) {
+        console.log('[BetController] Increase bet clicked but buttons are disabled');
+        return;
+      }
       log.debug('Increase bet clicked');
       this.adjustBetByStep(1);
     });
@@ -219,8 +229,13 @@ export class BetController {
   /**
    * Update bet limit button states (grey out at min/max)
    */
-  public updateBetLimitButtons(currentBet: number): void {
+  public updateBetLimitButtons(currentBet: number, shouldAllowEnable: boolean = true): void {
     if (!this.decreaseBetButton && !this.increaseBetButton) {
+      return;
+    }
+
+    if (this.isButtonsDisabled) {
+      this.disableBetButtons(this.disabledAlpha);
       return;
     }
 
@@ -233,9 +248,9 @@ export class BetController {
 
     // Update decrease button
     if (this.decreaseBetButton) {
-      if (isAtMin) {
-        this.decreaseBetButton.setAlpha(0.3);
-        this.decreaseBetButton.setTint(0x777777);
+      if (isAtMin || !shouldAllowEnable) {
+        this.decreaseBetButton.setAlpha(0.5);
+        this.decreaseBetButton.setTint(0x555555);
         this.decreaseBetButton.disableInteractive();
       } else {
         this.decreaseBetButton.setAlpha(1.0);
@@ -246,9 +261,9 @@ export class BetController {
 
     // Update increase button
     if (this.increaseBetButton) {
-      if (isAtMax) {
-        this.increaseBetButton.setAlpha(0.3);
-        this.increaseBetButton.setTint(0x777777);
+      if (isAtMax || !shouldAllowEnable) {
+        this.increaseBetButton.setAlpha(0.5);
+        this.increaseBetButton.setTint(0x555555);
         this.increaseBetButton.disableInteractive();
       } else {
         this.increaseBetButton.setAlpha(1.0);
@@ -261,16 +276,18 @@ export class BetController {
   /**
    * Disable bet buttons
    */
-  public disableBetButtons(): void {
+  public disableBetButtons(alpha: number = 0.5): void {
+    this.isButtonsDisabled = true;
+    this.disabledAlpha = alpha;
     if (this.decreaseBetButton) {
-      this.decreaseBetButton.setAlpha(0.3);
-      this.decreaseBetButton.setTint(0x777777);
+      this.decreaseBetButton.setAlpha(alpha);
+      this.decreaseBetButton.setTint(0x555555);
       this.decreaseBetButton.disableInteractive();
     }
 
     if (this.increaseBetButton) {
-      this.increaseBetButton.setAlpha(0.3);
-      this.increaseBetButton.setTint(0x777777);
+      this.increaseBetButton.setAlpha(alpha);
+      this.increaseBetButton.setTint(0x555555);
       this.increaseBetButton.disableInteractive();
     }
   }
@@ -279,6 +296,7 @@ export class BetController {
    * Enable bet buttons
    */
   public enableBetButtons(): void {
+    this.isButtonsDisabled = false;
     if (this.decreaseBetButton) {
       this.decreaseBetButton.setAlpha(1.0);
       this.decreaseBetButton.clearTint();

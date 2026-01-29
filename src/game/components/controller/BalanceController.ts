@@ -160,6 +160,12 @@ export class BalanceController {
       if (this.pendingBalanceUpdate.balance !== undefined) {
         const oldBalance = this.getBalanceAmountText();
         this.updateBalanceAmount(this.pendingBalanceUpdate.balance);
+        try {
+          const gameAPI = this.callbacks.getGameAPI();
+          if (gameAPI?.getDemoState()) {
+            gameAPI.updateDemoBalance(this.pendingBalanceUpdate.balance);
+          }
+        } catch { }
         if (this.pendingBalanceUpdate.winnings && this.pendingBalanceUpdate.winnings > 0) {
           console.log(`[SlotController] Balance updated after reels stopped: ${oldBalance} -> ${this.pendingBalanceUpdate.balance} (added winnings: ${this.pendingBalanceUpdate.winnings})`);
         } else {

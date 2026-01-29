@@ -117,7 +117,7 @@ export class WinTracker {
     );
 
     const spacing = this.itemSpacing;
-    const isVertical = items.length >= 2;
+    const isVertical = false;
     const lineSpacing = Math.max(this.labelFontSize + 12, 28);
     const startX = isVertical ? 0 : -((items.length - 1) * spacing) / 2;
     const startY = isVertical ? -((items.length - 1) * lineSpacing) / 2 : 0;

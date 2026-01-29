@@ -157,7 +157,8 @@ export class TurboButtonController {
   public disableButton(): void {
     const turboButton = this.buttons.get('turbo');
     if (turboButton) {
-      turboButton.setTint(0x666666);
+      turboButton.setAlpha(0.5);
+      turboButton.setTint(0x555555);
       turboButton.disableInteractive();
       console.log('[SlotController] Turbo button disabled and greyed out');
     }
@@ -166,6 +167,7 @@ export class TurboButtonController {
   public enableButton(): void {
     const turboButton = this.buttons.get('turbo');
     if (turboButton) {
+      turboButton.setAlpha(1.0);
       turboButton.clearTint();
       turboButton.setInteractive();
       console.log('[SlotController] Turbo button enabled');

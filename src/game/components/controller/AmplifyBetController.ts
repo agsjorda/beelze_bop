@@ -270,6 +270,7 @@ export class AmplifyBetController {
   public disableButton(): void {
     const amplifyButton = this.buttons.get('amplify');
     if (amplifyButton) {
+      amplifyButton.setAlpha(0.5);
       amplifyButton.removeInteractive();
       console.log('[SlotController] Amplify button disabled');
     }
@@ -278,6 +279,8 @@ export class AmplifyBetController {
   public enableButton(): void {
     const amplifyButton = this.buttons.get('amplify');
     if (amplifyButton) {
+      amplifyButton.setAlpha(1.0);
+      amplifyButton.clearTint();
       amplifyButton.setInteractive();
       console.log('[SlotController] Amplify button enabled');
     }
