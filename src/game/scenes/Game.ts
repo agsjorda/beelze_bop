@@ -100,10 +100,10 @@ export class Game extends Scene {
 		try { this.bonusBackground?.resize(this); } catch { }
 		try {
 			if (this.character1) {
-				this.character1.setPosition(this.scale.width * 0.15, this.scale.height * 0.5);
+				this.character1.setPosition(this.scale.width * 0.42, this.scale.height * 0.27);
 			}
 			if (this.character2) {
-				this.character2.setPosition(this.scale.width * 0.85, this.scale.height * 0.5);
+				this.character2.setPosition(this.scale.width * 0.65, this.scale.height * 0.24);
 			}
 		} catch { }
 		try { this.header?.resize(this); } catch { }
@@ -611,6 +611,14 @@ export class Game extends Scene {
 					} catch (e) {
 						console.warn('[Game] WIN_STOP: Failed to derive freespin item totalWin, falling back to tumble totalWin', e);
 					}
+				}
+
+				// Prefer slot.totalWin when provided (includes full tumble sequence)
+				const slotTotalWinRaw = (spinData.slot as any)?.totalWin;
+				const slotTotalWin = Number(slotTotalWinRaw);
+				if (totalWin === 0 && Number.isFinite(slotTotalWin) && slotTotalWin > 0) {
+					console.log(`[Game] WIN_STOP: Using slot.totalWin=${slotTotalWin}`);
+					totalWin = slotTotalWin;
 				}
 
 				const slotTumbles = spinData.slot?.tumbles || [];
@@ -1341,6 +1349,26 @@ export class Game extends Scene {
 			if (this.bonusBackground) console.log('- BonusBackground visible:', this.bonusBackground.getContainer().visible);
 			if (this.header) console.log('- Header visible:', this.header.getContainer().visible);
 			if (this.bonusHeader) console.log('- BonusHeader visible:', this.bonusHeader.getContainer().visible);
+		};
+
+		// Add a helper to adjust default win dialog auto-close from the console
+		(window as any).setWinDialogAutoClose = (ms?: number | null, enabled: boolean = true) => {
+			const value = (ms === undefined) ? 2000 : ms;
+			this.dialogs.setDefaultWinDialogAutoClose(value === null ? null : Number(value), enabled);
+		};
+
+		// Add a helper to show a Medium win dialog from the console.
+		(window as any).showMediumWin = (amount: number = 10000, bet: number = 1) => {
+			this.dialogs.showMediumWin(this, { winAmount: amount, betAmount: bet });
+		};
+		(window as any).showSmallWin = (amount: number = 10000, bet: number = 1) => {
+			this.dialogs.showSmallWin(this, { winAmount: amount, betAmount: bet });
+		};
+		(window as any).showLargeWin = (amount: number = 10000, bet: number = 1) => {
+			this.dialogs.showLargeWin(this, { winAmount: amount, betAmount: bet });
+		};
+		(window as any).showSuperWin = (amount: number = 10000, bet: number = 1) => {
+			this.dialogs.showSuperWin(this, { winAmount: amount, betAmount: bet });
 		};
 
 	}

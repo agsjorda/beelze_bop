@@ -165,6 +165,17 @@ export class FreeSpinController {
       console.log('[FreeSpinController] Already triggered or active, skipping');
       return;
     }
+
+    // Apply deferred bonus-mode transition right before autoplay starts.
+    try {
+      const sceneAny: any = this.scene as any;
+      const deferred = sceneAny?.__deferredBonusStart;
+      if (typeof deferred === 'function') {
+        sceneAny.__deferredBonusStart = null;
+        deferred();
+        console.log('[FreeSpinController] Ran deferred bonus mode trigger');
+      }
+    } catch {}
     
     // Check if we're in bonus mode
     if (!gameStateManager.isBonus) {
@@ -301,29 +312,8 @@ export class FreeSpinController {
    */
   private continueAutoplay(): void {
     console.log(`[FreeSpinController] Continuing - ${this.spinsRemaining} spins remaining`);
-    
-    if (this.spinsRemaining > 0) {
-      console.log('[FreeSpinController] Waiting for WIN_STOP');
-      this.waitingForWinlines = true;
-    } else {
-      // If a scatter retrigger is pending, keep autoplay active until retrigger flow completes.
-      try {
-        const symbolsAny: any = this.scene as any;
-        const symbols = symbolsAny?.symbols;
-        if (
-          gameStateManager.isBonus &&
-          symbols &&
-          typeof symbols.hasPendingScatterRetrigger === 'function' &&
-          symbols.hasPendingScatterRetrigger()
-        ) {
-          console.log('[FreeSpinController] Retrigger pending - deferring stop until retrigger sequence completes');
-          return;
-        }
-      } catch { }
-
-      console.log('[FreeSpinController] All spins completed');
-      this.stop();
-    }
+    console.log('[FreeSpinController] Waiting for WIN_STOP');
+    this.waitingForWinlines = true;
   }
 
   /**
@@ -351,6 +341,12 @@ export class FreeSpinController {
         return;
       }
     } catch { }
+
+    if (this.spinsRemaining <= 0) {
+      console.log('[FreeSpinController] Last free spin complete - stopping after WIN_STOP');
+      this.stop();
+      return;
+    }
     
     // Clear existing timer
     if (this.autoplayTimer) {
@@ -447,6 +443,22 @@ export class FreeSpinController {
     this.dialogListenerSetup = false;
     this.lastReportedSpinsLeft = null;
     this.lastReportedItemsLen = null;
+
+    // Mark bonus finished once free spins fully complete (no retrigger pending).
+    if (gameStateManager.isBonus && !gameStateManager.isBonusFinished) {
+      let hasPendingRetrigger = false;
+      try {
+        const symbolsAny: any = this.scene as any;
+        const symbols = symbolsAny?.symbols;
+        if (symbols && typeof symbols.hasPendingScatterRetrigger === 'function') {
+          hasPendingRetrigger = symbols.hasPendingScatterRetrigger();
+        }
+      } catch { }
+      if (!hasPendingRetrigger) {
+        console.log('[FreeSpinController] Free spins complete - setting isBonusFinished=true');
+        gameStateManager.isBonusFinished = true;
+      }
+    }
     
     // Reset global autoplay state
     gameStateManager.isAutoPlaying = false;
@@ -577,6 +589,9 @@ export class FreeSpinController {
     // If win dialog already active, defer to WIN_DIALOG_CLOSED handler
     if (isWinDialogActive()) {
       console.log('[FreeSpinController] Win dialog active - deferring congrats');
+      gameEventManager.once(GameEventType.WIN_DIALOG_CLOSED, () => {
+        this.scheduleCongratsDialog();
+      });
       return;
     }
 
@@ -594,6 +609,9 @@ export class FreeSpinController {
       console.log('[FreeSpinController] Win dialog shown - deferring congrats');
       settled = true;
       this.scene.events.off('dialogShown', onDialogShown);
+      gameEventManager.once(GameEventType.WIN_DIALOG_CLOSED, () => {
+        this.scheduleCongratsDialog();
+      });
     };
 
     this.scene.events.on('dialogShown', onDialogShown);
@@ -607,6 +625,9 @@ export class FreeSpinController {
 
       if (isWinDialogActive()) {
         console.log('[FreeSpinController] Win dialog active after grace - deferring');
+        gameEventManager.once(GameEventType.WIN_DIALOG_CLOSED, () => {
+          this.scheduleCongratsDialog();
+        });
         return;
       }
 

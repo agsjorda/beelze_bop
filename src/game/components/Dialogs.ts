@@ -25,6 +25,8 @@ export interface DialogConfig {
 	isRetrigger?: boolean; // For FreeSpin_BZ: whether this is a retrigger case
 	betAmount?: number; // Base bet amount for staged win animations
 	suppressBlackOverlay?: boolean;
+	autoClose?: boolean;
+	autoCloseMs?: number;
 }
 
 export class Dialogs {
@@ -62,6 +64,10 @@ export class Dialogs {
 
 	// Auto-close timer for win dialogs during autoplay
 	private autoCloseTimer: Phaser.Time.TimerEvent | null = null;
+	private configAutoCloseMs: number | null = null;
+	private configAutoCloseEnabled: boolean = false;
+	private defaultWinDialogAutoCloseMs: number | null = 2500;
+	private defaultWinDialogAutoCloseEnabled: boolean = true;
 
 	// Number display Y positions per dialog group (overrides). If null, default will be used.
 	private numberYWin: number | null = 490;
@@ -202,13 +208,23 @@ export class Dialogs {
 		}
 
 		if (this.isDialogActive) {
-			this.hideDialog();
+			// Avoid delayed hide transitions from nuking the next dialog.
+			this.hideDialog(true);
 		}
 
 		console.log(`[Dialogs] Showing dialog: ${normalizedConfig.type}`);
 
 		// Track current dialog type for bonus mode detection
 		this.currentDialogType = normalizedConfig.type;
+		// Configure per-dialog auto-close (overrides default autoplay auto-close)
+		this.configAutoCloseEnabled = !!(normalizedConfig.autoClose || normalizedConfig.autoCloseMs !== undefined);
+		if (normalizedConfig.autoCloseMs !== undefined) {
+			this.configAutoCloseMs = Math.max(0, Number(normalizedConfig.autoCloseMs) || 0);
+		} else if (normalizedConfig.autoClose) {
+			this.configAutoCloseMs = 2000;
+		} else {
+			this.configAutoCloseMs = null;
+		}
 		// Track retrigger state only for Free Spin dialog
 		this.isRetriggerFreeSpin = (normalizedConfig.type === 'FreeSpin_BZ' || normalizedConfig.type === 'FreeSpinRetri_BZ')
 			? !!normalizedConfig.isRetrigger || normalizedConfig.type === 'FreeSpinRetri_BZ'
@@ -613,6 +629,20 @@ export class Dialogs {
 			this.autoCloseTimer = null;
 		}
 
+		// If caller explicitly requested auto-close, apply it for any dialog type.
+		if (this.configAutoCloseEnabled && this.configAutoCloseMs !== null) {
+			const delayMs = Math.max(0, this.configAutoCloseMs);
+			console.log('[Dialogs] Config auto-close enabled:', {
+				dialogType: this.currentDialogType,
+				delayMs
+			});
+			this.autoCloseTimer = scene.time.delayedCall(delayMs, () => {
+				console.log('[Dialogs] Config auto-close timer triggered - closing dialog');
+				this.handleDialogClick(scene, true);
+			});
+			return;
+		}
+
 		// Set up auto-close for win dialogs during autoplay OR when scatter is hit
 		console.log('[Dialogs] Auto-close timer setup check:', {
 			isWinDialog: this.isWinDialog(),
@@ -631,6 +661,30 @@ export class Dialogs {
 			}
 		} catch { }
 
+		// Default: auto-close win dialogs outside autoplay/scatter and always close FreeSpinRetri_BZ.
+		const isRetriggerDialog = this.currentDialogType === 'FreeSpinRetri_BZ';
+		const isAutoFlow = gameStateManager.isAutoPlaying || isFreeSpinAutoplay || gameStateManager.isScatter;
+		if (this.defaultWinDialogAutoCloseEnabled && this.defaultWinDialogAutoCloseMs !== null) {
+			if (isRetriggerDialog || (this.isWinDialog() && !isAutoFlow)) {
+				let delayMs = Math.max(0, this.defaultWinDialogAutoCloseMs);
+				// Ensure staged sequences have time to play all tiers before auto-close.
+				if (this.isStagedWinNumberAnimation && this.stagedWinStages.length > 1) {
+					const perStageDwellMs = 2000; // Keep in sync with startStagedWinNumberSequence
+					const stagedDelay = perStageDwellMs * this.stagedWinStages.length + 1500;
+					delayMs = Math.max(delayMs, stagedDelay);
+				}
+				console.log('[Dialogs] Default win dialog auto-close enabled:', {
+					dialogType: this.currentDialogType,
+					delayMs
+				});
+				this.autoCloseTimer = scene.time.delayedCall(delayMs, () => {
+					console.log('[Dialogs] Default win dialog auto-close timer triggered - closing dialog');
+					this.handleDialogClick(scene, true);
+				});
+				return;
+			}
+		}
+
 		// If a win dialog appears exactly when bonus spins are exhausted, do NOT auto-close it.
 		// We want the normal (non-autoplay) dwell time so the flow can proceed cleanly to Congrats.
 		if (this.isWinDialog() && gameStateManager.isBonusFinished) {
@@ -638,15 +692,11 @@ export class Dialogs {
 			return;
 		}
 
-		// Also auto-close FreeSpinDialog when it's a retrigger during bonus mode
-		const isRetriggerFreeSpinDialog = (this.currentDialogType === 'FreeSpin_BZ' || this.currentDialogType === 'FreeSpinRetri_BZ') && this.isRetriggerFreeSpin;
-		const shouldAutoClose = (this.isWinDialog() && (gameStateManager.isAutoPlaying || isFreeSpinAutoplay || gameStateManager.isScatter))
-			|| isRetriggerFreeSpinDialog;
+		// Only auto-close win dialogs during autoplay/scatter. Free spin dialogs stay until user clicks.
+		const shouldAutoClose = this.isWinDialog() && (gameStateManager.isAutoPlaying || isFreeSpinAutoplay || gameStateManager.isScatter);
 
 		if (shouldAutoClose) {
-			const reason = isRetriggerFreeSpinDialog
-				? 'retrigger'
-				: (gameStateManager.isAutoPlaying || isFreeSpinAutoplay ? 'autoplay' : 'scatter hit');
+			const reason = (gameStateManager.isAutoPlaying || isFreeSpinAutoplay) ? 'autoplay' : 'scatter hit';
 			// Base auto-close delay (ms). Previously ~2.5s. Extend by +1s when autoplaying (normal or free spin).
 			let baseDelayMs = 2500;
 
@@ -666,8 +716,7 @@ export class Dialogs {
 			}
 
 			const extraAutoplayDelayMs = 0;
-			// For retrigger FreeSpinDialog, use the same timing as win dialogs in autoplay for consistency
-			const delayMs = (reason === 'autoplay' || reason === 'retrigger') ? (baseDelayMs + extraAutoplayDelayMs) : baseDelayMs;
+			const delayMs = reason === 'autoplay' ? (baseDelayMs + extraAutoplayDelayMs) : baseDelayMs;
 			console.log(`[Dialogs] Setting up auto-close timer during ${reason} (${Math.round(delayMs / 2000)} seconds)`);
 			console.log(`[Dialogs] Dialog will automatically close in ${Math.round(delayMs / 2000)} seconds due to ${reason}`);
 
@@ -783,20 +832,18 @@ export class Dialogs {
 		numberDisplay.create(scene);
 		// Display free spins if provided, otherwise display win amount
 		const displayValue = freeSpins !== undefined ? freeSpins : winAmount;
-		// Pre-measure for Total Win so the value doesn't overflow the screen
+		// Pre-measure to ensure the value doesn't overflow the screen for all dialogs
 		numberDisplay.displayValue(displayValue);
-		if (isTotalWinDialog) {
-			try {
-				const bounds = numberDisplay.getContainer().getBounds();
-				const maxWidth = scene.scale.width * 0.82;
-				if (bounds.width > maxWidth) {
-					const baseScale = numberConfig.scale ?? 0.3;
-					const scaleFactor = maxWidth / bounds.width;
-					const newScale = Math.max(0.18, baseScale * scaleFactor);
-					numberDisplay.setScale(newScale);
-				}
-			} catch { }
-		}
+		try {
+			const bounds = numberDisplay.getContainer().getBounds();
+			const maxWidth = scene.scale.width * 0.82;
+			if (bounds.width > maxWidth) {
+				const baseScale = numberConfig.scale ?? 0.3;
+				const scaleFactor = maxWidth / bounds.width;
+				const newScale = Math.max(0.18, baseScale * scaleFactor);
+				numberDisplay.setScale(newScale);
+			}
+		} catch { }
 		// Start from 0 (or current) and animate on fade-in
 		numberDisplay.displayValue(0);
 		this.numberDisplay = numberDisplay;
@@ -851,6 +898,18 @@ export class Dialogs {
 		const fsDisplay = new NumberDisplay(this.networkManager, this.screenModeManager, numberConfig);
 		fsDisplay.create(scene);
 		fsDisplay.displayValue(freeSpins);
+		
+		// Ensure secondary display doesn't overflow screen
+		try {
+			const bounds = fsDisplay.getContainer().getBounds();
+			const maxWidth = scene.scale.width * 0.82;
+			if (bounds.width > maxWidth) {
+				const baseScale = numberConfig.scale ?? 0.3;
+				const scaleFactor = maxWidth / bounds.width;
+				const newScale = Math.max(0.18, baseScale * scaleFactor);
+				fsDisplay.setScale(newScale);
+			}
+		} catch { }
 
 		this.congratsFreeSpinsDisplay = fsDisplay;
 
@@ -1108,6 +1167,13 @@ export class Dialogs {
 		console.log('[Dialogs] All win dialog elements disabled successfully');
 	}
 
+	private hideBlackOverlay(): void {
+		if (!this.blackOverlay) return;
+		this.blackOverlay.setVisible(false);
+		this.blackOverlay.setAlpha(0);
+		console.log('[Dialogs] Black overlay hidden');
+	}
+
 	/**
 	 * Reset game state for new spin (same logic as when spin is triggered)
 	 */
@@ -1354,17 +1420,45 @@ export class Dialogs {
 	 * Start candy transition for free spin dialog
 	 */
 	private startCandyTransition(scene: Scene): void {
-		   // No transition: just cleanup and trigger bonus mode
-		   this.disableAllWinDialogElements();
-		   this.cleanupDialog();
-		   this.triggerBonusMode(scene);
-		   scene.events.emit('dialogAnimationsComplete');
-		   try {
-			   const audioManager = (window as any).audioManager;
-			   if (audioManager && typeof audioManager.restoreBackground === 'function') {
-				   audioManager.restoreBackground();
-			   }
-		   } catch { }
+		// Hide dialog visuals immediately, but defer cleanup/bonus mode until autoplay is about to start.
+		this.disableAllWinDialogElements();
+		try { this.dialogOverlay?.setVisible(false); } catch { }
+		try {
+			const sceneAny: any = scene as any;
+			sceneAny.__deferredBonusStart = () => {
+				this.cleanupDialog();
+				try {
+					const audioManager = (window as any).audioManager;
+					if (audioManager && typeof audioManager.restoreBackground === 'function') {
+						audioManager.restoreBackground();
+					}
+				} catch { }
+			};
+			console.log('[Dialogs] Deferred bonus mode trigger until free spin autoplay start');
+		} catch { }
+
+		// Switch to bonus visuals immediately as the radial light transition begins.
+		this.triggerBonusMode(scene);
+
+		// Play radial light transition before signaling dialog completion (starts free spins).
+		let completionEmitted = false;
+		const emitDialogCompleteOnce = () => {
+			if (completionEmitted) return;
+			completionEmitted = true;
+			try {
+				this.radialLightTransition?.forceFinish();
+			} catch { }
+			scene.events.emit('dialogAnimationsComplete');
+		};
+		// Fallback to avoid freezing if the transition tween doesn't complete.
+		try {
+			setTimeout(emitDialogCompleteOnce, 1600);
+		} catch { }
+		this.playRadialLightTransition().then(() => {
+			emitDialogCompleteOnce();
+		}).catch(() => {
+			emitDialogCompleteOnce();
+		});
 	}
 
 	/**
@@ -1773,6 +1867,7 @@ export class Dialogs {
 		// Hide the dialog overlay
 		this.dialogOverlay.setVisible(false);
 		this.isDialogActive = false;
+		this.hideBlackOverlay();
 
 		// Reset current dialog type
 		this.currentDialogType = null;
@@ -1858,10 +1953,20 @@ export class Dialogs {
 	/**
 	 * Hide the dialog with a simple black overlay transition
 	 */
-	hideDialog(): void {
+	hideDialog(immediate: boolean = false): void {
 		if (!this.isDialogActive) return;
 
 		console.log('[Dialogs] Hiding dialog with black overlay transition');
+
+		if (immediate || !this.currentScene) {
+			// Immediate hide (used when swapping dialogs).
+			this.dialogOverlay.setVisible(false);
+			this.isDialogActive = false;
+			this.hideBlackOverlay();
+			this.performDialogCleanup();
+			console.log('[Dialogs] Dialog hidden immediately');
+			return;
+		}
 
 		if (this.currentScene) {
 			// Create a black overlay for transition
@@ -1883,6 +1988,7 @@ export class Dialogs {
 					// Hide dialog immediately while screen is black
 					this.dialogOverlay.setVisible(false);
 					this.isDialogActive = false;
+					this.hideBlackOverlay();
 
 					// Fade out black overlay over 0.75 seconds
 					this.currentScene!.tweens.add({
@@ -1902,9 +2008,11 @@ export class Dialogs {
 			// Fallback if no scene reference
 			this.dialogOverlay.setVisible(false);
 			this.isDialogActive = false;
+			this.hideBlackOverlay();
 		}
 
 		// Perform cleanup after transition
+		this.hideBlackOverlay();
 		this.performDialogCleanup();
 
 		console.log('[Dialogs] Dialog hidden and cleaned up');
@@ -2408,6 +2516,10 @@ export class Dialogs {
 		});
 	}
 
+	showFreeSpinRetriggerDialog(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'FreeSpinRetri_BZ', isRetrigger: true, ...config });
+	}
+
 	showLargeWin(scene: Scene, config?: Partial<DialogConfig>): void {
 		this.showDialog(scene, { type: 'EpicW_BZ', ...config });
 	}
@@ -2422,5 +2534,27 @@ export class Dialogs {
 
 	showSuperWin(scene: Scene, config?: Partial<DialogConfig>): void {
 		this.showDialog(scene, { type: 'SuperW_BZ', ...config });
+	}
+
+	/**
+	 * Configure the default auto-close behavior for win dialogs.
+	 * Pass null to disable the default auto-close.
+	 */
+	public setDefaultWinDialogAutoClose(ms: number | null, enabled: boolean = true): void {
+		if (ms === null) {
+			this.defaultWinDialogAutoCloseMs = null;
+			this.defaultWinDialogAutoCloseEnabled = false;
+			console.log('[Dialogs] Default win dialog auto-close disabled');
+			return;
+		}
+		const normalized = Math.max(0, Number(ms) || 0);
+		this.defaultWinDialogAutoCloseMs = normalized;
+		this.defaultWinDialogAutoCloseEnabled = enabled;
+		console.log('[Dialogs] Default win dialog auto-close updated', { enabled, ms: normalized });
+	}
+
+	public setDefaultWinDialogAutoCloseEnabled(enabled: boolean): void {
+		this.defaultWinDialogAutoCloseEnabled = enabled;
+		console.log('[Dialogs] Default win dialog auto-close enabled set to', enabled);
 	}
 }

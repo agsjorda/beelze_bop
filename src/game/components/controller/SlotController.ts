@@ -83,6 +83,8 @@ export class SlotController {
 	private shouldSubtractOneFromServerFsDisplay: boolean = false;
 	private uiFsDecrementApplied: boolean = false;
 	
+	// Flag to track if we're in buy feature free spins and waiting for TotalW_BZ dialog
+	private isBuyFeatureFreeSpinsActive: boolean = false;
 	
 	private buyFeatureController!: BuyFeatureController;
 	private hasScatterRetriggerInSpinData(): boolean {
@@ -103,6 +105,11 @@ export class SlotController {
 			return false;
 		}
 	}
+
+	// Keep UI controls locked during buy feature flow or its free spins sequence.
+	private isBuyFeatureControlsLocked(): boolean {
+		return this.buyFeatureController.isSpinLocked() || this.isBuyFeatureFreeSpinsActive;
+	}
 	
 	private amplifyBetController!: AmplifyBetController;
 	
@@ -116,14 +123,13 @@ export class SlotController {
 	private isFreeRoundAutoplay: boolean = false;
 	// Flag to track if we need to re-enable spin button after first autoplay spin in normal mode
 	private shouldReenableSpinButtonAfterFirstAutoplay: boolean = false;
-	// Debounce for fast spin clicks
-	private lastSpinClickAt: number = 0;
-	private readonly spinClickDebounceMs: number = 250;
 	// Throttle API spin requests to prevent spam
 	private lastSpinRequestAt: number = 0;
 	private readonly spinRequestMinIntervalMs: number = 200;
 	// Local lock to prevent rapid spin re-entry before reel state updates
 	private isSpinLocked: boolean = false;
+	// Prevent re-enabling spin while win animations are pending
+	private pendingWinLock: boolean = false;
 
 	// Debug: visualize button hitboxes (red outlines)
 	private showButtonHitboxes: boolean = false;
@@ -147,11 +153,13 @@ export class SlotController {
 			enableFeatureButton: () => this.enableFeatureButton(),
 			enableBetButtons: () => this.enableBetButtons(),
 			enableAmplifyButton: () => this.enableAmplifyButton(),
+			enableTurboButton: () => this.enableTurboButton(),
 			disableSpinButton: () => this.disableSpinButton(),
 			disableAutoplayButton: () => this.disableAutoplayButton(),
 			disableFeatureButton: () => this.disableFeatureButton(),
 			disableBetButtons: () => this.disableBetButtons(),
 			disableAmplifyButton: () => this.disableAmplifyButton(),
+			disableTurboButton: () => this.disableTurboButton(),
 			enableBetBackgroundInteraction: (reason: string) => this.enableBetBackgroundInteraction(reason),
 			disableBetBackgroundInteraction: (reason: string) => this.disableBetBackgroundInteraction(reason),
 			showOutOfBalancePopup: () => this.showOutOfBalancePopup(),
@@ -279,6 +287,7 @@ export class SlotController {
 		const autoplayButton = this.buttons.get('autoplay');
 		if (autoplayButton) {
 			autoplayButton.setAlpha(0.5);
+			autoplayButton.setTint(0x555555);
 			autoplayButton.disableInteractive();
 			console.log('[SlotController] Autoplay button disabled for free rounds');
 		}
@@ -286,7 +295,8 @@ export class SlotController {
 		// Amplify bet button
 		const amplifyButton = this.buttons.get('amplify');
 		if (amplifyButton) {
-			amplifyButton.setAlpha(0.5);
+			amplifyButton.setAlpha(0.2);
+			amplifyButton.setTint(0x555555);
 			amplifyButton.disableInteractive();
 			console.log('[SlotController] Amplify bet button disabled for free rounds');
 		}
@@ -301,7 +311,7 @@ export class SlotController {
 	public enableControlsAfterFreeRounds(): void {
 		console.log('[SlotController] Enabling controls after free rounds');
 
-		this.enableSpinButton();
+		this.updateSpinButtonState();
 		this.enableBetButtons();
 		this.enableFeatureButton();
 
@@ -339,6 +349,26 @@ export class SlotController {
 
 		// Bet background (that opens bet options)
 		this.enableBetBackgroundInteraction('after free rounds');
+	}
+
+	/**
+	 * Disable core controls when a manual spin is initiated.
+	 */
+	private lockControlsForSpinAction(): void {
+		this.disableSpinButton();
+		this.disableBetButtons();
+		this.disableFeatureButton();
+		this.disableAutoplayButton();
+		this.disableTurboButton();
+	}
+
+	/**
+	 * Disable controls while scatter/bonus flow blocks input.
+	 */
+	private lockControlsForScatterOrBonus(): void {
+		this.disableSpinButton();
+		this.disableAutoplayButton();
+		this.disableAmplifyButton();
 	}
 
 	/**
@@ -520,6 +550,9 @@ export class SlotController {
 		
 		// Setup spin state change listener
 		this.setupSpinStateListener();
+		
+		// Setup dialog shown listener for TotalW_BZ dialog
+		this.setupDialogShownListener();
 		
 		// No need to set initial spin button state here - will be handled when reels finish
 	}
@@ -870,22 +903,22 @@ export class SlotController {
 	 * Disable bet buttons (grey out and disable interaction)
 	 */
 	private disableBetButtons(): void {
+		const disabledAlpha = 0.5;
 		if (this.betController) {
-			this.betController.disableBetButtons();
-		} else {
-			// Fallback for initialization phase
-			const decreaseBetButton = this.buttons.get('decrease_bet');
-			const increaseBetButton = this.buttons.get('increase_bet');
-			if (decreaseBetButton) {
-				decreaseBetButton.setAlpha(0.3);
-				decreaseBetButton.setTint(0x777777);
-				decreaseBetButton.disableInteractive();
-			}
-			if (increaseBetButton) {
-				increaseBetButton.setAlpha(0.3);
-				increaseBetButton.setTint(0x777777);
-				increaseBetButton.disableInteractive();
-			}
+			this.betController.disableBetButtons(disabledAlpha);
+		}
+		// Also disable legacy bet buttons if present
+		const decreaseBetButton = this.buttons.get('decrease_bet');
+		const increaseBetButton = this.buttons.get('increase_bet');
+		if (decreaseBetButton) {
+			decreaseBetButton.setAlpha(disabledAlpha);
+			decreaseBetButton.setTint(0x555555);
+			decreaseBetButton.disableInteractive();
+		}
+		if (increaseBetButton) {
+			increaseBetButton.setAlpha(disabledAlpha);
+			increaseBetButton.setTint(0x555555);
+			increaseBetButton.disableInteractive();
 		}
 	}
 
@@ -893,13 +926,22 @@ export class SlotController {
 	 * Enable bet buttons (restore opacity and enable interaction)
 	 */
 	private enableBetButtons(): void {
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableBetButtons();
+			return;
+		}
+
+		if (this.isSpinLocked || gameStateManager.isReelSpinning) {
+			this.disableBetButtons();
+			return;
+		}
+
 		if (this.betController) {
 			this.betController.enableBetButtons();
-		} else {
-			// Fallback for initialization phase
-			const currentBaseBet = this.getBaseBetAmount() || 0.2;
-			this.updateBetLimitButtons(currentBaseBet);
 		}
+		// Apply limit states for legacy buttons (or as a fallback)
+		const currentBaseBet = this.getBaseBetAmount() || 0.2;
+		this.updateBetLimitButtons(currentBaseBet);
 	}
 
 	/**
@@ -916,6 +958,15 @@ export class SlotController {
 	 * is at the minimum or maximum level in the bet ladder.
 	 */
 	private updateBetLimitButtons(currentBet: number): void {
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableBetButtons();
+			return;
+		}
+		if (this.isSpinLocked || gameStateManager.isReelSpinning) {
+			this.disableBetButtons();
+			return;
+		}
+
 		const decreaseBetButton = this.buttons.get('decrease_bet');
 		const increaseBetButton = this.buttons.get('increase_bet');
 		if (!decreaseBetButton && !increaseBetButton) {
@@ -943,8 +994,8 @@ export class SlotController {
 
 		if (decreaseBetButton) {
 			if (isAtMin) {
-				decreaseBetButton.setAlpha(0.3);
-				decreaseBetButton.setTint(0x777777);
+				decreaseBetButton.setAlpha(0.5);
+				decreaseBetButton.setTint(0x555555);
 				decreaseBetButton.disableInteractive();
 			} else {
 				decreaseBetButton.setAlpha(1.0);
@@ -955,8 +1006,8 @@ export class SlotController {
 
 		if (increaseBetButton) {
 			if (isAtMax) {
-				increaseBetButton.setAlpha(0.3);
-				increaseBetButton.setTint(0x777777);
+				increaseBetButton.setAlpha(0.5);
+				increaseBetButton.setTint(0x555555);
 				increaseBetButton.disableInteractive();
 			} else {
 				increaseBetButton.setAlpha(1.0);
@@ -973,7 +1024,8 @@ export class SlotController {
 		const featureButton = this.buttons.get('feature');
 		
 		if (featureButton) {
-			featureButton.setAlpha(0.3); // Make it semi-transparent/greyed out
+			featureButton.setAlpha(0.5); // Make it semi-transparent/greyed out
+			featureButton.setTint(0x555555); // Apply dark grey tint
 			featureButton.disableInteractive(); // Disable clicking
 			if (this.featureButtonHitZone) {
 				this.featureButtonHitZone.disableInteractive();
@@ -1000,7 +1052,13 @@ export class SlotController {
 				console.log('[SlotController] Skipping feature enable (enhance/amplify bet is ON)');
 				return;
 			}
+			// Also keep Buy Feature disabled while buy feature flow or free spins are active
+			if (this.isBuyFeatureControlsLocked()) {
+				console.log('[SlotController] Skipping feature enable (buy feature flow active)');
+				return;
+			}
 			featureButton.setAlpha(1.0); // Restore full opacity
+			featureButton.clearTint(); // Remove grey tint
 			this.applyBuyFeatureHitbox(featureButton);
 			if (this.featureButtonHitZone) {
 				this.featureButtonHitZone.setInteractive();
@@ -1052,6 +1110,44 @@ export class SlotController {
 		} else {
 			this.featureButtonHitZone.setPosition(featureButton.x, featureButton.y);
 			this.featureButtonHitZone.setSize(hitW, hitH);
+		}
+	}
+
+	/**
+	 * Generic button disable function - can be used for any button
+	 * @param buttonKey - The key of the button to disable (e.g., 'spin', 'feature', 'autoplay')
+	 */
+	private disableButton(buttonKey: string): void {
+		const button = this.buttons.get(buttonKey);
+		if (button) {
+			button.setAlpha(0.5);
+			button.setTint(0x555555);
+			button.disableInteractive();
+			console.log(`[SlotController] Button '${buttonKey}' disabled`);
+		}
+	}
+
+	private disableButtonWithAlpha(buttonKey: string, alpha: number): void {
+		const button = this.buttons.get(buttonKey);
+		if (button) {
+			button.setAlpha(alpha);
+			button.setTint(0x555555);
+			button.disableInteractive();
+			console.log(`[SlotController] Button '${buttonKey}' disabled (alpha=${alpha})`);
+		}
+	}
+
+	/**
+	 * Generic button enable function - can be used for any button
+	 * @param buttonKey - The key of the button to enable (e.g., 'spin', 'feature', 'autoplay')
+	 */
+	private enableButton(buttonKey: string): void {
+		const button = this.buttons.get(buttonKey);
+		if (button) {
+			button.setAlpha(1.0);
+			button.clearTint();
+			button.setInteractive();
+			console.log(`[SlotController] Button '${buttonKey}' enabled`);
 		}
 	}
 
@@ -1332,17 +1428,16 @@ export class SlotController {
 		spinButton.setInteractive();
 		spinButton.on('pointerdown', async () => {
 			console.log('[SlotController] Spin button clicked');
-			const now = Date.now();
-			if (now - this.lastSpinClickAt < this.spinClickDebounceMs) {
-				console.log('[SlotController] Spin click ignored - debounce');
-				return;
-			}
-			this.lastSpinClickAt = now;
+			// Debounce is handled by SpinButtonController, no need to check here
 			this.playSpinButtonClickSfx();
 			// If autoplay is active (or about to start), clicking spin will stop autoplay instead
 			if (gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested) {
 				console.log('[SlotController] Stopping autoplay via spin button click');
 				this.stopAutoplay();
+				return;
+			}
+			if (this.isSpinLocked) {
+				console.log('[SlotController] Spin blocked - spin is locked');
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
@@ -1351,12 +1446,7 @@ export class SlotController {
 			}
 			
 			// Disable spin button, bet buttons, feature button and play animations
-			this.disableSpinButton();
-			this.disableBetButtons();
-			this.disableFeatureButton();
-			// Disable and grey out autoplay and turbo buttons while symbols are dropping
-			this.disableAutoplayButton();
-			this.disableTurboButton();
+			this.lockControlsForSpinAction();
 			this.playSpinButtonAnimation();
 			this.rotateSpinButton();
 			
@@ -1782,17 +1872,16 @@ export class SlotController {
 		spinButton.setInteractive();
 		spinButton.on('pointerdown', async () => {
 			console.log('[SlotController] Spin button clicked');
-			const now = Date.now();
-			if (now - this.lastSpinClickAt < this.spinClickDebounceMs) {
-				console.log('[SlotController] Spin click ignored - debounce');
-				return;
-			}
-			this.lastSpinClickAt = now;
+			// Debounce is handled by SpinButtonController, no need to check here
 			this.playSpinButtonClickSfx();
 			// If autoplay is active (or about to start), clicking spin will stop autoplay instead
 			if (gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested) {
 				console.log('[SlotController] Stopping autoplay via spin button click');
 				this.stopAutoplay();
+				return;
+			}
+			if (this.isSpinLocked) {
+				console.log('[SlotController] Spin blocked - spin is locked');
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
@@ -1801,12 +1890,7 @@ export class SlotController {
 			}
 			
 			// Disable spin button, bet buttons, feature button and play animations
-			this.disableSpinButton();
-			this.disableBetButtons();
-			this.disableFeatureButton();
-			// Disable and grey out autoplay and turbo buttons while symbols are dropping
-			this.disableAutoplayButton();
-			this.disableTurboButton();
+			this.lockControlsForSpinAction();
 			this.playSpinButtonAnimation();
 			this.rotateSpinButton();
 			
@@ -2089,6 +2173,22 @@ export class SlotController {
 			}
 		});
 
+		// Reset pending win lock on spin start
+		gameEventManager.on(GameEventType.SPIN, () => {
+			this.pendingWinLock = false;
+		});
+
+		// Track whether the current spin has wins so we can defer UI re-enable until WIN_STOP
+		gameEventManager.on(GameEventType.SPIN_DATA_RESPONSE, (data: any) => {
+			try {
+				const spinData: any = data?.spinData;
+				this.pendingWinLock = this.spinDataHasWins(spinData);
+				if (this.pendingWinLock) {
+					this.disableSpinButton();
+				}
+			} catch { }
+		});
+
 		// Listen for any spin to start (manual or autoplay)
 		gameEventManager.on(GameEventType.SPIN, () => {
 			console.log('[SlotController] Spin event received');
@@ -2190,7 +2290,11 @@ export class SlotController {
 			
 			// Update balance from server every time reels stop (skip during scatter/bonus)
 			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
-				this.updateBalanceFromServer();
+				if (this.balanceController?.hasPendingBalanceUpdate()) {
+					console.log('[SlotController] Skipping server balance update on REELS_STOP (pending local update)');
+				} else {
+					this.updateBalanceFromServer();
+				}
 			} else {
 				console.log('[SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)');
 			}
@@ -2279,7 +2383,7 @@ export class SlotController {
 			// button should be re-enabled between spins.
 			const gsmAny: any = gameStateManager as any;
 			if (gsmAny.isInFreeSpinRound === true) {
-				this.enableSpinButton();
+				this.updateSpinButtonState();
 				console.log('[SlotController] Initialization free-round mode active - re-enabled spin only on REELS_STOP');
 				return;
 			}
@@ -2288,6 +2392,12 @@ export class SlotController {
 			const symbolsComponent = (this.scene as any).symbols;
 			if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function' && symbolsComponent.isFreeSpinAutoplayActive()) {
 				console.log('[SlotController] Free spin autoplay is active - keeping buttons disabled');
+				return;
+			}
+
+			// If win animations are pending, defer UI re-enable until WIN_STOP
+			if (this.pendingWinLock || gameStateManager.isShowingWinlines || gameStateManager.isShowingWinDialog) {
+				console.log('[SlotController] Wins pending - keeping buttons disabled until WIN_STOP');
 				return;
 			}
 			
@@ -2299,16 +2409,22 @@ export class SlotController {
 			// Check autoplay counter instead of state manager to avoid timing issues
 			const spinsRemaining = this.getAutoplaySpinsRemaining();
 			if (spinsRemaining === 0 && !gameStateManager.isAutoPlaying) {
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableTurboButton();
-				this.enableBetButtons();
+				this.updateSpinButtonState();
+				// Don't re-enable auxiliary buttons if buy feature spin lock is active
+				if (!this.isBuyFeatureControlsLocked()) {
+					this.enableAutoplayButton();
+					this.enableTurboButton();
+					this.enableBetButtons();
+					this.enableAmplifyButton();
+				}
 				// Keep feature disabled during bonus or until explicitly allowed
 				if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
 					this.enableFeatureButton();
 				}
-				this.enableAmplifyButton();
-				this.enableBetBackgroundInteraction('after manual spin REELS_STOP');
+				// Don't enable bet background if buy feature spin lock is active
+				if (!this.isBuyFeatureControlsLocked()) {
+					this.enableBetBackgroundInteraction('after manual spin REELS_STOP');
+				}
 				this.hideAutoplaySpinsRemainingText();
 				this.updateAutoplayButtonState();
 				this.updateTurboButtonState();
@@ -2319,16 +2435,22 @@ export class SlotController {
 			// Update spin button state when spin completes
 			// Only enable spin button if not autoplaying AND reels are not spinning
 			if(!this.gameData?.isAutoPlaying && !gameStateManager.isReelSpinning) {
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableTurboButton();
-				this.enableBetButtons();
+				this.updateSpinButtonState();
+				// Don't re-enable auxiliary buttons if buy feature spin lock is active
+				if (!this.isBuyFeatureControlsLocked()) {
+					this.enableAutoplayButton();
+					this.enableTurboButton();
+					this.enableBetButtons();
+					this.enableAmplifyButton();
+				}
 				// Keep feature disabled during bonus or until explicitly allowed
 				if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
 					this.enableFeatureButton();
 				}
-				this.enableAmplifyButton();
-				this.enableBetBackgroundInteraction('after manual spin complete');
+				// Don't enable bet background if buy feature spin lock is active
+				if (!this.isBuyFeatureControlsLocked()) {
+					this.enableBetBackgroundInteraction('after manual spin complete');
+				}
 				this.updateTurboButtonState();
 				console.log('[SlotController] All buttons enabled - manual spin completed and reels stopped');
 				return;
@@ -2347,10 +2469,32 @@ export class SlotController {
 			if (!gameStateManager.isAutoPlaying) {
 				this.disableSpinButton();
 			}
+			this.disableAutoplayButton();
+			this.disableTurboButton();
+			this.disableBetButtons();
+			this.disableAmplifyButton();
 		});
 		gameEventManager.on(GameEventType.TUMBLE_SEQUENCE_DONE, () => {
 			if (!gameStateManager.isAutoPlaying) {
+				// Avoid re-enabling spin while scatter/bonus or pending balance updates are active
+				if (gameStateManager.isScatter || gameStateManager.isBonus || this.balanceController?.hasPendingBalanceUpdate()) {
+					this.disableSpinButton();
+					return;
+				}
 				this.updateSpinButtonState();
+			}
+			if (gameStateManager.isScatter || gameStateManager.isBonus || this.balanceController?.hasPendingBalanceUpdate()) {
+				this.disableAutoplayButton();
+				this.disableTurboButton();
+				this.disableBetButtons();
+				this.disableAmplifyButton();
+				return;
+			}
+			if (!this.isBuyFeatureControlsLocked()) {
+				this.enableAutoplayButton();
+				this.enableTurboButton();
+				this.enableBetButtons();
+				this.enableAmplifyButton();
 			}
 		});
 
@@ -2408,18 +2552,21 @@ export class SlotController {
 			const gsmAny: any = gameStateManager as any;
 			if (gsmAny.isInFreeSpinRound === true && !gameStateManager.isBonus) {
 				// Ensure spin button itself is usable for manual free-round spins.
-				this.enableSpinButton();
+				this.updateSpinButtonState();
 				console.log('[SlotController] AUTO_STOP during initialization free-round mode - kept autoplay/bet controls disabled');
 				return;
 			}
 			
 			// Re-enable spin button, autoplay button, bet buttons, feature button, and bet background
-			this.enableSpinButton();
-			this.enableAutoplayButton();
-			this.enableBetButtons();
+			this.updateSpinButtonState();
+			// Don't re-enable auxiliary buttons if buy feature spin lock is active
+			if (!this.isBuyFeatureControlsLocked()) {
+				this.enableAutoplayButton();
+				this.enableBetButtons();
+				this.enableAmplifyButton();
+				this.enableBetBackgroundInteraction('after autoplay stop');
+			}
 			this.enableFeatureButton();
-			this.enableAmplifyButton();
-			this.enableBetBackgroundInteraction('after autoplay stop');
 		// Show and resume spin icon after autoplay stops, hide stop icon
 			if (this.spinIcon) {
 				this.spinIcon.setVisible(true);
@@ -2443,6 +2590,7 @@ export class SlotController {
 		// Listen for when reels stop spinning to enable spin button for manual spins
 		gameEventManager.on(GameEventType.WIN_STOP, () => {
 			console.log('[SlotController] WIN_STOP received - checking if spin button should be enabled');
+			this.pendingWinLock = false;
 			
 			// If scatter bonus is in progress or bonus mode is active, keep buttons disabled
 			if (gameStateManager.isScatter || gameStateManager.isBonus) {
@@ -2585,23 +2733,24 @@ export class SlotController {
 		
 		// If scatter/bonus active, keep controls disabled
 		if (gameStateManager.isScatter || gameStateManager.isBonus) {
-			this.disableSpinButton();
-			this.disableAutoplayButton();
-			this.disableAmplifyButton();
+			this.lockControlsForScatterOrBonus();
 			return;
 		}
 		
 		// Re-enable controls if not spinning and we're back in normal mode
 		if (!gameStateManager.isReelSpinning) {
-			this.enableSpinButton();
-			this.enableAutoplayButton();
-			this.enableBetButtons();
+			this.updateSpinButtonState();
+			// Don't re-enable auxiliary buttons if buy feature flow is active
+			if (!this.isBuyFeatureControlsLocked()) {
+				this.enableAutoplayButton();
+				this.enableBetButtons();
+				this.enableAmplifyButton();
+				this.enableBetBackgroundInteraction('after stopAutoplay');
+			}
 			// Keep feature disabled during bonus or until explicitly allowed
 			if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
 				this.enableFeatureButton();
 			}
-			this.enableAmplifyButton();
-			this.enableBetBackgroundInteraction('after stopAutoplay');
 			this.updateAutoplayButtonState();
 			console.log('[SlotController] Autoplay stopped - controls re-enabled in normal mode');
 		}
@@ -2630,14 +2779,19 @@ export class SlotController {
 	 * Disable the turbo button (grey out and disable interaction)
 	 */
 	public disableTurboButton(): void {
-		this.turboButtonController.disableButton();
+		const disabledAlpha = 0.5;
+		this.disableButtonWithAlpha('turbo', disabledAlpha);
 	}
 
 	/**
 	 * Enable the turbo button (remove grey tint and enable interaction)
 	 */
 	public enableTurboButton(): void {
-		this.turboButtonController.enableButton();
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableTurboButton();
+			return;
+		}
+		this.enableButton('turbo');
 	}
 
 	/**
@@ -2651,6 +2805,10 @@ export class SlotController {
 	 * Enable the amplify button (enable interaction)
 	 */
 	public enableAmplifyButton(): void {
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableAmplifyButton();
+			return;
+		}
 		this.amplifyBetController.enableButton();
 	}
 
@@ -2658,6 +2816,10 @@ export class SlotController {
 	 * Update turbo button state based on game conditions
 	 */
 	public updateTurboButtonState(): void {
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableTurboButton();
+			return;
+		}
 		this.turboButtonController.updateButtonState();
 	}
 
@@ -2844,7 +3006,8 @@ export class SlotController {
 		// Grey out the feature button
 		const featureButton = this.buttons.get('feature');
 		if (featureButton) {
-			featureButton.setAlpha(0.3); // Make it semi-transparent/greyed out
+			featureButton.setAlpha(0.5); // Make it semi-transparent/greyed out
+			featureButton.setTint(0x555555); // Apply dark grey tint
 			featureButton.disableInteractive(); // Disable clicking
 			console.log('[SlotController] Feature button greyed out and disabled');
 		}
@@ -2854,13 +3017,15 @@ export class SlotController {
 		const increaseBetButton = this.buttons.get('increase_bet');
 		
 		if (decreaseBetButton) {
-			decreaseBetButton.setAlpha(0.3); // Make it semi-transparent/greyed out
+			decreaseBetButton.setAlpha(0.5); // Make it semi-transparent/greyed out
+			decreaseBetButton.setTint(0x555555); // Apply dark grey tint
 			decreaseBetButton.disableInteractive(); // Disable clicking
 			console.log('[SlotController] Decrease bet button greyed out and disabled');
 		}
 		
 		if (increaseBetButton) {
-			increaseBetButton.setAlpha(0.3); // Make it semi-transparent/greyed out
+			increaseBetButton.setAlpha(0.5); // Make it semi-transparent/greyed out
+			increaseBetButton.setTint(0x555555); // Apply dark grey tint
 			increaseBetButton.disableInteractive(); // Disable clicking
 			console.log('[SlotController] Increase bet button greyed out and disabled');
 		}
@@ -3059,24 +3224,19 @@ export class SlotController {
 	 * Disable the autoplay button (grey out and disable interaction)
 	 */
 	public disableAutoplayButton(): void {
-		const autoplayButton = this.buttons.get('autoplay');
-		if (autoplayButton) {
-			autoplayButton.setTint(0x666666); // Grey out the button
-			autoplayButton.disableInteractive();
-			console.log('[SlotController] Autoplay button disabled and greyed out');
-		}
+		const disabledAlpha = 0.5;
+		this.disableButtonWithAlpha('autoplay', disabledAlpha);
 	}
 
 	/**
 	 * Enable the autoplay button (remove grey tint and enable interaction)
 	 */
 	public enableAutoplayButton(): void {
-		const autoplayButton = this.buttons.get('autoplay');
-		if (autoplayButton) {
-			autoplayButton.clearTint(); // Remove grey tint
-			autoplayButton.setInteractive();
-			console.log('[SlotController] Autoplay button enabled');
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableAutoplayButton();
+			return;
 		}
+		this.enableButton('autoplay');
 	}
 
 	/**
@@ -3091,9 +3251,9 @@ export class SlotController {
 		const autoplayButton = this.buttons.get('autoplay');
 		if (!autoplayButton) return;
 
-		// Disable autoplay button if spinning, enable otherwise
-		if (gameStateManager.isReelSpinning) {
-			console.log(`[SlotController] Disabling autoplay button - isReelSpinning: ${gameStateManager.isReelSpinning}`);
+		// Disable autoplay button if spinning or buy feature flow/free spins are active
+		if (gameStateManager.isReelSpinning || this.isBuyFeatureControlsLocked()) {
+			console.log(`[SlotController] Disabling autoplay button - isReelSpinning: ${gameStateManager.isReelSpinning}, buyFeatureControlsLocked: ${this.isBuyFeatureControlsLocked()}`);
 			this.disableAutoplayButton();
 		} else {
 			console.log(`[SlotController] Enabling autoplay button - not spinning`);
@@ -3227,6 +3387,56 @@ export class SlotController {
 		return totalWin;
 	}
 
+	private spinDataHasWins(spinData: SpinData | any): boolean {
+		try {
+			if (!spinData || !spinData.slot) return false;
+			if (gameStateManager.isBonus) {
+				const bonusWin = this.getBonusSpinWin(spinData);
+				if (bonusWin > 0) return true;
+			} else {
+				const baseWin = this.getBaseSpinWinForBalance(spinData);
+				if (baseWin > 0) return true;
+			}
+			const slotTumbles = spinData?.slot?.tumbles;
+			if (Array.isArray(slotTumbles) && slotTumbles.length > 0) {
+				return true;
+			}
+		} catch { }
+		return false;
+	}
+
+	private getBaseSpinWinForBalance(spinData: SpinData): number {
+		try {
+			const slotAny: any = spinData?.slot;
+			const slotTotalWin = Number(slotAny?.totalWin ?? 0);
+			if (Number.isFinite(slotTotalWin) && slotTotalWin > 0) {
+				return slotTotalWin;
+			}
+			const tumbles = slotAny?.tumbles;
+			if (Array.isArray(tumbles) && tumbles.length > 0) {
+				let total = 0;
+				for (const tumble of tumbles) {
+					const w = Number((tumble as any)?.win ?? 0);
+					if (Number.isFinite(w) && w > 0) {
+						total += w;
+						continue;
+					}
+					const outsArr = Array.isArray((tumble as any)?.symbols?.out)
+						? (tumble as any).symbols.out
+						: [];
+					for (const out of outsArr) {
+						const ow = Number(out?.win ?? 0);
+						total += Number.isFinite(ow) ? ow : 0;
+					}
+				}
+				return total;
+			}
+		} catch (e) {
+			console.warn('[SlotController] Failed to derive base spin win from tumbles/totalWin:', e);
+		}
+		return SpinDataUtils.getTotalWin(spinData);
+	}
+
 	/**
 	 * Handle spin logic - either normal API call or free spin simulation
 	 */
@@ -3266,44 +3476,38 @@ export class SlotController {
 						this.stopAutoplay();
 					}
 					this.showOutOfBalancePopup();
-					this.enableSpinButton();
-					this.enableAutoplayButton();
-					this.enableBetButtons();
+					this.updateSpinButtonState();
+					// Don't re-enable auxiliary buttons if buy feature flow is active
+					if (!this.isBuyFeatureControlsLocked()) {
+						this.enableAutoplayButton();
+						this.enableBetButtons();
+						this.enableAmplifyButton();
+					}
 					this.enableFeatureButton();
-					this.enableAmplifyButton();
 					return;
-				}
-			} catch {}
-
-			// Start clearing/dropping existing symbols immediately at spin start
-			try {
-				const gameScene: any = this.scene as any;
-				const symbolsComponent = gameScene?.symbols;
-				if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
-					console.log('[SlotController] Triggering pre-spin symbol drop');
-					symbolsComponent.startPreSpinDrop();
-				}
-			} catch (e) {
-				console.warn('[SlotController] Failed to start pre-spin symbol drop:', e);
 			}
+		} catch {}
 
-			// Play spin sound effect
-			if ((window as any).audioManager) {
-				(window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
-				console.log('[SlotController] Playing spin sound effect');
-			}
-			
-			// Decrement balance by bet amount (frontend only) for paid spins only.
-			// During freeround autoplay or initialization free rounds, spins are free
-			// so we do NOT touch the balance here.
-			const inInitFreeRoundContext =
-				(gameStateManager as any)?.isInFreeSpinRound === true && !gameStateManager.isBonus;
-			if (!this.isFreeRoundAutoplay && !inInitFreeRoundContext) {
-				this.decrementBalanceByBet();
-			}
+		// Avoid pre-spin symbol clearing; this should only happen on explicit skip.
 
-			try {
-				let spinData: SpinData;
+		// Play spin sound effect
+		if ((window as any).audioManager) {
+			(window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
+			console.log('[SlotController] Playing spin sound effect');
+		}
+		
+		// Clear any stale pending balance update before starting a new spin
+		this.balanceController?.clearPendingBalanceUpdate();
+
+		// Determine if we're in initialization free-round context
+		const inInitFreeRoundContext =
+			(gameStateManager as any)?.isInFreeSpinRound === true && !gameStateManager.isBonus;
+		if (!this.isFreeRoundAutoplay && !inInitFreeRoundContext) {
+			this.decrementBalanceByBet();
+		}
+
+		try {
+			let spinData: SpinData;
 
 				// Start spinner timer - show spinner if fetch takes longer than 2 seconds (after symbols clear)
 				this.startSpinnerTimer();
@@ -3443,6 +3647,22 @@ export class SlotController {
 				}
 				
 				console.log('[SlotController] 🎰 ===== END SPIN DATA =====');
+
+				// Queue a pending balance update for base-game spins (apply after reels stop)
+				if (!gameStateManager.isBonus) {
+					const winTotal = this.getBaseSpinWinForBalance(spinData);
+					if (winTotal > 0) {
+						const currentBalance = this.getBalanceAmount();
+						const pendingBalance = currentBalance + winTotal;
+						this.balanceController?.setPendingBalanceUpdate({
+							balance: pendingBalance,
+							bet: this.getBaseBetAmount() || 0,
+							winnings: winTotal
+						});
+						console.log(`[SlotController] Pending balance update queued: +$${winTotal} -> ${pendingBalance}`);
+					}
+				}
+
 				
 				// Emit the spin data response event
 				gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, {
@@ -3491,10 +3711,25 @@ export class SlotController {
 				// Always keep the buy feature disabled during bonus mode
 				this.canEnableFeatureButton = false;
 				this.disableFeatureButton();
+				// If buy feature spin lock is active, mark that we're in buy feature free spins
+				if (this.buyFeatureController.isSpinLocked()) {
+					this.isBuyFeatureFreeSpinsActive = true;
+					console.log('[SlotController] Buy feature free spins activated - buttons will remain disabled until TotalW_BZ dialog');
+				}
 			} else {
 				console.log('[SlotController] Bonus mode deactivated - showing primary controller');
 				this.showPrimaryController();
-				this.buyFeatureController.setSpinLock(false);
+				// Clear buy feature free spins flag when bonus ends
+				this.isBuyFeatureFreeSpinsActive = false;
+				// Only release buy feature spin lock if bonus has actually finished
+				if (gameStateManager.isBonusFinished) {
+					console.log('[SlotController] Bonus finished - releasing buy feature spin lock');
+					this.buyFeatureController.setSpinLock(false);
+					// Re-enable all auxiliary buttons now that buy feature sequence is complete
+					this.updateAllAuxiliaryButtonStates();
+				} else {
+					console.log('[SlotController] Bonus ended but may retrigger - keeping spin locked');
+				}
 				// Clear any pending free spins data when bonus mode ends
 				if (this.pendingFreeSpinsData) {
 					console.log('[SlotController] Bonus mode ended - clearing pending free spins data');
@@ -3505,6 +3740,17 @@ export class SlotController {
 				// Re-enable buy feature only after bonus is fully deactivated
 				this.enableFeatureButton();
 				this.updateSpinButtonState();
+				// Defer UI refresh so Game's setBonusMode handler can clear bonus flags first
+				if (this.scene?.time) {
+					this.scene.time.delayedCall(0, () => {
+						this.updateSpinButtonState();
+						this.updateAllAuxiliaryButtonStates();
+						this.updateFeatureButtonState();
+					});
+				} else {
+					this.updateAllAuxiliaryButtonStates();
+					this.updateFeatureButtonState();
+				}
 			}
 		});
 
@@ -3514,7 +3760,15 @@ export class SlotController {
 			this.hideFreeSpinDisplay();
 			this.freeSpinDisplayOverride = null;
 			this.pendingFreeSpinsData = null;
-			this.buyFeatureController.setSpinLock(false);
+			// Only release buy feature spin lock if bonus has actually finished
+			if (gameStateManager.isBonusFinished) {
+				console.log('[SlotController] Bonus finished - releasing buy feature spin lock');
+				this.buyFeatureController.setSpinLock(false);
+				// Re-enable all auxiliary buttons now that buy feature sequence is complete
+				this.updateAllAuxiliaryButtonStates();
+			} else {
+				console.log('[SlotController] Bonus ended but may retrigger - keeping spin locked');
+			}
 			this.updateSpinButtonState();
 		});
 
@@ -3522,7 +3776,15 @@ export class SlotController {
 		this.scene.events.on('hideBonusHeader', () => {
 			console.log('[SlotController] hideBonusHeader received - hiding free spin display');
 			this.hideFreeSpinDisplay();
-			this.buyFeatureController.setSpinLock(false);
+			// Only release buy feature spin lock if bonus has actually finished
+			if (gameStateManager.isBonusFinished) {
+				console.log('[SlotController] Bonus finished - releasing buy feature spin lock');
+				this.buyFeatureController.setSpinLock(false);
+				// Re-enable all auxiliary buttons now that buy feature sequence is complete
+				this.updateAllAuxiliaryButtonStates();
+			} else {
+				console.log('[SlotController] Bonus ended but may retrigger - keeping spin locked');
+			}
 			this.updateSpinButtonState();
 		});
 
@@ -3538,10 +3800,8 @@ export class SlotController {
 				this.stopAutoplay();
 			}
 			
-			// Keep controls disabled/greyed out while scatter/bonus sequence proceeds
-			this.disableSpinButton();
-			this.disableAutoplayButton();
-			this.disableAmplifyButton();
+		// Keep controls disabled/greyed out while scatter/bonus sequence proceeds
+		this.lockControlsForScatterOrBonus();
 			
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
 			this.hidePrimaryControllerWithScatter(data.scatterIndex);
@@ -3632,6 +3892,32 @@ export class SlotController {
 				}
 			} catch {}
 
+			if (skipInitialization) {
+				// If autoplay already started, ensure the display is visible using the latest known values.
+				try {
+					const isVisible = !!this.freeSpinNumber?.visible;
+					if (!isVisible) {
+						if (this.freeSpinDisplayOverride !== null) {
+							this.showFreeSpinDisplayWithActualValue(this.freeSpinDisplayOverride as number);
+							console.log(`[SlotController] Showing free spin display from override (autoplay active): ${this.freeSpinDisplayOverride}`);
+						} else if (this.pendingFreeSpinsData) {
+							this.showFreeSpinDisplayWithActualValue(this.pendingFreeSpinsData.actualFreeSpins);
+							console.log(`[SlotController] Showing free spin display from pending data (autoplay active): ${this.pendingFreeSpinsData.actualFreeSpins}`);
+							this.pendingFreeSpinsData = null;
+						} else {
+							const symbolsComponent = (this.scene as any)?.symbols;
+							const remaining = symbolsComponent?.freeSpinAutoplaySpinsRemaining;
+							if (typeof remaining === 'number') {
+								this.showFreeSpinDisplayWithActualValue(remaining);
+								console.log(`[SlotController] Showing free spin display from Symbols tracker (autoplay active): ${remaining}`);
+							}
+						}
+					}
+				} catch (e) {
+					console.warn('[SlotController] Failed to show free spin display during autoplay:', e);
+				}
+			}
+
 			if (!skipInitialization) {
 				// Prefer to initialize from the first freeSpin item's spinsLeft (supports freespin and freeSpin)
 				let initializedFromFreeSpinData = false;
@@ -3697,18 +3983,7 @@ export class SlotController {
 		gameEventManager.on(GameEventType.FREE_SPIN_AUTOPLAY, async () => {
 			console.log('[SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation');
 			
-			// Drop/clear previous symbols at the start of each free spin in bonus mode,
-			// same as we do for normal spins and buy feature spins.
-			try {
-				const gameScene: any = this.scene as any;
-				const symbolsComponent = gameScene?.symbols;
-				if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
-					console.log('[SlotController] Triggering pre-spin symbol drop for FREE_SPIN_AUTOPLAY');
-					symbolsComponent.startPreSpinDrop();
-				}
-			} catch (e) {
-				console.warn('[SlotController] Failed to start pre-spin symbol drop for FREE_SPIN_AUTOPLAY:', e);
-			}
+			// Avoid pre-spin symbol clearing; this should only happen on explicit skip.
 			
 			// Apply turbo mode to game data and winlines (same as normal autoplay)
 			this.forceApplyTurboToSceneGameData();
@@ -3849,6 +4124,31 @@ export class SlotController {
 	}
 
 	/**
+	 * Setup listener for dialog shown events to detect when TotalW_BZ dialog appears
+	 */
+	private setupDialogShownListener(): void {
+		if (!this.scene) {
+			console.warn('[SlotController] Scene not available for dialog listener');
+			return;
+		}
+
+		this.scene.events.on('dialogShown', (dialogType: string) => {
+			console.log(`[SlotController] Dialog shown: ${dialogType}, isBuyFeatureFreeSpinsActive: ${this.isBuyFeatureFreeSpinsActive}`);
+			
+			// If the TotalW_BZ dialog is shown and we're in buy feature free spins, re-enable buttons
+			if (dialogType === 'TotalW_BZ' && this.isBuyFeatureFreeSpinsActive) {
+				console.log('[SlotController] TotalW_BZ dialog shown - re-enabling buttons');
+				this.isBuyFeatureFreeSpinsActive = false;
+				this.updateBetButtonsStateWithLock();
+				this.updateAutoplayButtonStateWithLock();
+				this.updateTurboButtonStateWithLock();
+				this.updateAmplifyButtonStateWithLock();
+				this.enableBetBackgroundInteraction('TotalW_BZ dialog shown');
+			}
+		});
+	}
+
+	/**
 	 * Refresh the GameData reference from the scene
 	 */
 	private refreshGameDataReference(): void {
@@ -3878,18 +4178,17 @@ export class SlotController {
 		if (this.spinButtonController) {
 			this.spinButtonController.disable();
 		}
-		// Always disable the actual spin button image as well
 		const spinButton = this.buttons.get('spin');
 		if (spinButton) {
-			spinButton.setTint(0x666666); // Gray out the button (match thats_bait)
 			spinButton.disableInteractive();
+			spinButton.setTint(0x666666);
 		}
-		// Also handle SlotController's own spinIcon
 		if (this.spinIcon) {
-			this.spinIcon.setAlpha(0.5); // Dim the icon (match thats_bait)
+			this.spinIcon.setAlpha(0.5);
+			this.spinIcon.setTint(0x666666);
 		}
 		if (this.spinIconTween) {
-			this.spinIconTween.pause(); // Pause icon animation
+			this.spinIconTween.pause();
 		}
 	}
 
@@ -3897,7 +4196,7 @@ export class SlotController {
 	 * Enable the spin button
 	 */
 	public enableSpinButton(): void {
-		if (this.isSpinLocked || gameStateManager.isReelSpinning) {
+		if (this.isSpinLocked || gameStateManager.isReelSpinning || this.isBuyFeatureControlsLocked()) {
 			console.log('[SlotController] enableSpinButton skipped - spin locked or reels still spinning');
 			this.disableSpinButton();
 			return;
@@ -3908,17 +4207,16 @@ export class SlotController {
 		}
 		const spinButton = this.buttons.get('spin');
 		if (spinButton) {
+			spinButton.setAlpha(1.0);
 			spinButton.clearTint();
-			spinButton.setAlpha(1.0); // Restore full alpha
 			spinButton.setInteractive();
-			console.log('[SlotController] Spin button enabled');
 		}
-		// Also handle SlotController's own spinIcon
 		if (this.spinIcon) {
-			this.spinIcon.setAlpha(1.0); // Restore full alpha
+			this.spinIcon.setAlpha(1.0);
+			this.spinIcon.clearTint();
 		}
 		if (this.spinIconTween) {
-			this.spinIconTween.resume(); // Resume icon animation
+			this.spinIconTween.resume();
 		}
 	}
 
@@ -3939,10 +4237,29 @@ export class SlotController {
 			return;
 		}
 
-		if (this.buyFeatureController.isSpinLocked()) {
+		if (this.isBuyFeatureControlsLocked()) {
 			this.disableSpinButton();
 			return;
 		}
+
+		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+			this.disableSpinButton();
+			return;
+		}
+
+		if (this.balanceController?.hasPendingBalanceUpdate()) {
+			this.disableSpinButton();
+			return;
+		}
+
+		try {
+			const symbolsComponent: any = (this.scene as any)?.symbols;
+			const scatterManager = symbolsComponent?.scatterAnimationManager;
+			if (scatterManager && typeof scatterManager.isAnimationInProgress === 'function' && scatterManager.isAnimationInProgress()) {
+				this.disableSpinButton();
+				return;
+			}
+		} catch {}
 
 		if(gameData.isAutoPlaying){
 			this.disableSpinButton();
@@ -3958,6 +4275,85 @@ export class SlotController {
 			console.log(`[SlotController] Enabling spin button - no active game state`);
 			this.enableSpinButton();
 		}
+		// Also update feature button state whenever spin button state changes
+		this.updateFeatureButtonState();
+	}
+
+	/**
+	 * Public method to update feature button state based on game conditions
+	 */
+	public updateFeatureButtonState(): void {
+		if (!this.isBuyFeatureControlsLocked() && !gameStateManager.isBonus && this.canEnableFeatureButton) {
+			const gameData = this.getGameData();
+			if (!gameData || !gameData.isEnhancedBet) {
+				this.enableFeatureButton();
+			} else {
+				this.disableFeatureButton();
+			}
+		} else {
+			this.disableFeatureButton();
+		}
+	}
+
+	/**
+	 * Update autoplay button state - disable during buy feature spin sequence
+	 */
+	public updateAutoplayButtonStateWithLock(): void {
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableAutoplayButton();
+			return;
+		}
+		// Otherwise use normal state logic
+		this.updateAutoplayButtonState();
+	}
+
+	/**
+	 * Update turbo button state - disable during buy feature spin sequence
+	 */
+	public updateTurboButtonStateWithLock(): void {
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableTurboButton();
+			return;
+		}
+		// Otherwise use normal state logic
+		this.updateTurboButtonState();
+	}
+
+	/**
+	 * Update bet buttons state - disable during buy feature spin sequence and free spins
+	 */
+	public updateBetButtonsStateWithLock(): void {
+		// Keep disabled if buy feature flow/free spins are active
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableBetButtons();
+			this.disableBetBackgroundInteraction('buy feature spin lock or free spins active');
+			return;
+		}
+		// Otherwise enable bet buttons
+		this.enableBetButtons();
+		this.enableBetBackgroundInteraction('buy feature spin lock released');
+	}
+
+	/**
+	 * Update amplify button state - disable during buy feature spin sequence
+	 */
+	public updateAmplifyButtonStateWithLock(): void {
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableAmplifyButton();
+			return;
+		}
+		// Otherwise enable amplify button
+		this.enableAmplifyButton();
+	}
+
+	/**
+	 * Update all auxiliary button states (autoplay, turbo, bet, amplify) during buy feature sequence
+	 */
+	private updateAllAuxiliaryButtonStates(): void {
+		this.updateAutoplayButtonStateWithLock();
+		this.updateTurboButtonStateWithLock();
+		this.updateBetButtonsStateWithLock();
+		this.updateAmplifyButtonStateWithLock();
 	}
 
 	/**
@@ -4220,6 +4616,7 @@ export class SlotController {
 		return dummySpinData;
 	}
 }
+
 
 
 
