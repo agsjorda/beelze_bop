@@ -57,14 +57,16 @@ export interface InitFreeSpinRound {
  */
 export interface SlotInitializeData {
     gameId: string;
+    playerId?: string;
     sessionId: string;
     lang: string;
     currency: string;
+    currencySymbol?: string;
     hasFreeSpinRound: boolean;
     // New backend format: array of free spin round entries.
     // Kept as `any` union-friendly type for backwards compatibility,
     // but we always treat it as InitFreeSpinRound[] in our helper.
-    freeSpinRound: InitFreeSpinRound[] | number;
+    freeSpinRound: InitFreeSpinRound[] | number | Record<string, unknown> | null;
     hasUnresolvedSpin: boolean;
     unresolvedSpinIndex: number;
     // The backend can return arbitrary structure here; keep it flexible
@@ -376,14 +378,16 @@ export class GameAPI {
         if (isDemo) {
             const payload: SlotInitializeData = {
                 gameId: GameAPI.GAME_ID,
+                playerId: '',
                 sessionId: '',
                 lang: 'en',
                 currency: 'USD',
+                currencySymbol: '$',
                 hasFreeSpinRound: false,
-                freeSpinRound: 0,
+                freeSpinRound: {},
                 hasUnresolvedSpin: false,
                 unresolvedSpinIndex: 0,
-                unresolvedSpin: null,
+                unresolvedSpin: {},
             };
             this.initializationData = payload;
             this.remainingInitFreeSpins = 0;
