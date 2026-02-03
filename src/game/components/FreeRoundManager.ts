@@ -3,6 +3,7 @@ import { GameAPI, SlotInitializeData } from '../../backend/GameAPI';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SlotController } from './controller/SlotController';
+import { CurrencyManager } from './CurrencyManager';
 
 export class FreeRoundManager {
 	private container: Phaser.GameObjects.Container | null = null;
@@ -368,8 +369,7 @@ export class FreeRoundManager {
 					// Guard on game state: wait until reels are stopped and all win flows/dialogs are done
 					if (
 						!gameStateManager.isReelSpinning &&
-						!gameStateManager.isShowingWinDialog &&
-						!gameStateManager.isShowingWinlines
+						!gameStateManager.isShowingWinDialog
 					) {
 						this.showCompletionCreditedPanel(this.getFinalFreeRoundTotalWin());
 						return;
@@ -391,8 +391,7 @@ export class FreeRoundManager {
 						// Re-check state; if still busy, recurse
 						if (
 							!gameStateManager.isReelSpinning &&
-							!gameStateManager.isShowingWinDialog &&
-							!gameStateManager.isShowingWinlines
+							!gameStateManager.isShowingWinDialog
 						) {
 							this.showCompletionCreditedPanel(this.getFinalFreeRoundTotalWin());
 						} else {
@@ -860,7 +859,7 @@ export class FreeRoundManager {
 
 		// "With $X.XX" line
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : '$';
+		const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
 		const betValue =
 			this.initBet != null
 				? this.initBet
@@ -885,7 +884,7 @@ export class FreeRoundManager {
 		this.panelBetText = scene.add.text(
 			0,
 			0,
-			`${currencySymbol}${betDisplay}`,
+			`${currencyPrefix}${betDisplay}`,
 			{
 				fontSize: '20px',
 				color: '#379557',
@@ -1048,7 +1047,7 @@ export class FreeRoundManager {
 		// Line 1: "You won $XX.XX with"
 		const totalWinDisplay = totalWin.toFixed(2);
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : '$';
+		const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
 
 		const line1Y = -40;
 		const line1Parts = [
@@ -1057,7 +1056,7 @@ export class FreeRoundManager {
 				style: { fontSize: '24px', color: '#ffffff', fontFamily: 'poppins-bold' }
 			},
 			{
-				text: `${currencySymbol}${totalWinDisplay}`,
+				text: `${currencyPrefix}${totalWinDisplay}`,
 				style: { fontSize: '32px', color: '#00ff00', fontFamily: 'poppins-bold' }
 			},
 			{
@@ -1068,15 +1067,15 @@ export class FreeRoundManager {
 
 		let line1Width = 0;
 		const line1TextObjects: Phaser.GameObjects.Text[] = [];
-		for (const part of line1Parts) {
+		line1Parts.forEach((part, index) => {
 			const t = scene.add.text(0, 0, part.text, part.style);
 			// Apply green gradient to the winnings value segment
-			if (!isDemo && part.text.startsWith('$')) {
+			if (!isDemo && index === 1) {
 				this.applyBetValueGradientToText(t);
 			}
 			line1Width += t.width;
 			line1TextObjects.push(t);
-		}
+		});
 		let cursorX = -line1Width / 2;
 		for (const t of line1TextObjects) {
 			t.setPosition(cursorX + t.width / 2, line1Y);
@@ -1133,7 +1132,7 @@ export class FreeRoundManager {
 		const betValueText = scene.add.text(
 			0,
 			0,
-			`${currencySymbol}${betDisplay}`,
+			`${currencyPrefix}${betDisplay}`,
 			{
 				fontSize: '22px',
 				color: '#379557',
@@ -1287,12 +1286,14 @@ export class FreeRoundManager {
 
 		// Line 1: "$XX.XX" (winnings only, on its own line)
 		const totalWinDisplay = totalWin.toFixed(2);
+		const isDemo = (scene as any).gameAPI?.getDemoState();
+		const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
 		const winningsY = -50;
 
 		const winningsText = scene.add.text(
 			0,
 			winningsY,
-			`$${totalWinDisplay}`,
+			`${currencyPrefix}${totalWinDisplay}`,
 			{
 				fontSize: '32px',
 				color: '#00ff00',

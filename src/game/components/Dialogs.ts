@@ -9,6 +9,7 @@ import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { UI_CONFIG, WIN_THRESHOLDS, TIMING_CONFIG } from '../../config/GameConfig';
 import { Logger } from '../../utils/Logger';
+import { CurrencyManager } from './CurrencyManager';
 
 export interface DialogConfig {
 	type: 'Congrats_BZ' | 'FreeSpin_BZ' | 'FreeSpinRetri_BZ' | 'BigW_BZ' | 'MegaW_BZ' | 'EpicW_BZ' | 'SuperW_BZ' | 'TotalW_BZ';
@@ -685,11 +686,17 @@ export class Dialogs {
 			}
 		}
 
-		// If a win dialog appears exactly when bonus spins are exhausted, do NOT auto-close it.
-		// We want the normal (non-autoplay) dwell time so the flow can proceed cleanly to Congrats.
+		// If a win dialog appears exactly when bonus spins are exhausted, only skip auto-close
+		// when auto-close is disabled. Otherwise honor the configured auto-close timing.
 		if (this.isWinDialog() && gameStateManager.isBonusFinished) {
-			console.log('[Dialogs] End-of-bonus win dialog detected - skipping auto-close to allow congrats flow');
-			return;
+			const hasConfiguredAutoClose =
+				(this.configAutoCloseEnabled && this.configAutoCloseMs !== null) ||
+				(this.defaultWinDialogAutoCloseEnabled && this.defaultWinDialogAutoCloseMs !== null);
+			if (!hasConfiguredAutoClose) {
+				console.log('[Dialogs] End-of-bonus win dialog detected - auto-close disabled, skipping');
+				return;
+			}
+			console.log('[Dialogs] End-of-bonus win dialog detected - honoring auto-close settings');
 		}
 
 		// Only auto-close win dialogs during autoplay/scatter. Free spin dialogs stay until user clicks.
@@ -819,9 +826,9 @@ export class Dialogs {
 			alignment: 'center',
 			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
-			// For Congrats dialog totals, show a dollar sign prefix.
+			// For Congrats dialog totals, show a currency prefix.
 			// Other dialogs remain unchanged.
-			prefix: isTotalWinDialog ? (isDemo ? '' : '$ ') : '',
+			prefix: isTotalWinDialog ? (isDemo ? '' : CurrencyManager.getInlinePrefix()) : '',
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 12,
 			dotYOffset: 10
@@ -1192,19 +1199,6 @@ export class Dialogs {
 		// Reset win dialog state
 		gameStateManager.isShowingWinDialog = false;
 		console.log('[Dialogs] Reset isShowingWinDialog to false for manual dialog close');
-
-		// Reset winlines tracking if the property exists
-		if (gameScene.hasWinlinesThisSpin !== undefined) {
-			gameScene.hasWinlinesThisSpin = false;
-			console.log('[Dialogs] Reset hasWinlinesThisSpin to false for manual dialog close');
-		}
-
-		// Reset win line drawer interrupted flag if symbols exist
-		if (gameScene.symbols && gameScene.symbols.winLineDrawer &&
-			gameScene.symbols.winLineDrawer.resetInterruptedFlag) {
-			gameScene.symbols.winLineDrawer.resetInterruptedFlag();
-			console.log('[Dialogs] Reset win line drawer interrupted flag for manual dialog close');
-		}
 
 		// NOTE: Do NOT call ensureCleanSymbolState() here as it immediately clears winning symbols
 		// The winning symbols should remain visible until the next spin starts

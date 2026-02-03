@@ -10,7 +10,6 @@ export interface TurboButtonCallbacks {
   getGameData: () => GameData | null;
   applyTurboSpeedModifications: () => void;
   forceApplyTurboToSceneGameData: () => void;
-  applyTurboToWinlineAnimations: () => void;
 }
 
 export class TurboButtonController {
@@ -226,7 +225,6 @@ export class TurboButtonController {
 
     this.callbacks.applyTurboSpeedModifications();
     this.callbacks.forceApplyTurboToSceneGameData();
-    this.callbacks.applyTurboToWinlineAnimations();
 
     EventBus.emit('turbo', gameData.isTurbo);
 

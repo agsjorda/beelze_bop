@@ -4,6 +4,7 @@ import { GameData } from '../components/GameData';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { GameAPI } from '../../backend/GameAPI';
 import { HelpScreen } from './MenuTabs/HelpScreen';
+import { CurrencyManager } from './CurrencyManager';
 
 interface ButtonBase {
     isButton: boolean;
@@ -1328,8 +1329,8 @@ export class Menu {
 
             // Static price text centered on the button (hide currency in demo)
             const isDemoBuyPrice = scene.gameAPI?.getDemoState();
-            const currencySymbolBuyPrice = isDemoBuyPrice ? '' : '$';
-            const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencySymbolBuyPrice}10,000`, {
+            const currencyPrefixBuyPrice = isDemoBuyPrice ? '' : CurrencyManager.getInlinePrefix();
+            const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencyPrefixBuyPrice}10,000`, {
                 fontSize: '18px',
                 color: '#FFFFFF',
                 fontFamily: 'Poppins-Bold'
@@ -2018,8 +2019,7 @@ export class Menu {
                         const repeatTimes = payoutAdjustments[0] - text2.length;
 
                         const isDemoPayout = scene.gameAPI?.getDemoState();
-                        const currencySymbolPayout = isDemoPayout ? '' : '$';
-                        const currencyPrefixPayout = currencySymbolPayout + (currencySymbolPayout ? ' ' : '');
+                        const currencyPrefixPayout = isDemoPayout ? '' : CurrencyManager.getInlinePrefix();
 
                         if(repeatTimes > 0){
                             text = col == 0 ? matchNumRange[row] : 
@@ -2062,8 +2062,7 @@ export class Menu {
                         const repeatTimes = payoutAdjustments[0] - text2.length;
 
                         const isDemoPayout = scene.gameAPI?.getDemoState();
-                        const currencySymbolPayout = isDemoPayout ? '' : '$';
-                        const currencyPrefixPayout = currencySymbolPayout + (currencySymbolPayout ? ' ' : '');
+                        const currencyPrefixPayout = isDemoPayout ? '' : CurrencyManager.getInlinePrefix();
 
                         if(repeatTimes > 0){
                             text = col == 0 ? scatterNumRange[row] : 

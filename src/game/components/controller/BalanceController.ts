@@ -1,6 +1,7 @@
 import type { Scene } from 'phaser';
 import type { GameAPI } from '../../../backend/GameAPI';
 import type { GameData } from '../GameData';
+import { CurrencyManager } from '../CurrencyManager';
 
 export interface BalanceControllerCallbacks {
   getScene: () => Scene | null;
@@ -33,7 +34,6 @@ export class BalanceController {
     const containerHeight = 55;
     const cornerRadius = 10;
     const isDemoBalance = this.callbacks.getGameAPI()?.getDemoState();
-    const balanceValueOffset = isDemoBalance ? 0 : 5;
 
     const balanceBg = scene.add.graphics();
     balanceBg.fillStyle(0x000000, 0.65);
@@ -60,7 +60,7 @@ export class BalanceController {
     this.controllerContainer.add(balanceLabel);
 
     this.balanceAmountText = scene.add.text(
-      balanceX + balanceValueOffset,
+      balanceX,
       balanceY + 8,
       '0',
       {
@@ -72,9 +72,9 @@ export class BalanceController {
     this.controllerContainer.add(this.balanceAmountText);
 
     this.balanceDollarText = scene.add.text(
-      balanceX - (this.balanceAmountText.width / 2) - 3.5,
+      balanceX,
       balanceY + 8,
-      isDemoBalance ? '' : '$',
+      CurrencyManager.getCurrencyGlyph(),
       {
         fontSize: '14px',
         color: '#ffffff',
@@ -83,6 +83,8 @@ export class BalanceController {
     ).setOrigin(0.5, 0.5).setDepth(9);
     this.balanceDollarText.setVisible(!isDemoBalance);
     this.controllerContainer.add(this.balanceDollarText);
+
+    this.layoutCurrencyPair(balanceX, balanceY + 8, this.balanceDollarText, this.balanceAmountText, !!isDemoBalance, 6);
   }
 
   public updateBalanceAmount(balanceAmount: number): void {
@@ -96,18 +98,7 @@ export class BalanceController {
       if (scene) {
         const balanceX = scene.scale.width * 0.19;
         const balanceY = this.balanceAmountText.y;
-        this.balanceAmountText.setPosition(balanceX + (isDemo ? 0 : 2.5), balanceY);
-
-        if (this.balanceDollarText) {
-          if (isDemo) {
-            this.balanceDollarText.setVisible(false);
-            this.balanceDollarText.setText('');
-          } else {
-            this.balanceDollarText.setVisible(true);
-            this.balanceDollarText.setText('$');
-            this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 2.5, balanceY);
-          }
-        }
+        this.layoutCurrencyPair(balanceX, balanceY, this.balanceDollarText, this.balanceAmountText, !!isDemo, 6);
       }
     }
   }
@@ -144,10 +135,49 @@ export class BalanceController {
 
   public getBalanceAmount(): number {
     if (this.balanceAmountText) {
-      const balanceText = this.balanceAmountText.text.replace('$', '').replace(/,/g, '');
+      const balanceText = CurrencyManager.stripCurrencyPrefix(this.balanceAmountText.text).replace(/,/g, '');
       return parseFloat(balanceText) || 0;
     }
     return 0;
+  }
+
+  public refreshCurrencySymbols(): void {
+    const scene = this.callbacks.getScene();
+    if (!scene || !this.balanceAmountText || !this.balanceDollarText) return;
+    const isDemo = this.callbacks.getGameAPI()?.getDemoState();
+    const balanceX = scene.scale.width * 0.19;
+    const balanceY = this.balanceAmountText.y;
+    this.balanceDollarText.setText(CurrencyManager.getCurrencyGlyph());
+    this.layoutCurrencyPair(balanceX, balanceY, this.balanceDollarText, this.balanceAmountText, !!isDemo, 6);
+  }
+
+  private layoutCurrencyPair(
+    centerX: number,
+    y: number,
+    currencyText: Phaser.GameObjects.Text,
+    amountText: Phaser.GameObjects.Text,
+    isDemo: boolean,
+    spacing: number
+  ): void {
+    const glyph = CurrencyManager.getCurrencyGlyph();
+    const showCurrency = !isDemo && glyph.length > 0;
+
+    if (!showCurrency) {
+      try { currencyText.setVisible(false); } catch {}
+      amountText.setPosition(centerX, y);
+      return;
+    }
+
+    currencyText.setVisible(true);
+    currencyText.setText(glyph);
+
+    const glyphWidth = currencyText.width || 0;
+    const amountWidth = amountText.width || 0;
+    const totalWidth = glyphWidth + spacing + amountWidth;
+    const startX = centerX - (totalWidth / 2);
+
+    currencyText.setPosition(startX + glyphWidth / 2, y);
+    amountText.setPosition(startX + glyphWidth + spacing + (amountWidth / 2), y);
   }
 
   public setPendingBalanceUpdate(update: { balance: number; bet: number; winnings?: number } | null): void {

@@ -80,12 +80,12 @@ export class SymbolGrid {
 
     this.symbols = [];
     this.newSymbols = [];
-    
-    const spacingX = this.horizontalSpacing * (SLOT_ROWS - 1);
-    const spacingY = this.verticalSpacing * (SLOT_COLUMNS - 1);
-    
-    this.totalGridWidth = (this.displayWidth * SLOT_ROWS) + spacingX;
-    this.totalGridHeight = (this.displayHeight * SLOT_COLUMNS) + spacingY;
+
+    const spacingX = this.horizontalSpacing * (SLOT_COLUMNS - 1);
+    const spacingY = this.verticalSpacing * (SLOT_ROWS - 1);
+
+    this.totalGridWidth = (this.displayWidth * SLOT_COLUMNS) + spacingX;
+    this.totalGridHeight = (this.displayHeight * SLOT_ROWS) + spacingY;
 
     this.slotX = centerX;
     this.slotY = centerY;

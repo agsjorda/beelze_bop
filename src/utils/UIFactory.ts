@@ -5,6 +5,7 @@
 
 import { Scene, GameObjects } from 'phaser';
 import { UI_CONFIG } from '../config/GameConfig';
+import { CurrencyManager } from '../game/components/CurrencyManager';
 
 /**
  * Configuration for creating a control button
@@ -62,7 +63,7 @@ export interface CurrencyDisplayConfig {
   amount: number;
   /** Show currency symbol (default: true in real mode) */
   showCurrency?: boolean;
-  /** Currency symbol (default: '$') */
+  /** Currency symbol (defaults to CurrencyManager glyph when omitted) */
   currencySymbol?: string;
   /** Font size (default: '14px') */
   fontSize?: string;
@@ -169,7 +170,7 @@ export function createCurrencyDisplay(
     y,
     amount,
     showCurrency = true,
-    currencySymbol = '$',
+    currencySymbol = CurrencyManager.getCurrencyGlyph(),
     fontSize = '14px',
     decimals = 2,
     depth = UI_CONFIG.DEPTH.CONTROLLER,

@@ -46,7 +46,9 @@ export class FreeSpinController {
   /** Whether dialog listener has been set up */
   private dialogListenerSetup: boolean = false;
   private lastReportedSpinsLeft: number | null = null;
+  /** @deprecated kept for reset() compatibility – no longer drives retrigger logic */
   private lastReportedItemsLen: number | null = null;
+  private lastReportedCount: number | null = null;
 
   /** Callbacks to integrate with main Symbols class */
   private callbacks: {
@@ -129,11 +131,32 @@ export class FreeSpinController {
     gameEventManager.on(GameEventType.REELS_START, () => {
       if (this._isActive && this.awaitingReelsStart) {
         const before = this.spinsRemaining;
-        if (this.spinsRemaining > 0) {
-          this.spinsRemaining -= 1;
+
+        // Prefer deriving remaining spins from the current spin data.
+        // This prevents retrigger flows from desyncing the internal counter and
+        // ending autoplay early (which appears as skipped spins).
+        let derived: number | null = null;
+        try {
+          if (this.callbacks.getCurrentSpinData) {
+            const spinData = this.callbacks.getCurrentSpinData();
+            const info = this.getSpinsInfoFromSpinData(spinData);
+            if (typeof info?.spinsLeft === 'number' && info.spinsLeft > 0) {
+              derived = Math.max(0, info.spinsLeft - 1);
+            }
+          }
+        } catch { }
+
+        if (derived !== null) {
+          this.spinsRemaining = derived;
+          console.log(`[FreeSpinController] Counter synced from spinData: ${before} -> ${this.spinsRemaining}`);
+        } else {
+          if (this.spinsRemaining > 0) {
+            this.spinsRemaining -= 1;
+          }
+          console.log(`[FreeSpinController] Counter decremented: ${before} -> ${this.spinsRemaining}`);
         }
+
         this.awaitingReelsStart = false;
-        console.log(`[FreeSpinController] Counter decremented: ${before} -> ${this.spinsRemaining}`);
       }
     });
     
@@ -184,30 +207,44 @@ export class FreeSpinController {
     }
 
     let freeSpinsCount = 0;
+    let spinDataSpinsLeft = 0;
     
     console.log('[FreeSpinController] ===== TRIGGERING AUTOPLAY =====');
-    
-    // Check pending data first
-    if (this.pendingFreeSpinsData) {
-      if (this.pendingFreeSpinsData.actualFreeSpins > 0) {
-        freeSpinsCount = this.pendingFreeSpinsData.actualFreeSpins;
-        console.log(`[FreeSpinController] Using pending data: ${freeSpinsCount} spins`);
-        this.pendingFreeSpinsData = null;
-      } else {
-        console.log('[FreeSpinController] Pending data is 0, falling back to spinData');
-        this.pendingFreeSpinsData = null;
-      }
-    } else if (gameStateManager.isBonus && this.callbacks.getCurrentSpinData) {
-      // Try to get from current spin data
+
+    // Prefer authoritative spinsLeft from current spin data.
+    // This avoids retrigger flows (dialogs) overwriting the remaining counter with just
+    // the "increment" amount (pendingFreeSpinsData.actualFreeSpins).
+    if (gameStateManager.isBonus && this.callbacks.getCurrentSpinData) {
       const spinData = this.callbacks.getCurrentSpinData();
       const info = this.getSpinsInfoFromSpinData(spinData);
-      freeSpinsCount = info.spinsLeft;
+      spinDataSpinsLeft = info.spinsLeft;
       this.lastReportedSpinsLeft = info.spinsLeft;
       this.lastReportedItemsLen = info.itemsLen;
-      
-      if (freeSpinsCount > 0) {
+      try {
+        const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+        const countValue = typeof fs?.count === 'number' ? fs.count : null;
+        if (countValue !== null) {
+          this.lastReportedCount = countValue;
+        }
+      } catch {}
+
+      if (spinDataSpinsLeft > 0) {
+        freeSpinsCount = spinDataSpinsLeft;
+        // Clear any stale pending data so it cannot override the counter later.
+        this.pendingFreeSpinsData = null;
         console.log(`[FreeSpinController] Using spin data: ${freeSpinsCount} spins`);
       }
+    }
+
+    // Fallback: use pending data only when spin data doesn't provide spinsLeft.
+    if (freeSpinsCount <= 0 && this.pendingFreeSpinsData) {
+      if (this.pendingFreeSpinsData.actualFreeSpins > 0) {
+        freeSpinsCount = this.pendingFreeSpinsData.actualFreeSpins;
+        console.log(`[FreeSpinController] Fallback to pending data: ${freeSpinsCount} spins`);
+      } else {
+        console.log('[FreeSpinController] Pending data is 0');
+      }
+      this.pendingFreeSpinsData = null;
     }
     
     if (freeSpinsCount > 0) {
@@ -271,6 +308,14 @@ export class FreeSpinController {
       return;
     }
 
+		// Guard against duplicate spin requests while a spin is already in-flight.
+		// If FREE_SPIN_AUTOPLAY is emitted twice, fake data free-spin items can advance twice
+		// and the remaining display will jump unexpectedly (e.g. showing 12).
+		if (this.awaitingReelsStart || this.waitingForReelsStop) {
+			console.warn('[FreeSpinController] performSpin ignored - previous spin still in progress');
+			return;
+		}
+
     console.log(`[FreeSpinController] ===== SPIN ${this.spinsRemaining} =====`);
     
     // Check if still in bonus mode
@@ -321,49 +366,100 @@ export class FreeSpinController {
    */
   private handleWinStop(): void {
     console.log('[FreeSpinController] WIN_STOP received');
-    
+
     if (!this.waitingForWinlines) {
       return;
     }
 
     this.waitingForWinlines = false;
 
-    // If a scatter retrigger is pending, wait for the retrigger dialog to finish
+    // If a scatter or Symbol0 retrigger is pending, wait for the retrigger dialog to finish
     // before scheduling the next spin.
     try {
       const symbolsAny: any = this.scene as any;
       const symbols = symbolsAny?.symbols;
-      const retriggerPending = !!(symbols && typeof symbols.hasPendingScatterRetrigger === 'function' && symbols.hasPendingScatterRetrigger());
-      const retriggerAnimating = !!(symbols && typeof symbols.isScatterRetriggerAnimationInProgress === 'function' && symbols.isScatterRetriggerAnimationInProgress());
-      if (retriggerPending || retriggerAnimating) {
-        console.log('[FreeSpinController] Retrigger pending - waiting for dialog completion before continuing');
+      const scatterRetriggerPending = !!(symbols && typeof symbols.hasPendingScatterRetrigger === 'function' && symbols.hasPendingScatterRetrigger());
+      const symbol0RetriggerPending = !!(symbols && typeof symbols.hasPendingSymbol0Retrigger === 'function' && symbols.hasPendingSymbol0Retrigger());
+      const retriggerAnimating = !!(symbols && typeof symbols.isScatterRetriggerAnimationInProgress === 'function' && symbols.isScatterRetriggerAnimationInProgress()) || !!(symbols && typeof symbols.isSymbol0RetriggerAnimationInProgress === 'function' && symbols.isSymbol0RetriggerAnimationInProgress());
+      if (scatterRetriggerPending || symbol0RetriggerPending || retriggerAnimating) {
+        console.log('[FreeSpinController] Retrigger pending (scatter or Symbol0) - waiting for dialog completion before continuing');
         this.waitForAllDialogsToCloseThenResume();
         return;
       }
     } catch { }
 
     if (this.spinsRemaining <= 0) {
-      console.log('[FreeSpinController] Last free spin complete - stopping after WIN_STOP');
-      this.stop();
+      console.log('[FreeSpinController] Last free spin complete - waiting for BONUS_TOTAL_WIN_SHOWN before stopping');
+
+      let handled = false;
+
+      const fallback = this.scene.time.delayedCall(3000, () => {
+        if (handled) return;
+        handled = true;
+        console.warn('[FreeSpinController] TIMEOUT waiting for BONUS_TOTAL_WIN_SHOWN on last spin - stopping anyway');
+        this.stop();
+      });
+
+      gameEventManager.once(GameEventType.BONUS_TOTAL_WIN_SHOWN, () => {
+        if (handled) return;
+        handled = true;
+        if (fallback) fallback.destroy();
+        console.log('[FreeSpinController] BONUS_TOTAL_WIN_SHOWN received on last spin - stopping');
+        this.stop();
+      });
       return;
     }
-    
+
     // Clear existing timer
     if (this.autoplayTimer) {
       this.autoplayTimer.destroy();
       this.autoplayTimer = null;
     }
-    
-    // Schedule next spin with appropriate delay
-    const baseDelay = 500;
-    const turboDelay = gameStateManager.isTurbo 
-      ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER 
-      : baseDelay;
-    
-    console.log(`[FreeSpinController] Scheduling next spin in ${turboDelay}ms`);
-    
-    this.autoplayTimer = this.scene.time.delayedCall(turboDelay, () => {
-      this.performSpin();
+
+    // Wait for BONUS_TOTAL_WIN_SHOWN event before scheduling next spin
+    // This ensures the delay is measured from when "TOTAL WIN" is actually displayed on screen
+    console.log('[FreeSpinController] Waiting for BONUS_TOTAL_WIN_SHOWN before scheduling next spin');
+
+    let eventHandled = false;
+
+    // Safety timeout in case event doesn't fire (race condition prevention)
+    const safetyTimeout = this.scene.time.delayedCall(3000, () => {
+      if (!eventHandled) {
+        eventHandled = true;
+        console.warn('[FreeSpinController] TIMEOUT waiting for BONUS_TOTAL_WIN_SHOWN, proceeding anyway');
+
+        // Schedule next spin with appropriate delay
+        const baseDelay = 400;
+        const turboDelay = gameStateManager.isTurbo
+          ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
+          : baseDelay;
+
+        console.log(`[FreeSpinController] Scheduling next spin in ${turboDelay}ms (timeout fallback)`);
+
+        this.autoplayTimer = this.scene.time.delayedCall(turboDelay, () => {
+          this.performSpin();
+        });
+      }
+    });
+
+    gameEventManager.once(GameEventType.BONUS_TOTAL_WIN_SHOWN, () => {
+      if (!eventHandled) {
+        eventHandled = true;
+        if (safetyTimeout) safetyTimeout.destroy();
+        console.log('[FreeSpinController] BONUS_TOTAL_WIN_SHOWN received');
+
+        // Schedule next spin with appropriate delay
+        const baseDelay = 300; // 300ms to allow "TOTAL WIN" to be visible
+        const turboDelay = gameStateManager.isTurbo
+          ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
+          : baseDelay;
+
+        console.log(`[FreeSpinController] Scheduling next spin in ${turboDelay}ms (from when TOTAL WIN appeared)`);
+
+        this.autoplayTimer = this.scene.time.delayedCall(turboDelay, () => {
+          this.performSpin();
+        });
+      }
     });
   }
 
@@ -401,16 +497,33 @@ export class FreeSpinController {
 
       this.scene.time.delayedCall(0, () => {
         if (settled) return;
-        
+
+        // When a retrigger is pending or animating, the win dialog may have just closed
+        // but the retrigger sequence/dialog has not run yet. Do NOT schedule the next spin
+        // here — wait for the retrigger dialog to close (next dialogAnimationsComplete).
+        try {
+          const symbolsAny: any = gameScene?.symbols;
+          const scatterRetriggerPending = !!(symbolsAny && typeof symbolsAny.hasPendingScatterRetrigger === 'function' && symbolsAny.hasPendingScatterRetrigger());
+          const symbol0RetriggerPending = !!(symbolsAny && typeof symbolsAny.hasPendingSymbol0Retrigger === 'function' && symbolsAny.hasPendingSymbol0Retrigger());
+          const retriggerAnimating = !!(symbolsAny && typeof symbolsAny.isScatterRetriggerAnimationInProgress === 'function' && symbolsAny.isScatterRetriggerAnimationInProgress()) || !!(symbolsAny && typeof symbolsAny.isSymbol0RetriggerAnimationInProgress === 'function' && symbolsAny.isSymbol0RetriggerAnimationInProgress());
+          if (scatterRetriggerPending || symbol0RetriggerPending || retriggerAnimating) {
+            console.log('[FreeSpinController] Retrigger pending or animating - waiting for retrigger dialog before scheduling next spin');
+            this.scene.events.once('dialogAnimationsComplete', () => {
+              this.waitForAllDialogsToCloseThenResume();
+            });
+            return;
+          }
+        } catch { }
+
         const showingNow = !!(dialogs && typeof dialogs.isDialogShowing === 'function' && dialogs.isDialogShowing());
         const winNow = !!gameStateManager.isShowingWinDialog;
-        
+
         if (showingNow || winNow) {
           settled = true;
           this.waitForAllDialogsToCloseThenResume();
           return;
         }
-        
+
         settled = true;
         this.scene.time.delayedCall(120, () => this.performSpin());
       });
@@ -486,10 +599,11 @@ export class FreeSpinController {
     const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
     const items = Array.isArray(fs?.items) ? fs.items : [];
     const slotArea = spinData?.slot?.area;
+    const countValue = typeof fs?.count === 'number' ? fs.count : null;
     let added = 0;
     let nextSpinsLeft: number | null = null;
 
-    // Prefer area-based current/next spinsLeft (most reliable for retrigger calculation).
+    // Prefer area-based: added = next - current, display = next item's spinsLeft
     try {
       if (Array.isArray(slotArea)) {
         const areaJson = JSON.stringify(slotArea);
@@ -497,28 +611,45 @@ export class FreeSpinController {
         if (idx >= 0) {
           const currentSpinsLeft = Number(items[idx]?.spinsLeft ?? 0);
           const nextItemSpinsLeft = Number(items[idx + 1]?.spinsLeft ?? 0);
-          if (currentSpinsLeft > 0 && nextItemSpinsLeft > 0) {
-            added = nextItemSpinsLeft - currentSpinsLeft + 1;
+          if (nextItemSpinsLeft > 0) {
+            added = nextItemSpinsLeft - currentSpinsLeft; // added = next - current
             nextSpinsLeft = nextItemSpinsLeft;
           }
         }
       }
     } catch { }
 
-    // Fallback: use last reported spinsLeft delta if area match fails.
-    if (added === 0 && this.lastReportedSpinsLeft !== null && info.spinsLeft > this.lastReportedSpinsLeft) {
-      added = info.spinsLeft - this.lastReportedSpinsLeft + 1;
-      nextSpinsLeft = info.spinsLeft;
+    // Fallback: use spinsRemaining to find the current item when area match fails.
+    if (added === 0 && items.length > 0 && this.spinsRemaining > 0) {
+      try {
+        const targetSpinsLeft = this.spinsRemaining + 1; // display is spinsLeft - 1
+        for (let i = 0; i < items.length - 1; i++) {
+          const it = items[i];
+          if (typeof it?.spinsLeft === 'number' &&
+              (it.spinsLeft === this.spinsRemaining || it.spinsLeft === targetSpinsLeft)) {
+            const nextItem = items[i + 1];
+            const nextVal = Number(nextItem?.spinsLeft ?? 0);
+            if (nextVal > it.spinsLeft) {
+              added = nextVal - it.spinsLeft;
+              nextSpinsLeft = nextVal;
+              break;
+            }
+          }
+        }
+      } catch { }
     }
 
-    // Last resort: items length delta.
-    if (added === 0 && this.lastReportedItemsLen !== null && info.itemsLen > this.lastReportedItemsLen) {
-      added = info.itemsLen - this.lastReportedItemsLen;
+    // Fallback: count delta (total free spins may increase on retrigger).
+    if (added === 0 && countValue !== null && this.lastReportedCount !== null && countValue > this.lastReportedCount) {
+      added = countValue - this.lastReportedCount;
       nextSpinsLeft = info.spinsLeft;
     }
 
     this.lastReportedSpinsLeft = nextSpinsLeft ?? info.spinsLeft;
     this.lastReportedItemsLen = info.itemsLen;
+    if (countValue !== null) {
+      this.lastReportedCount = countValue;
+    }
     return { added: Math.max(0, added), spinsLeft: nextSpinsLeft ?? info.spinsLeft };
   }
 
@@ -527,16 +658,35 @@ export class FreeSpinController {
       const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
       const items = Array.isArray(fs?.items) ? fs.items : [];
       const itemsLen = items.length;
+
+      // Prefer area matching to find the current item's spinsLeft (most reliable).
+      const slotArea = spinData?.slot?.area;
+      if (Array.isArray(slotArea) && items.length > 0) {
+        const areaJson = JSON.stringify(slotArea);
+        const match = items.find((it: any) => Array.isArray(it?.area) && JSON.stringify(it.area) === areaJson);
+        if (match && typeof match.spinsLeft === 'number' && match.spinsLeft > 0) {
+          return { spinsLeft: match.spinsLeft, itemsLen };
+        }
+      }
+
+      // Fallback: use spinsRemaining to locate the current item.
+      if (items.length > 0 && this.spinsRemaining > 0) {
+        const bySpins = items.find((it: any) =>
+          typeof it?.spinsLeft === 'number' &&
+          (it.spinsLeft === this.spinsRemaining || it.spinsLeft === this.spinsRemaining + 1)
+        );
+        if (bySpins) {
+          return { spinsLeft: bySpins.spinsLeft, itemsLen };
+        }
+      }
+
+      // Last resort: first positive item or count.
       const positiveItem = items.find((it: any) => typeof it?.spinsLeft === 'number' && it.spinsLeft > 0);
       const firstItemSpinsLeft = itemsLen > 0 && typeof items[0]?.spinsLeft === 'number'
         ? items[0].spinsLeft
         : 0;
-      const maxItemSpinsLeft = items.reduce((m: number, it: any) => {
-        const v = Number(it?.spinsLeft || 0);
-        return v > m ? v : m;
-      }, 0);
       const countValue = typeof fs?.count === 'number' ? fs.count : 0;
-      const derivedSpinsLeft = Math.max(positiveItem?.spinsLeft ?? 0, firstItemSpinsLeft, maxItemSpinsLeft, 0);
+      const derivedSpinsLeft = Math.max(positiveItem?.spinsLeft ?? 0, firstItemSpinsLeft, 0);
       const spinsLeft = derivedSpinsLeft > 0 ? derivedSpinsLeft : Math.max(countValue, 0);
       return { spinsLeft, itemsLen };
     } catch {
@@ -561,6 +711,7 @@ export class FreeSpinController {
     this.awaitingReelsStart = false;
     this.dialogListenerSetup = false;
     this.pendingFreeSpinsData = null;
+    this.lastReportedCount = null;
   }
 
   // ============================================================================

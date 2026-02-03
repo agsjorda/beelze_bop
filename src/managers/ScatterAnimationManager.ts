@@ -230,13 +230,11 @@ export class ScatterAnimationManager {
     const currentSpinData: SpinData | undefined = gameScene?.symbols?.currentSpinData;
     const fsData = currentSpinData?.slot?.freeSpin || currentSpinData?.slot?.freespin;
     const items = Array.isArray(fsData?.items) ? fsData!.items : [];
+    const positiveItem = items.find((it: any) => typeof it?.spinsLeft === 'number' && it.spinsLeft > 0);
     const firstItemSpinsLeft = items.length > 0 && typeof items[0]?.spinsLeft === 'number' ? items[0].spinsLeft : 0;
-    if (firstItemSpinsLeft > 0) {
-      console.log(`[ScatterAnimationManager] Using first freeSpin item's spinsLeft: ${firstItemSpinsLeft}`);
-    } else {
-      console.log('[ScatterAnimationManager] first freeSpin item spinsLeft not available; defaulting to 0');
-    }
-    return firstItemSpinsLeft || 0;
+    const countValue = typeof (fsData as any)?.count === 'number' ? (fsData as any).count : 0;
+    const derived = Number(positiveItem?.spinsLeft ?? firstItemSpinsLeft ?? 0) || 0;
+    return derived > 0 ? derived : countValue > 0 ? countValue : 0;
   }
 
   /**
@@ -266,74 +264,33 @@ export class ScatterAnimationManager {
   // Spinner wait removed; dialogs shown immediately
 
   private showFreeSpinsDialog(data: Data, options: { suppressBlackOverlay?: boolean } = {}): void {
-    console.log('[ScatterAnimationManager] ===== SHOW FREE SPINS DIALOG CALLED =====');
-    console.log('[ScatterAnimationManager] Dialogs component available:', !!this.dialogsComponent);
-    
     if (!this.dialogsComponent) {
       console.warn('[ScatterAnimationManager] Dialogs component not available');
       return;
     }
 
-    // Get free spins count from the current spinData
-    let freeSpins = 0; // Default to 0, will be set from spinData or fallback
-    
-    // Get free spins from the current spinData directly from symbols (support new and legacy formats)
-    if (this.scene) {
-      const gameScene = this.scene as any; // Cast to access symbols property
-      if (gameScene.symbols && gameScene.symbols.currentSpinData) {
-        const currentSpinData = gameScene.symbols.currentSpinData;
-        if (currentSpinData.slot) {
-          const fsData = currentSpinData.slot.freeSpin || currentSpinData.slot.freespin;
-          if (fsData) {
-            const items = Array.isArray(fsData.items) ? fsData.items : [];
-            const firstItemSpinsLeft = items.length > 0 && typeof items[0]?.spinsLeft === 'number' ? items[0].spinsLeft : 0;
-            const positiveItem = items.find((it: any) => typeof it?.spinsLeft === 'number' && it.spinsLeft > 0);
-            const countValue = typeof fsData.count === 'number' ? fsData.count : 0;
-            freeSpins = (positiveItem?.spinsLeft ?? firstItemSpinsLeft ?? 0);
-            if (freeSpins <= 0 && countValue > 0) {
-              freeSpins = countValue;
-            }
-            console.log(`[ScatterAnimationManager] Derived free spins from spinData: ${freeSpins}`);
-          } else {
-            console.warn(`[ScatterAnimationManager] No freeSpin/freespin data in current spinData`);
-          }
-        } else {
-          console.warn(`[ScatterAnimationManager] No slot data in current spinData`);
-        }
-      } else {
-        console.warn(`[ScatterAnimationManager] Symbols or currentSpinData not available`);
-      }
-    }
+    let freeSpins = this.getFreeSpinsFromSpinData();
 
     // Fallback to backend-provided Data.freeSpins if spinData is missing or zero
     if (freeSpins <= 0 && typeof data?.freeSpins === 'number' && data.freeSpins > 0) {
       freeSpins = data.freeSpins;
-      console.log(`[ScatterAnimationManager] Fallback to Data.freeSpins for dialog: ${freeSpins}`);
     }
     
     // If we couldn't get freeSpins from spinData, log error and use 0
     if (freeSpins === 0) {
       console.error(`[ScatterAnimationManager] Could not get freeSpins from current spinData - dialog will show 0`);
     }
-    
-    console.log(`[ScatterAnimationManager] Showing free spins dialog for ${freeSpins} free spins`);
-    console.log(`[ScatterAnimationManager] Backend data state: freeSpins=${data.freeSpins}, scatterIndex=${data.scatterIndex}`);
 
     // Update game state to reflect bonus mode
-    console.log('[ScatterAnimationManager] Setting isBonus to true');
     gameStateManager.isBonus = true;
-    console.log('[ScatterAnimationManager] isBonus is now:', gameStateManager.isBonus);
 
     // Show the FreeSpin_BZ with all effects - this will trigger bonus mode when clicked
     try {
-      console.log('[ScatterAnimationManager] Calling dialogsComponent.showDialog with type: FreeSpin_BZ, freeSpins:', freeSpins);
       this.dialogsComponent.showDialog(this.scene, {
         type: 'FreeSpin_BZ',
         freeSpins: freeSpins,
         suppressBlackOverlay: options.suppressBlackOverlay
       });
-      
-      console.log('[ScatterAnimationManager] Free spins dialog displayed successfully');
       
       // Emit IS_BONUS event through the EventManager
       gameEventManager.emit(GameEventType.IS_BONUS, {
@@ -347,10 +304,7 @@ export class ScatterAnimationManager {
           scatterIndex: data.scatterIndex,
           actualFreeSpins: freeSpins
         };
-        console.log(`[ScatterAnimationManager] Emitting scatterBonusActivated event with data:`, eventData);
-        
         this.scene.events.emit('scatterBonusActivated', eventData);
-        console.log(`[ScatterAnimationManager] Emitted scatterBonusActivated event with index ${data.scatterIndex} and ${freeSpins} free spins`);
       }
       
       // Set up listener for when dialog animations complete

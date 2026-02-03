@@ -6,8 +6,8 @@
 // =============================================================================
 // GRID CONFIGURATION
 // =============================================================================
-export const SLOT_COLUMNS: number = 5; // number of rows (visual rows)
-export const SLOT_ROWS: number = 6; // number of columns (reels)
+export const SLOT_COLUMNS: number = 6; // number of columns (vertical reels)
+export const SLOT_ROWS: number = 5; // number of rows (horizontal)
 
 // =============================================================================
 // SYMBOL CONFIGURATION
