@@ -5,6 +5,7 @@ import { Data } from "../../tmp_backend/Data";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { PaylineData } from '../../backend/SpinData';
+import { CurrencyManager } from './CurrencyManager';
 
 
 export class Header {
@@ -79,8 +80,8 @@ export class Header {
 		// Line 2: amount value
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoInitial = (this.scene as any)?.gameAPI?.getDemoState();
-		const currencySymbolInitial = isDemoInitial ? '' : '$';
-		this.amountText = scene.add.text(x, y + 18, `${currencySymbolInitial}${currencySymbolInitial ? ' ' : ''}0.00`, {
+		const currencyPrefixInitial = isDemoInitial ? '' : CurrencyManager.getInlinePrefix();
+		this.amountText = scene.add.text(x, y + 18, `${currencyPrefixInitial}0.00`, {
 			fontSize: '24px',
 			color: '#FFB837',
 			fontFamily: 'Poppins-Bold',
@@ -437,9 +438,9 @@ export class Header {
 	private formatCurrency(amount: number): string {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : '$';
+		const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
 		const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-		return `${currencySymbol}${currencySymbol ? ' ' : ''}${formatted}`;
+		return `${currencyPrefix}${formatted}`;
 	}
 
 	/**

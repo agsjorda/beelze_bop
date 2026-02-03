@@ -18,6 +18,7 @@ import {
   OVERLAY_FADE_OUT_DURATION_MS,
 } from './constants';
 import { MultiplierSymbols } from './MultiplierSymbols';
+import { CurrencyManager } from '../CurrencyManager';
 
 /**
  * Manages overlay graphics and win text for the symbol grid
@@ -232,18 +233,18 @@ export class SymbolOverlay {
     isDemo: boolean = false
   ): Phaser.GameObjects.Text {
     const fontSize = Math.max(40, Math.round(displayHeight * 0.5));
-    const currencySymbol = isDemo ? '' : '$';
+    const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
     
     // Format the amount
     let textValue: string;
     try {
       if (Number.isInteger(amount)) {
-        textValue = `${currencySymbol}${amount}`;
+        textValue = `${currencyPrefix}${amount}`;
       } else {
-        textValue = `${currencySymbol}${Number(amount).toFixed(2)}`;
+        textValue = `${currencyPrefix}${Number(amount).toFixed(2)}`;
       }
     } catch {
-      textValue = `${currencySymbol}${amount}`;
+      textValue = `${currencyPrefix}${amount}`;
     }
     
     // Create the text object

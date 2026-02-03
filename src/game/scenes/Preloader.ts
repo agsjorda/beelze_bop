@@ -12,6 +12,7 @@ import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { Character } from '../components/Character';
 import { playRadialDimmerTransition } from '../utils/playRadialDimmerTransition';
+import { CurrencyManager } from '../components/CurrencyManager';
 
 export class Preloader extends Scene
 {
@@ -393,6 +394,7 @@ export class Preloader extends Scene
 				console.log('[Preloader] Calling backend slot initialization...');
 				const slotInitData = await this.gameAPI.initializeSlotSession();
 				console.log('[Preloader] Slot initialization data:', slotInitData);
+				CurrencyManager.initializeFromInitData(slotInitData);
 			} else {
 				console.log('[Preloader] Demo mode active - skipping backend slot initialization');
 			}

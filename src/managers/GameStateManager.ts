@@ -17,7 +17,6 @@ export class GameStateManager {
   private _isAutoPlaying: boolean = false;
   private _isTurbo: boolean = false;
   private _isAutoPlaySpinRequested: boolean = false;
-  private _isShowingWinlines: boolean = false;
   private _isShowingWinDialog: boolean = false;
   private _scatterIndex: number = 0;
   private _isBonusFinished: boolean = false;
@@ -59,15 +58,6 @@ export class GameStateManager {
       console.log('[GameStateManager] AUTO_STOP received, setting isAutoPlaying to false');
       this._isAutoPlaying = false;
     });
-
-    // Listen for win animation states
-    gameEventManager.on(GameEventType.WIN_START, () => {
-      this._isShowingWinlines = true;
-    });
-
-    gameEventManager.on(GameEventType.WIN_STOP, () => {
-      this._isShowingWinlines = false;
-    });
   }
 
   /**
@@ -87,7 +77,6 @@ export class GameStateManager {
   public get isAutoPlaying(): boolean { return this._isAutoPlaying; }
   public get isTurbo(): boolean { return this._isTurbo; }
   public get isAutoPlaySpinRequested(): boolean { return this._isAutoPlaySpinRequested; }
-  public get isShowingWinlines(): boolean { return this._isShowingWinlines; }
   public get isShowingWinDialog(): boolean { return this._isShowingWinDialog; }
   public get scatterIndex(): number { return this._scatterIndex; }
   public get isBonusFinished(): boolean { return this._isBonusFinished; }
@@ -134,10 +123,6 @@ export class GameStateManager {
 
   public set isAutoPlaySpinRequested(value: boolean) {
     this._isAutoPlaySpinRequested = value;
-  }
-
-  public set isShowingWinlines(value: boolean) {
-    this._isShowingWinlines = value;
   }
 
   public set isShowingWinDialog(value: boolean) {
@@ -202,7 +187,6 @@ export class GameStateManager {
     this._isAutoPlaying = false;
     this._isTurbo = false;
     this._isAutoPlaySpinRequested = false;
-    this._isShowingWinlines = false;
     this._isShowingWinDialog = false;
     this._scatterIndex = 0;
     this._isBonusFinished = false;
@@ -222,7 +206,6 @@ export class GameStateManager {
       isAutoPlaying: this._isAutoPlaying,
       isTurbo: this._isTurbo,
       isAutoPlaySpinRequested: this._isAutoPlaySpinRequested,
-      isShowingWinlines: this._isShowingWinlines,
       isShowingWinDialog: this._isShowingWinDialog,
       scatterIndex: this._scatterIndex,
       isBonusFinished: this._isBonusFinished,

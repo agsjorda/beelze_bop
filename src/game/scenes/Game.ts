@@ -42,6 +42,7 @@ import { WIN_THRESHOLDS } from '../../config/GameConfig';
 import { FreeRoundManager } from '../components/FreeRoundManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { Character } from '../components/Character';
+import { CurrencyManager } from '../components/CurrencyManager';
 
 export class Game extends Scene {
 	private networkManager!: NetworkManager;
@@ -68,10 +69,6 @@ export class Game extends Scene {
 	private freeRoundManager: FreeRoundManager | null = null;
 	private character1!: Character;
 	private character2!: Character;
-
-	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
-	// Track whether this spin has winlines to animate
-	private hasWinlinesThisSpin: boolean = false;
 
 	// Queue for wins that occur while a dialog is already showing
 	private winQueue: Array<{ payout: number; bet: number }> = [];
@@ -361,6 +358,8 @@ export class Game extends Scene {
 			const initData = this.gameAPI.getInitializationData();
 			const initFsRemaining = this.gameAPI.getRemainingInitFreeSpins();
 			const initFsBet = this.gameAPI.getInitFreeSpinBet();
+			CurrencyManager.initializeFromInitData(initData);
+			this.slotController?.refreshCurrencySymbols?.();
 
 			this.freeRoundManager = new FreeRoundManager();
 			this.freeRoundManager.create(this, this.gameAPI, this.slotController);
@@ -687,9 +686,7 @@ export class Game extends Scene {
 			console.log('[Game] Reels done - requesting balance update to finalize spin');
 			gameEventManager.emit(GameEventType.BALANCE_UPDATE);
 
-			// Note: Win dialog logic moved to WIN_STOP handler using payline data
-			// No fallback logic needed here - WinLineDrawer handles all timing
-			console.log('[Game] REELS_STOP: Balance update requested, WIN_STOP handled by winline animations');
+			console.log('[Game] REELS_STOP: Balance update requested');
 		});
 
 		// Ensure WinTracker is cleared (with a fade-out) as soon as reels actually start for a new spin
@@ -727,8 +724,6 @@ export class Game extends Scene {
 		// Listen for any spin to start (manual or autoplay)
 		gameEventManager.on(GameEventType.SPIN, (eventData: any) => {
 			console.log('[Game] SPIN event received - clearing win queue for new spin');
-			// Reset winlines tracking for the new spin
-			this.hasWinlinesThisSpin = false;
 			// Allow win dialogs again on the next spin
 			this.suppressWinDialogsUntilNextSpin = false;
 
@@ -910,12 +905,6 @@ export class Game extends Scene {
 		console.log(`[Game] Current isShowingWinDialog state: ${gameStateManager.isShowingWinDialog}`);
 		console.log(`[Game] Current dialog showing state: ${this.dialogs.isDialogShowing()}`);
 
-		// Check if the win line animation was interrupted by a manual spin
-		if (this.symbols && this.symbols.winLineDrawer && this.symbols.winLineDrawer.wasInterruptedBySpin()) {
-			console.log('[Game] Win line animation was interrupted by manual spin - preventing win dialog from showing');
-			return;
-		}
-
 		// If multiplier animations are in progress, defer win dialog until animations complete
 		try {
 			const symbolsAny: any = this.symbols as any;
@@ -962,22 +951,30 @@ export class Game extends Scene {
 
 		// If scatter is active and we're autoplaying (normal or free spin), defer win dialog
 		// until after the free spin dialog finishes (dialogAnimationsComplete).
-		// This ensures the sequence: scatter symbol anims -> free spin dialog -> win dialog.
+		// EXCEPTION: When retrigger is pending, show win dialog NOW so it plays before the
+		// retrigger sequence (win → explosion → win dialogs → retrigger anims → FreeSpinRetri).
 		try {
-			// Detect free spin autoplay via Symbols helper if available
 			const symbolsAny: any = this.symbols as any;
-			const isFreeSpinAutoplayActive =
-				symbolsAny && typeof symbolsAny.isFreeSpinAutoplayActive === 'function'
-					? !!symbolsAny.isFreeSpinAutoplayActive()
-					: false;
+			const hasPendingRetrigger =
+				(symbolsAny && typeof symbolsAny.hasPendingScatterRetrigger === 'function' && symbolsAny.hasPendingScatterRetrigger()) ||
+				(symbolsAny && typeof symbolsAny.hasPendingSymbol0Retrigger === 'function' && symbolsAny.hasPendingSymbol0Retrigger());
 
-			const isNormalAutoplayActive = !!(gameStateManager.isAutoPlaying || this.gameData?.isAutoPlaying);
+			if (hasPendingRetrigger) {
+				console.log('[Game] Retrigger pending - showing win dialog now (before retrigger sequence)');
+				// Fall through to show win dialog below
+			} else {
+				const isFreeSpinAutoplayActive =
+					symbolsAny && typeof symbolsAny.isFreeSpinAutoplayActive === 'function'
+						? !!symbolsAny.isFreeSpinAutoplayActive()
+						: false;
+				const isNormalAutoplayActive = !!(gameStateManager.isAutoPlaying || this.gameData?.isAutoPlaying);
 
-			if (gameStateManager.isScatter && (isNormalAutoplayActive || isFreeSpinAutoplayActive)) {
-				console.log('[Game] Scatter + autoplay detected - deferring win dialog until after free spin dialog closes');
-				this.winQueue.push({ payout, bet });
-				console.log(`[Game] Added to win queue due to scatter/autoplay. Queue length: ${this.winQueue.length}`);
-				return;
+				if (gameStateManager.isScatter && (isNormalAutoplayActive || isFreeSpinAutoplayActive)) {
+					console.log('[Game] Scatter + autoplay detected - deferring win dialog until after free spin dialog closes');
+					this.winQueue.push({ payout, bet });
+					console.log(`[Game] Added to win queue due to scatter/autoplay. Queue length: ${this.winQueue.length}`);
+					return;
+				}
 			}
 		} catch (e) {
 			console.warn('[Game] Failed to evaluate scatter/autoplay deferral for win dialog:', e);
@@ -1154,7 +1151,6 @@ export class Game extends Scene {
 				// Clear autoplay-related flags like on fresh spin
 				this.gameStateManager.isAutoPlaying = false;
 				this.gameStateManager.isAutoPlaySpinRequested = false;
-				this.gameStateManager.isShowingWinlines = false;
 				this.gameStateManager.isShowingWinDialog = false;
 				// Suppress any win dialogs that might be triggered during the transition back to base
 				this.suppressWinDialogsUntilNextSpin = true;
@@ -1277,16 +1273,15 @@ export class Game extends Scene {
 			}
 		});
 
-		// Reset symbols and winlines back to base state
+		// Reset symbols back to base state
 		this.events.on('resetSymbolsForBase', () => {
-			console.log('[Game] Resetting symbols and winlines to base state');
+			console.log('[Game] Resetting symbols to base state');
 			try {
 				if (this.symbols) {
 					// Do not clear Spine tracks here; keep symbols animating by forcing Idle loops
 					if ((this.symbols as any).resumeIdleAnimationsForAllSymbols) {
 						(this.symbols as any).resumeIdleAnimationsForAllSymbols();
 					}
-					this.symbols.clearWinLines();
 					// Also hide any winning overlays and restore depths/visibility
 					if (typeof (this.symbols as any).hideWinningOverlay === 'function') {
 						(this.symbols as any).hideWinningOverlay();
@@ -1298,10 +1293,9 @@ export class Game extends Scene {
 						(this.symbols as any).restoreSymbolVisibility();
 					}
 				}
-				// Reset any internal flags related to win dialogs/winlines
-				this.hasWinlinesThisSpin = false;
+				// Reset any internal flags related to win dialogs
 				gameStateManager.isShowingWinDialog = false;
-				console.log('[Game] Symbols and winlines reset complete');
+				console.log('[Game] Symbols reset complete');
 			} catch (e) {
 				console.error('[Game] Error resetting symbols for base:', e);
 			}
@@ -1384,16 +1378,6 @@ export class Game extends Scene {
 		if (this.gameStateManager.isBonus) {
 			console.log('[Game] In bonus mode - skipping old spin system, free spin autoplay will handle it');
 			return;
-		}
-
-		// Reset the interrupted flag for the new spin
-		if (this.symbols && this.symbols.winLineDrawer) {
-			this.symbols.winLineDrawer.resetInterruptedFlag();
-		}
-
-		// Check if win line drawer is still animating and hasn't completed first loop
-		if (this.symbols && this.symbols.winLineDrawer) {
-			this.symbols.winLineDrawer.forceEmitWinStopIfNeeded();
 		}
 
 		this.gameStateManager.startSpin();

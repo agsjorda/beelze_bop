@@ -20,6 +20,10 @@ export enum GameEventType {
   MULTIPLIER_ANIMATIONS_COMPLETE = 'MULTIPLIER_ANIMATIONS_COMPLETE',
   // Emitted after scatter retrigger animation sequence has completed
   SCATTER_RETRIGGER_ANIMATION_COMPLETE = 'SCATTER_RETRIGGER_ANIMATION_COMPLETE',
+  // Emitted after Symbol0 retrigger animation sequence has completed
+  SYMBOL0_RETRIGGER_ANIMATION_COMPLETE = 'SYMBOL0_RETRIGGER_ANIMATION_COMPLETE',
+  // Emitted when "TOTAL WIN" is displayed during bonus games
+  BONUS_TOTAL_WIN_SHOWN = 'BONUS_TOTAL_WIN_SHOWN',
   WIN_DIALOG_CLOSED = 'WIN_DIALOG_CLOSED',
   DIALOG_START = 'DIALOG_START',
   DIALOG_STOP = 'DIALOG_STOP',

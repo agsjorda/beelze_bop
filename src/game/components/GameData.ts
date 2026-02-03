@@ -15,7 +15,6 @@ export class GameData {
 
 	// Legacy state flags (prefer GameStateManager for new code)
 	public isAutoPlaying: boolean = false;
-	public isShowingWinlines: boolean = false;
 	public isTurbo: boolean = false;
 	public isReelSpinning: boolean = false;
 	public isEnhancedBet: boolean = false;
@@ -56,18 +55,4 @@ export function setSpeed(data: GameData, DELAY_BETWEEN_SPINS: number) {
  */
 export function gameSpin(data: GameData) {
 	Logger.create('GameData').warn('gameSpin function is deprecated - use GameStateManager.isReelSpinning instead');
-}
-
-export function isWinlinesShowing(data: GameData): boolean {
-	return data.isShowingWinlines;
-}
-
-export function pauseAutoplayForWinlines(data: GameData): void {
-	data.isShowingWinlines = true;
-	Logger.create('GameData').debug('Autoplay paused for winline animations');
-}
-
-export function resumeAutoplayAfterWinlines(data: GameData): void {
-	data.isShowingWinlines = false;
-	Logger.create('GameData').debug('Autoplay resumed after winline animations');
 }

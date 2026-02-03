@@ -4,6 +4,7 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { MIN_CLUSTER_SIZE, UI_CONFIG } from '../../config/GameConfig';
 import { Logger } from '../../utils/Logger';
 import { getMultiplierValue, isMultiplierSymbol } from '../../types/SymbolTypes';
+import { CurrencyManager } from './CurrencyManager';
 
 interface WinTrackerLayoutOptions {
   offsetX?: number;
@@ -34,12 +35,18 @@ export class WinTracker {
   private offsetX: number = 0;
   private offsetY: number = -45;
   private itemSpacing: number = 80;
-  private iconScale: number = 0.3;
+  private iconScale: number = 0.25;
   private innerGap: number = 13;
   private horizontalGap: number = 20;
   private multiplierIconScale: number = 2;
   private multiplierIconGap: number = 0.5;
   private autoHideTimer: Phaser.Time.TimerEvent | null = null;
+  private pageTimer: Phaser.Time.TimerEvent | null = null;
+  private pagedItems: Array<[number, SymbolSummary]> | null = null;
+  private pagedIndex: number = 0;
+  private pageSize: number = 2;
+  private pageDurationMs: number = 1200;
+  private pageFadeMs: number = 200;
 
   private readonly depth: number = 905;
   private readonly shadowOffsetX: number = 4;
@@ -71,6 +78,7 @@ export class WinTracker {
       try { this.autoHideTimer.remove(false); } catch {}
       this.autoHideTimer = null;
     }
+    this.stopPaging();
     this.container.removeAll(true);
     this.container.setVisible(false);
     this.container.setAlpha(1);
@@ -93,8 +101,33 @@ export class WinTracker {
    */
   public showForTumble(outs: Array<{ symbol?: number; count?: number; win?: number }> | null, spinData: SpinData | null): void {
     if (!this.container) return;
+    this.stopPaging();
     const summary = this.buildSummaryFromTumbleOuts(outs, spinData);
     this.renderFromSummary(summary);
+  }
+
+  public showPagedForTumble(
+    outs: Array<{ symbol?: number; count?: number; win?: number }> | null,
+    spinData: SpinData | null,
+    pageSize: number = 2,
+    pageDurationMs: number = 1200,
+    pageFadeMs: number = 200
+  ): void {
+    if (!this.container) return;
+    this.stopPaging();
+    const summary = this.buildSummaryFromTumbleOuts(outs, spinData);
+    if (!summary || summary.size <= pageSize) {
+      this.renderFromSummary(summary);
+      return;
+    }
+    this.pagedItems = Array.from(summary.entries()).sort(
+      (a, b) => b[1].totalWin - a[1].totalWin
+    );
+    this.pagedIndex = 0;
+    this.pageSize = Math.max(1, pageSize);
+    this.pageDurationMs = Math.max(300, pageDurationMs);
+    this.pageFadeMs = Math.max(0, pageFadeMs);
+    this.renderPagedSlice();
   }
 
   private renderFromSpinData(spinData: SpinData | null): void {
@@ -116,19 +149,106 @@ export class WinTracker {
       (a, b) => b[1].totalWin - a[1].totalWin
     );
 
-    const spacing = this.itemSpacing;
     const isVertical = false;
     const lineSpacing = Math.max(this.labelFontSize + 12, 28);
-    const startX = isVertical ? 0 : -((items.length - 1) * spacing) / 2;
-    const startY = isVertical ? -((items.length - 1) * lineSpacing) / 2 : 0;
-    let index = 0;
-
-    for (const [symbolId, data] of items) {
-      const x = isVertical ? startX : (startX + index * spacing);
-      const y = isVertical ? (startY + index * lineSpacing) : 0;
-      this.addSymbolItem(x, symbolId, data, y);
-      index += 1;
+    if (isVertical) {
+      const spacing = this.itemSpacing;
+      const startY = -((items.length - 1) * lineSpacing) / 2;
+      let index = 0;
+      for (const [symbolId, data] of items) {
+        const y = startY + index * lineSpacing;
+        const item = this.createSymbolItem(symbolId, data);
+        item.container.setPosition(0, y);
+        this.container.add(item.container);
+        index += 1;
+      }
+      return;
     }
+
+    const itemContainers: Array<{ container: Phaser.GameObjects.Container; width: number }> = [];
+    for (const [symbolId, data] of items) {
+      const item = this.createSymbolItem(symbolId, data);
+      itemContainers.push(item);
+    }
+    const gap = Math.max(10, this.horizontalGap);
+    const totalWidth = itemContainers.reduce((sum, item) => sum + item.width, 0) + gap * Math.max(0, itemContainers.length - 1);
+    let cursor = -totalWidth / 2;
+    for (const item of itemContainers) {
+      item.container.setPosition(cursor + item.width / 2, 0);
+      this.container.add(item.container);
+      cursor += item.width + gap;
+    }
+  }
+
+  private renderPagedSlice(): void {
+    if (!this.container || !this.scene || !this.pagedItems) {
+      return;
+    }
+    const start = this.pagedIndex * this.pageSize;
+    const slice = this.pagedItems.slice(start, start + this.pageSize);
+    const summary = new Map<number, SymbolSummary>(slice);
+    this.renderFromSummary(summary);
+    this.container.setVisible(true);
+    this.container.setAlpha(1);
+
+    const hasNext = (start + this.pageSize) < this.pagedItems.length;
+    if (!hasNext) {
+      return;
+    }
+
+    if (this.pageTimer) {
+      try { this.pageTimer.remove(false); } catch {}
+      this.pageTimer = null;
+    }
+    this.pageTimer = this.scene.time.delayedCall(this.pageDurationMs, () => {
+      this.advancePagedSlice();
+    });
+  }
+
+  private advancePagedSlice(): void {
+    if (!this.container || !this.scene || !this.pagedItems) {
+      return;
+    }
+    this.pagedIndex += 1;
+    const start = this.pagedIndex * this.pageSize;
+    if (start >= this.pagedItems.length) {
+      this.stopPaging();
+      return;
+    }
+
+    const doRenderNext = () => {
+      this.renderPagedSlice();
+      if (this.pageFadeMs > 0) {
+        this.container.setAlpha(0);
+        this.scene.tweens.add({
+          targets: this.container,
+          alpha: 1,
+          duration: this.pageFadeMs,
+          ease: 'Sine.easeOut'
+        });
+      }
+    };
+
+    if (this.pageFadeMs > 0) {
+      this.scene.tweens.add({
+        targets: this.container,
+        alpha: 0,
+        duration: this.pageFadeMs,
+        ease: 'Sine.easeIn',
+        onComplete: doRenderNext
+      });
+    } else {
+      doRenderNext();
+    }
+  }
+
+  private stopPaging(): void {
+    if (this.pageTimer) {
+      try { this.pageTimer.remove(false); } catch {}
+      this.pageTimer = null;
+    }
+    this.pagedItems = null;
+    this.pagedIndex = 0;
   }
 
   private buildSummary(spinData: SpinData | null): Map<number, SymbolSummary> | null {
@@ -193,7 +313,8 @@ export class WinTracker {
     return summary.size > 0 ? summary : null;
   }
 
-  private addSymbolItem(x: number, symbolId: number, data: SymbolSummary, y: number = 0): void {
+  private createSymbolItem(symbolId: number, data: SymbolSummary): { container: Phaser.GameObjects.Container; width: number } {
+    const itemContainer = this.scene.add.container(0, 0);
     // Prefer spine-based symbol from the game; fallback to PNG
     const { icon, isSpine } = this.createSymbolIcon(symbolId);
     let shadow: Phaser.GameObjects.Image | null = null;
@@ -265,8 +386,8 @@ export class WinTracker {
       0,
       (() => {
         const isDemo = (this.scene as any).gameAPI?.getDemoState();
-        const currencySymbol = isDemo ? '' : '$';
-        return `${currencySymbol}${data.totalWin.toFixed(2)}`;
+        const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+        return `${currencyPrefix}${data.totalWin.toFixed(2)}`;
       })(),
       {
         fontSize: `${this.labelFontSize}px`,
@@ -319,12 +440,12 @@ export class WinTracker {
       gap +
       valueLabel.displayWidth;
 
-    let cursor = x - totalWidth * 0.5;
+    let cursor = -totalWidth * 0.5;
 
-    countLabel.setPosition(cursor + countLabel.displayWidth * 0.5, y);
+    countLabel.setPosition(cursor + countLabel.displayWidth * 0.5, 0);
     cursor += countLabel.displayWidth + gap;
 
-    icon.setPosition(cursor + iconDW * 0.5, y);
+    icon.setPosition(cursor + iconDW * 0.5, 0);
     if (shadow) {
       shadow.setPosition(icon.x + this.shadowOffsetX, icon.y + this.shadowOffsetY);
     }
@@ -334,33 +455,43 @@ export class WinTracker {
       cursor += gap;
       for (let i = 0; i < mulIcons.length; i++) {
         const img = mulIcons[i];
-        img.setPosition(cursor + img.displayWidth * 0.5, y);
+        img.setPosition(cursor + img.displayWidth * 0.5, 0);
         cursor += img.displayWidth + (i < mulIcons.length - 1 ? iconGap : 0);
       }
     }
 
     if (multiplierLabel) {
       cursor += gap;
-      multiplierLabel.setPosition(cursor + multiplierLabel.displayWidth * 0.5, y);
+      multiplierLabel.setPosition(cursor + multiplierLabel.displayWidth * 0.5, 0);
       cursor += multiplierLabel.displayWidth;
     }
 
     cursor += gap;
 
-    eqLabel.setPosition(cursor + eqLabel.displayWidth * 0.5, y);
+    eqLabel.setPosition(cursor + eqLabel.displayWidth * 0.5, 0);
     cursor += eqLabel.displayWidth + gap;
 
-    valueLabel.setPosition(cursor + valueLabel.displayWidth * 0.5, y);
+    valueLabel.setPosition(cursor + valueLabel.displayWidth * 0.5, 0);
 
     if (shadow) {
-      this.container.add(shadow);
+      itemContainer.add(shadow);
     }
-    this.container.add(icon);
-    this.container.add(countLabel);
-    for (const img of mulIcons) { this.container.add(img); }
-    if (multiplierLabel) { this.container.add(multiplierLabel); }
-    this.container.add(eqLabel);
-    this.container.add(valueLabel);
+    itemContainer.add(icon);
+    itemContainer.add(countLabel);
+    for (const img of mulIcons) { itemContainer.add(img); }
+    if (multiplierLabel) { itemContainer.add(multiplierLabel); }
+    itemContainer.add(eqLabel);
+    itemContainer.add(valueLabel);
+
+    let width = totalWidth;
+    try {
+      const b = itemContainer.getBounds();
+      if (b && b.width > 0) {
+        width = b.width;
+      }
+    } catch { }
+
+    return { container: itemContainer, width };
   }
 
   private buildSummaryFromTumbleOuts(
@@ -599,6 +730,7 @@ export class WinTracker {
    * Used by callers instead of instantly hiding to give a smoother UX.
    */
   public hideWithFade(durationMs: number = 250): void {
+    this.stopPaging();
     this.fadeOut(durationMs);
   }
 

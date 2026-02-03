@@ -17,6 +17,7 @@ import { TurboButtonController } from './TurboButtonController';
 import { MenuButtonController } from './MenuButtonController';
 import { BuyFeatureController } from './BuyFeatureController';
 import { BalanceController } from './BalanceController';
+import { CurrencyManager } from '../CurrencyManager';
 import { 
 	BetController, 
 	AutoplayController, 
@@ -66,7 +67,10 @@ export class SlotController {
 	
 	// UI override for free spin remaining display
 	private freeSpinDisplayOverride: number | null = null;
-	private pendingFreeSpinsData: { scatterIndex: number; actualFreeSpins: number } | null = null;
+	private pendingFreeSpinsData: { scatterIndex: number; actualFreeSpins: number; isRetrigger?: boolean } | null = null;
+	private pendingFakeDataRetriggerNextSpinsLeft: number | null = null;
+	private pendingFakeDataRetriggerAdded: number | null = null;
+	private freeSpinAutoplaySimInFlight: boolean = false;
 	
 	private balanceController: BalanceController | null = null;
 	
@@ -1356,7 +1360,6 @@ export class SlotController {
 				getGameData: () => this.getGameData(),
 				applyTurboSpeedModifications: () => this.applyTurboSpeedModifications(),
 				forceApplyTurboToSceneGameData: () => this.forceApplyTurboToSceneGameData(),
-				applyTurboToWinlineAnimations: () => this.applyTurboToWinlineAnimations(),
 			}
 		);
 
@@ -1384,7 +1387,6 @@ export class SlotController {
 				getGameData: () => this.getGameData(),
 				applyTurboSpeedModifications: () => this.applyTurboSpeedModifications(),
 				forceApplyTurboToSceneGameData: () => this.forceApplyTurboToSceneGameData(),
-				applyTurboToWinlineAnimations: () => this.applyTurboToWinlineAnimations(),
 			}
 		);
 		
@@ -1566,9 +1568,8 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		// Check if demo mode is active - if so, center the text (no currency symbol)
+		// Check if demo mode is active - if so, hide currency symbol
 		const isDemoBet = this.gameAPI?.getDemoState();
-		const betValueOffset = isDemoBet ? 0 : 3; // Center in demo mode, offset right when currency symbol exists
 
 
 		// Create amplify bet spine animation (behind bet background)
@@ -1609,7 +1610,7 @@ export class SlotController {
 
 		// "0.60" amount (2nd line, right part)
 		this.betAmountText = scene.add.text(
-			betX + betValueOffset,
+			betX,
 			betY + 8,
 			'0.20',
 			{
@@ -1662,9 +1663,9 @@ export class SlotController {
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
 		this.betDollarText = scene.add.text(
-			betX - (this.betAmountText.width / 2) - 3.5,
+			betX,
 			betY + 8,
-			isDemoBet ? '' : '$',
+			CurrencyManager.getCurrencyGlyph(),
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
@@ -1674,6 +1675,7 @@ export class SlotController {
 		// Hide currency symbol in demo mode
 		this.betDollarText.setVisible(!isDemoBet);
 		this.controllerContainer.add(this.betDollarText);
+		this.layoutCurrencyPair(betX, betY + 8, this.betDollarText, this.betAmountText, !!isDemoBet, 5);
 
 		// Decrease bet button (left side within container)
 		const decreaseBetButton = scene.add.image(
@@ -1744,9 +1746,8 @@ export class SlotController {
 		// Position for feature button (between balance and bet containers)
 		const featureX = scene.scale.width * 0.5; // Center between balance and bet
 		const featureY = scene.scale.height * 0.724; // Same Y as balance and bet containers
-		// Check if demo mode is active - if so, center the text (no currency symbol)
+		// Check if demo mode is active - if so, hide currency symbol
 		const isDemoFeature = this.gameAPI?.getDemoState();
-		const featureXOffset = isDemoFeature ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 
 		// Feature button image (serves as background)
 		const featureButton = scene.add.image(
@@ -1788,7 +1789,7 @@ export class SlotController {
 
 		// Amount (2nd line, right part) - bound to current bet x100
 		this.featureAmountText = scene.add.text(
-			featureX + featureXOffset,
+			featureX,
 			featureY + 8,
 			'0',
 			{
@@ -1803,9 +1804,9 @@ export class SlotController {
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
 		this.featureDollarText = scene.add.text(
-			featureX - (this.featureAmountText.width / 2) - 3,
+			featureX,
 			featureY + 8,
-			isDemoFeature ? '' : '$',
+			CurrencyManager.getCurrencyGlyph(),
 			{
 				fontSize: '14px',
 				color: '#ffffff',
@@ -1817,6 +1818,7 @@ export class SlotController {
 		this.controllerContainer.add(this.featureDollarText);
 		this.featureDollarText.setInteractive();
 		this.featureDollarText.on('pointerdown', () => this.handleBuyFeaturePress());
+		this.layoutCurrencyPair(featureX, featureY + 8, this.featureDollarText, this.featureAmountText, !!isDemoFeature, 5);
 
 		// Initialize amount from current bet
 		this.updateFeatureAmountFromCurrentBet();
@@ -2030,15 +2032,7 @@ export class SlotController {
 				if (this.betDollarText && this.scene) {
 					const betX = this.scene.scale.width * 0.81;
 					const betY = this.betAmountText.y;
-					this.betAmountText.setPosition(betX + (isDemo ? 0 : 3), betY);
-					if (isDemo) {
-						this.betDollarText.setVisible(false);
-						this.betDollarText.setText('');
-					} else {
-						this.betDollarText.setVisible(true);
-						this.betDollarText.setText('$');
-						this.betDollarText.setPosition(this.betAmountText.x - (this.betAmountText.width / 2) - 5, betY);
-					}
+					this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
 				}
 			}
 		} finally {
@@ -2051,24 +2045,10 @@ export class SlotController {
 			this.betAmountText.setText(betAmount.toFixed(2));
 
 			const isDemo = this.gameAPI?.getDemoState();
-			if (this.scene) {
+			if (this.scene && this.betDollarText) {
 				const betX = this.scene.scale.width * 0.81;
 				const betY = this.betAmountText.y;
-				// Center amount text in demo mode; maintain offset when currency symbol exists
-				this.betAmountText.setPosition(betX + (isDemo ? 0 : 3), betY);
-			}
-
-			// Update currency symbol position based on new bet amount width
-			if (this.betDollarText) {
-				const betY = this.betAmountText.y;
-				if (isDemo) {
-					this.betDollarText.setVisible(false);
-					this.betDollarText.setText('');
-				} else {
-					this.betDollarText.setVisible(true);
-					this.betDollarText.setText('$');
-					this.betDollarText.setPosition(this.betAmountText.x - (this.betAmountText.width / 2) - 5, betY);
-				}
+				this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
 			}
 		}
 
@@ -2102,17 +2082,55 @@ export class SlotController {
 		if (this.scene) {
 			const featureX = this.scene.scale.width * 0.5;
 			const y = this.featureAmountText.y;
-			this.featureAmountText.setPosition(featureX + (isDemo ? 0 : 5), y);
-			if (isDemo) {
-				   this.featureDollarText.setVisible(false);
-				   this.featureDollarText.setText('');
-			} else {
-				   this.featureDollarText.setVisible(true);
-				   this.featureDollarText.setText('$');
-				   this.featureDollarText.setColor && this.featureDollarText.setColor('#000000');
-				   this.featureDollarText.setPosition(this.featureAmountText.x - (this.featureAmountText.width / 2) - 3, y);
-			}
+			this.featureDollarText.setColor && this.featureDollarText.setColor('#000000');
+			this.layoutCurrencyPair(featureX, y, this.featureDollarText, this.featureAmountText, !!isDemo, 5);
 		}
+	}
+
+	public refreshCurrencySymbols(): void {
+		this.balanceController?.refreshCurrencySymbols();
+		if (this.scene && this.betAmountText && this.betDollarText) {
+			const isDemo = this.gameAPI?.getDemoState();
+			const betX = this.scene.scale.width * 0.81;
+			const betY = this.betAmountText.y;
+			this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
+		}
+		if (this.scene && this.featureAmountText && this.featureDollarText) {
+			const isDemo = this.gameAPI?.getDemoState();
+			const featureX = this.scene.scale.width * 0.5;
+			const featureY = this.featureAmountText.y;
+			this.featureDollarText.setColor && this.featureDollarText.setColor('#000000');
+			this.layoutCurrencyPair(featureX, featureY, this.featureDollarText, this.featureAmountText, !!isDemo, 5);
+		}
+	}
+
+	private layoutCurrencyPair(
+		centerX: number,
+		y: number,
+		currencyText: Phaser.GameObjects.Text,
+		amountText: Phaser.GameObjects.Text,
+		isDemo: boolean,
+		spacing: number
+	): void {
+		const glyph = CurrencyManager.getCurrencyGlyph();
+		const showCurrency = !isDemo && glyph.length > 0;
+
+		if (!showCurrency) {
+			try { currencyText.setVisible(false); } catch {}
+			amountText.setPosition(centerX, y);
+			return;
+		}
+
+		currencyText.setVisible(true);
+		currencyText.setText(glyph);
+
+		const glyphWidth = currencyText.width || 0;
+		const amountWidth = amountText.width || 0;
+		const totalWidth = glyphWidth + spacing + amountWidth;
+		const startX = centerX - (totalWidth / 2);
+
+		currencyText.setPosition(startX + glyphWidth / 2, y);
+		amountText.setPosition(startX + glyphWidth + spacing + (amountWidth / 2), y);
 	}
 
 	getBetAmountText(): string | null {
@@ -2225,11 +2243,8 @@ export class SlotController {
 			// Log current GameData animation values to debug turbo mode
 			console.log('[SlotController] Spin started - GameData animation values:', this.getGameDataAnimationInfo());
 			
-			// Ensure turbo speed is applied to scene GameData before winline animations start
+			// Ensure turbo speed is applied to scene GameData
 			this.forceApplyTurboToSceneGameData();
-			
-			// Ensure turbo speed is applied to winline animations via Symbols component
-			this.applyTurboToWinlineAnimations();
 		});
 
 		// Listen for reels start to disable amplify button
@@ -2237,6 +2252,7 @@ export class SlotController {
 			console.log('[SlotController] Reels started - disabling spin button and amplify button');
 			this.disableSpinButton();
 			this.disableAmplifyButton();
+			const isFake = !!this.gameAPI?.isFakeDataEnabled?.();
 			// Autoplay counter is managed by AutoplayController
 			const spinsRemaining = this.getAutoplaySpinsRemaining();
 			if (spinsRemaining > 0 && gameStateManager.isAutoPlaying && !gameStateManager.isBonus) {
@@ -2257,7 +2273,8 @@ export class SlotController {
 				}
 			}
 			// During bonus mode, decrement the remaining free spins at the start of the spin.
-			if (gameStateManager.isBonus) {
+			// In fake-data mode, the display is updated only in FREE_SPIN_AUTOPLAY from spinData.
+			if (gameStateManager.isBonus && !isFake) {
 				try {
 					if (this.shouldSubtractOneFromServerFsDisplay && !this.uiFsDecrementApplied && this.freeSpinNumber) {
 						let nextVal: number | null = null;
@@ -2305,14 +2322,17 @@ export class SlotController {
 			// If we're in bonus mode, check if free spins are finishing now
 			if (gameStateManager.isBonus) {
 				try {
+					const isFake = !!this.gameAPI?.isFakeDataEnabled?.();
 					// Sync free spin display after the spin completes
 					try {
-						const symbolsComponent = (this.scene as any)?.symbols;
-						if (symbolsComponent && this.freeSpinNumber) {
-							const rem = symbolsComponent.freeSpinAutoplaySpinsRemaining;
-							if (typeof rem === 'number') {
-								this.updateFreeSpinNumber(rem);
-								console.log(`[SlotController] REELS_STOP: synced free spin display to ${rem}`);
+						if (this.freeSpinNumber) {
+							if (!isFake) {
+								const symbolsComponent = (this.scene as any)?.symbols;
+								const rem = symbolsComponent?.freeSpinAutoplaySpinsRemaining;
+								if (typeof rem === 'number') {
+									this.updateFreeSpinNumber(rem);
+									console.log(`[SlotController] REELS_STOP: synced free spin display to ${rem}`);
+								}
 							}
 						}
 					} catch (e) {
@@ -2396,7 +2416,7 @@ export class SlotController {
 			}
 
 			// If win animations are pending, defer UI re-enable until WIN_STOP
-			if (this.pendingWinLock || gameStateManager.isShowingWinlines || gameStateManager.isShowingWinDialog) {
+			if (this.pendingWinLock || gameStateManager.isShowingWinDialog) {
 				console.log('[SlotController] Wins pending - keeping buttons disabled until WIN_STOP');
 				return;
 			}
@@ -2900,9 +2920,10 @@ export class SlotController {
 			
 			// Update dollar sign position based on new bet amount width
 			if (this.betDollarText) {
-				const betX = this.betAmountText.x;
 				const betY = this.betAmountText.y;
-				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
+				const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
+				const isDemo = this.gameAPI?.getDemoState();
+				this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
 			}
 		}
 		
@@ -2922,9 +2943,10 @@ export class SlotController {
 			
 			// Update dollar sign position based on new bet amount width
 			if (this.betDollarText) {
-				const betX = this.betAmountText.x;
 				const betY = this.betAmountText.y;
-				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
+				const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
+				const isDemo = this.gameAPI?.getDemoState();
+				this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
 			}
 		}
 		
@@ -2943,7 +2965,7 @@ export class SlotController {
 
 
 	/**
-	 * Apply turbo speed modifications to winline animations
+	 * Apply turbo speed modifications to animations
 	 */
 	private applyTurboSpeedModifications(): void {
 		const gameData = this.getGameData();
@@ -2971,7 +2993,7 @@ export class SlotController {
 			gameData.dropReelsDuration = gameData.dropReelsDuration * TurboConfig.TURBO_DURATION_MULTIPLIER;
 			(gameData as any).compressionDelayMultiplier = TurboConfig.TURBO_DELAY_MULTIPLIER;
 			
-			console.log(`[SlotController] Turbo speed applied to winline animations (4x faster):`);
+			console.log(`[SlotController] Turbo speed applied to animations:`);
 			console.log(`  winUpDuration: ${originalWinUp} -> ${gameData.winUpDuration}`);
 			console.log(`  dropDuration: ${originalDrop} -> ${gameData.dropDuration}`);
 			console.log(`  dropReelsDelay: ${originalDelay} -> ${gameData.dropReelsDelay}`);
@@ -2981,7 +3003,7 @@ export class SlotController {
 			const originalDelay = 2500; // This should match Data.DELAY_BETWEEN_SPINS
 			setSpeed(gameData, originalDelay);
 			(gameData as any).compressionDelayMultiplier = 1;
-			console.log('[SlotController] Normal speed restored for winline animations');
+			console.log('[SlotController] Normal speed restored for animations');
 		}
 	}
 
@@ -3317,25 +3339,60 @@ export class SlotController {
 
 	/**
 	 * Determine the spinsLeft to display from the provided spinData.
+	 * Uses next freeSpin.items.spinsLeft when area match: remaining = next item's spinsLeft.
 	 * Priority:
-	 * 1) Match the item whose area equals the current slot area
+	 * 1) Match by area → use next item's spinsLeft if exists, else current item's
 	 * 2) First item with spinsLeft > 0
-	 * 3) Fallback to Symbols.freeSpinAutoplaySpinsRemaining if available
+	 * 3) fs.count if items have no spinsLeft
 	 */
 	private computeDisplaySpinsLeft(spinData: SpinData): number {
 		const items = this.getFreeSpinItems(spinData);
-		if (items.length === 0) {
-			const fs = spinData?.slot?.freespin || (spinData as any)?.slot?.freeSpin;
-			const count = typeof fs?.count === 'number' ? fs.count : 0;
-			if (count > 0) return count;
+		const fs = spinData?.slot?.freespin || (spinData as any)?.slot?.freeSpin;
+		const isFake = !!this.gameAPI?.isFakeDataEnabled?.();
+
+		// Fake-data mode: always display the current item's spinsLeft as authored in fake_spin_data.json.
+		// Match the current spin's area to the corresponding item and return that item's spinsLeft.
+		if (isFake) {
+			try {
+				const area = (spinData as any)?.slot?.area;
+				if (Array.isArray(area) && Array.isArray(items) && items.length > 0) {
+					for (const it of items) {
+						if (this.areasEqual(it?.area, area)) {
+							const left = Number(it?.spinsLeft || 0) || 0;
+							return left;
+						}
+					}
+				}
+			} catch {}
+
+			// Strict fake-data behavior: if we can't area-match, do NOT fall back to any
+			// other derivation (first positive / next item / fs.count). Those fallbacks can
+			// produce unexpected jumps (e.g. showing 12 on retrigger).
+			console.warn('[SlotController] Fake-data mode: failed to area-match freeSpin.items for spinsLeft; returning 0', {
+				hasItems: Array.isArray(items) && items.length > 0,
+				area: (spinData as any)?.slot?.area
+			});
+			return 0;
 		}
 
-		// Try to match by area
+		if (items.length === 0) {
+			const count = typeof fs?.count === 'number' ? fs.count : 0;
+			return count > 0 ? count : 0;
+		}
+
+		// Match by area - use NEXT item's spinsLeft for remaining display
 		const currentArea = spinData?.slot?.area;
 		if (currentArea) {
-			const matched = items.find((it: any) => this.areasEqual(it?.area, currentArea));
-			if (matched && typeof matched.spinsLeft === 'number') {
-				return matched.spinsLeft;
+			const idx = items.findIndex((it: any) => this.areasEqual(it?.area, currentArea));
+			if (idx >= 0) {
+				const nextItem = items[idx + 1];
+				if (nextItem && typeof nextItem.spinsLeft === 'number') {
+					return nextItem.spinsLeft;
+				}
+				const currentItem = items[idx];
+				if (currentItem && typeof currentItem.spinsLeft === 'number') {
+					return currentItem.spinsLeft;
+				}
 			}
 		}
 
@@ -3343,16 +3400,9 @@ export class SlotController {
 		const firstWithSpins = items.find((it: any) => typeof it?.spinsLeft === 'number' && it.spinsLeft > 0);
 		if (firstWithSpins) return firstWithSpins.spinsLeft;
 
-		const fs = spinData?.slot?.freespin || (spinData as any)?.slot?.freeSpin;
+		// Last resort from spin data: fs.count
 		const count = typeof fs?.count === 'number' ? fs.count : 0;
-		if (count > 0) return count;
-
-		// Last resort: use Symbols tracker if present
-		const gameScene = this.scene as any;
-		const remaining = gameScene?.symbols?.freeSpinAutoplaySpinsRemaining;
-		if (typeof remaining === 'number') return remaining;
-
-		return 0;
+		return count > 0 ? count : 0;
 	}
 
 	/**
@@ -3512,61 +3562,15 @@ export class SlotController {
 				// Start spinner timer - show spinner if fetch takes longer than 2 seconds (after symbols clear)
 				this.startSpinnerTimer();
 
-				// Check if we're in bonus mode and use free spin simulation
+				// In bonus mode, free spins are driven by FreeSpinController via FREE_SPIN_AUTOPLAY.
+				// Do NOT simulate free spins here, otherwise fake freeSpin.items can advance twice
+				// (especially during retriggers) and the remaining display will jump (e.g. showing 12).
 				if (gameStateManager.isBonus) {
-					console.log('[SlotController] In bonus mode - using free spin simulation...');
-					spinData = await this.gameAPI.simulateFreeSpin();
-					
-					// Hide spinner immediately after receiving data
+					console.log('[SlotController] handleSpin ignored in bonus mode (FREE_SPIN_AUTOPLAY drives free spins)');
 					this.hideSpinner();
-					
-					// Update free spin display directly from spinData.freeSpin.items[].spinsLeft
-					const serverSpinsLeft = this.computeDisplaySpinsLeft(spinData);
-					// Prefer UI override (e.g., +5 on retrigger) if set
-					const displaySpinsOverrideApplied = this.freeSpinDisplayOverride !== null;
-					let displaySpins = displaySpinsOverrideApplied ? (this.freeSpinDisplayOverride as number) : serverSpinsLeft;
-					let symbolsRemaining: number | null = null;
-					let isAutoplayActive = false;
-					try {
-						const symbolsComponent = (this.scene as any)?.symbols;
-						if (symbolsComponent) {
-							if (typeof symbolsComponent.isFreeSpinAutoplayActive === 'function') {
-								isAutoplayActive = symbolsComponent.isFreeSpinAutoplayActive();
-							}
-							if (typeof symbolsComponent.freeSpinAutoplaySpinsRemaining === 'number') {
-								symbolsRemaining = symbolsComponent.freeSpinAutoplaySpinsRemaining;
-								if (!displaySpinsOverrideApplied && isAutoplayActive) {
-									displaySpins = symbolsRemaining !== null ? symbolsRemaining : 0;
-								}
-							}
-							if (typeof symbolsComponent.setFreeSpinAutoplaySpinsRemaining === 'function') {
-								if (!isAutoplayActive || symbolsRemaining === null) {
-									symbolsComponent.setFreeSpinAutoplaySpinsRemaining(displaySpins);
-								}
-							}
-						}
-					} catch (e) {
-						console.warn('[SlotController] Failed to sync Symbols free spin counter from spin data:', e);
-					}
-					this.updateFreeSpinNumber(displaySpins);
-					console.log(`[SlotController] Updated free spin display to ${displaySpins} remaining (${displaySpinsOverrideApplied ? 'override' : 'from spin data'})`);
-					
-					// Check if there are any more free spins available
-					let remainingAfterSpin = displaySpins;
-					if (!displaySpinsOverrideApplied && isAutoplayActive && typeof symbolsRemaining === 'number') {
-						if (serverSpinsLeft >= symbolsRemaining && symbolsRemaining > 0) {
-							remainingAfterSpin = symbolsRemaining - 1;
-						} else {
-							remainingAfterSpin = serverSpinsLeft;
-						}
-					}
-					if (remainingAfterSpin <= 0) {
-						// No more free spins - mark bonus finished and show total win dialog
-						console.log('[SlotController] No more free spins available - marking bonus finished');
-						gameStateManager.isBonusFinished = true;
-						this.freeSpinDisplayOverride = null;
-					}
-				} else {
+					return;
+				}
+				{
 					console.log('[SlotController] Normal mode - calling GameAPI.doSpin...');
 					// Use base bet amount for API calls (without amplify bet increase)
 					const currentBet = this.getBaseBetAmount() || 10;
@@ -3808,77 +3812,84 @@ export class SlotController {
 			// Store the free spins data for later display after dialog closes
 			this.pendingFreeSpinsData = data;
 			
-			// If this is a retrigger, add the reported increment to remaining spins and override display
+			// Retrigger UI updates are handled by the standard FREE_SPIN_AUTOPLAY spinData-driven updates.
+		});
+
+		// Deterministic fake-data retrigger values computed at the retrigger source (Symbols).
+		// This avoids relying on GameAPI.getCurrentSpinData() during dialog close, which can be stale.
+		this.scene.events.on('fakeDataRetriggerComputed', (payload: { nextSpinsLeft?: number; added?: number } | null) => {
 			try {
-				if (data?.isRetrigger) {
-					// Determine current remaining free spins
-					// Priority: Symbols tracker (authoritative) > API data > display text
-					let currentRemaining = 0;
-					
-					// First, try Symbols' internal tracker (most accurate)
-					try {
-						const sym = (this.scene as any)?.symbols;
-						if (sym && typeof sym.freeSpinAutoplaySpinsRemaining === 'number') {
-							currentRemaining = sym.freeSpinAutoplaySpinsRemaining;
-							console.log(`[SlotController] Retrigger: Using Symbols tracker for current remaining: ${currentRemaining}`);
-						}
-					} catch {}
-					
-					// Fallback to computing from API data
-					if (currentRemaining <= 0) {
-						try {
-							const apiSpinData = this.gameAPI?.getCurrentSpinData();
-							if (apiSpinData) {
-								currentRemaining = this.computeDisplaySpinsLeft(apiSpinData);
-								console.log(`[SlotController] Retrigger: Using API data for current remaining: ${currentRemaining}`);
-							}
-						} catch {}
-					}
-					
-					// Last resort: use display text (may be stale, but better than 0)
-					if (currentRemaining <= 0) {
-						try {
-							const txt = (this.freeSpinNumber?.text || '').toString().trim();
-							const val = parseInt(txt, 10);
-							if (!isNaN(val) && val >= 0) {
-								currentRemaining = val;
-								console.log(`[SlotController] Retrigger: Using display text for current remaining: ${currentRemaining}`);
-							}
-						} catch {}
-					}
-					
-					// Ensure we don't use a value > 1 if we're on the last spin
-					// If currentRemaining is 1, it means we just finished the last spin, so base should be 0
-					if (currentRemaining === 1) {
-						console.log('[SlotController] Retrigger: Last spin detected (currentRemaining=1), using 0 as base for retrigger calculation');
-						currentRemaining = 0;
-					}
-					
-					const increment = Math.max(0, Number(data?.actualFreeSpins) || 0);
-					const newRemaining = Math.max(0, currentRemaining + increment);
-					this.freeSpinDisplayOverride = newRemaining;
-					
-					// Sync Symbols' tracker
-					try {
-						const symbolsComponent = (this.scene as any)?.symbols;
-						if (symbolsComponent && typeof symbolsComponent.setFreeSpinAutoplaySpinsRemaining === 'function') {
-							symbolsComponent.setFreeSpinAutoplaySpinsRemaining(newRemaining);
-						}
-					} catch {}
-					
-					// Update UI immediately
-					this.updateFreeSpinNumber(newRemaining);
-					console.log(`[SlotController] Retrigger detected - increased remaining free spins by +${increment}: ${currentRemaining} -> ${newRemaining}`);
+				const isFake = !!this.gameAPI?.isFakeDataEnabled?.();
+				if (!isFake) return;
+				const next = Math.max(0, Number(payload?.nextSpinsLeft ?? 0) || 0);
+				const added = Math.max(0, Number(payload?.added ?? 0) || 0);
+				if (next > 0) {
+					this.pendingFakeDataRetriggerNextSpinsLeft = next;
+					this.pendingFakeDataRetriggerAdded = added;
+					console.log('[SlotController] Stored fake-data retrigger computed values', { nextSpinsLeft: next, added });
 				}
-			} catch (e) {
-				console.warn('[SlotController] Failed to apply retrigger override:', e);
-			}
+			} catch {}
 		});
 
 		// Listen for dialog animations completion to show free spin display
 		this.scene.events.on('dialogAnimationsComplete', () => {
 			console.log('[SlotController] Dialog animations completed - checking if free spin display should be shown');
 			console.log('[SlotController] Current pendingFreeSpinsData:', this.pendingFreeSpinsData);
+			const isFake = !!this.gameAPI?.isFakeDataEnabled?.();
+
+			// Fake-data mode: free spin remaining display must come only from the current SpinData item's spinsLeft.
+			// Do not use overrides, pending scatter counts, Symbols counters, or UI-side decrements.
+			if (isFake) {
+				try {
+					const apiSpinData = this.gameAPI?.getCurrentSpinData();
+					let left = apiSpinData ? this.computeDisplaySpinsLeft(apiSpinData as any) : 0;
+					// Fake-data initial dialog close: if area-match isn't possible yet, initialize from items[0].spinsLeft.
+					if (left <= 0 && apiSpinData) {
+						try {
+							const fs = (apiSpinData as any)?.slot?.freespin || (apiSpinData as any)?.slot?.freeSpin;
+							const items = Array.isArray(fs?.items) ? fs.items : [];
+							const firstVal = items.length > 0 ? Number(items[0]?.spinsLeft ?? 0) : 0;
+							if (firstVal > 0) {
+								left = firstVal;
+							}
+						} catch { }
+					}
+					// Strict retrigger behavior in fake-data mode:
+					// - Initial trigger dialog close shows raw spinsLeft.
+					// - Retrigger dialog close shows spinsLeft - 1.
+					const isRetriggerDialog = !!(this.pendingFreeSpinsData && (this.pendingFreeSpinsData as any).isRetrigger);
+					let baseLeft = left;
+					if (isRetriggerDialog && this.pendingFakeDataRetriggerNextSpinsLeft !== null) {
+						baseLeft = this.pendingFakeDataRetriggerNextSpinsLeft;
+					}
+					if (isRetriggerDialog && apiSpinData) {
+						try {
+							const fs = (apiSpinData as any)?.slot?.freespin || (apiSpinData as any)?.slot?.freeSpin;
+							const items = Array.isArray(fs?.items) ? fs.items : [];
+							const slotArea = (apiSpinData as any)?.slot?.area;
+							if (Array.isArray(items) && items.length > 0 && Array.isArray(slotArea)) {
+								const areaJson = JSON.stringify(slotArea);
+								const idx = items.findIndex((it: any) => Array.isArray(it?.area) && JSON.stringify(it.area) === areaJson);
+								const nextVal = idx >= 0 ? Number(items[idx + 1]?.spinsLeft ?? 0) : 0;
+								if (nextVal > 0) {
+									baseLeft = nextVal;
+								}
+							}
+						} catch {}
+					}
+					const displayLeft = isRetriggerDialog ? Math.max(0, baseLeft - 1) : baseLeft;
+					this.showFreeSpinDisplayWithActualValue(displayLeft);
+				} catch (e) {
+					console.warn('[SlotController] Fake-data mode: failed to initialize free spin display from spinsLeft:', e);
+				}
+				this.pendingFreeSpinsData = null;
+				this.pendingFakeDataRetriggerNextSpinsLeft = null;
+				this.pendingFakeDataRetriggerAdded = null;
+				this.freeSpinDisplayOverride = null;
+				this.shouldSubtractOneFromServerFsDisplay = false;
+				this.uiFsDecrementApplied = false;
+				return;
+			}
 			
 			// If free spin autoplay is active, do NOT reinitialize the counter from API; keep Symbols' tracked value
 			let skipInitialization = false;
@@ -3963,6 +3974,10 @@ export class SlotController {
 			// If an autoplay spin was already triggered before the display appeared, apply the -1 now (deferred UI decrement)
 			try {
 				if (gameStateManager.isBonus && this.freeSpinNumber) {
+					const isFake = !!this.gameAPI?.isFakeDataEnabled?.();
+					if (isFake) {
+						return;
+					}
 					if (this.shouldSubtractOneFromServerFsDisplay && !this.uiFsDecrementApplied) {
 						const currentText = (this.freeSpinNumber.text || '').toString().trim();
 						const currentVal = parseInt(currentText, 10);
@@ -3982,19 +3997,29 @@ export class SlotController {
 		// Listen for free spin autoplay events
 		gameEventManager.on(GameEventType.FREE_SPIN_AUTOPLAY, async () => {
 			console.log('[SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation');
+			const isFake = !!this.gameAPI?.isFakeDataEnabled?.();
+			if (isFake && this.freeSpinAutoplaySimInFlight) {
+				console.warn('[SlotController] FREE_SPIN_AUTOPLAY ignored (fake-data simulateFreeSpin already in-flight)');
+				return;
+			}
 			
 			// Avoid pre-spin symbol clearing; this should only happen on explicit skip.
 			
-			// Apply turbo mode to game data and winlines (same as normal autoplay)
+			// Apply turbo mode to scene game data (same as normal autoplay)
 			this.forceApplyTurboToSceneGameData();
-			this.applyTurboToWinlineAnimations();
 
-			// Decrement UI at REELS_START
-			this.shouldSubtractOneFromServerFsDisplay = true;
-			this.uiFsDecrementApplied = false;
+			// Fake-data mode: do not use UI-side decrements; display comes from spinsLeft only.
+			if (!isFake) {
+				// Decrement UI at REELS_START
+				this.shouldSubtractOneFromServerFsDisplay = true;
+				this.uiFsDecrementApplied = false;
+			}
 			
 			if (gameStateManager.isBonus && this.gameAPI && this.symbols) {
 				try {
+					if (isFake) {
+						this.freeSpinAutoplaySimInFlight = true;
+					}
 					// Get free spin data from GameAPI directly (this should have the original scatter data)
 					const gameAPISpinData = this.gameAPI.getCurrentSpinData();
 					if (gameAPISpinData && (gameAPISpinData.slot?.freespin?.items || gameAPISpinData.slot?.freeSpin?.items)) {
@@ -4020,45 +4045,22 @@ export class SlotController {
 					// DEBUG: Log the full spinData for troubleshooting
 					console.log('[SPINDATA_DEBUG] Free spinData received:', JSON.stringify(spinData));
 					
-					// Compute raw server spinsLeft and sync internal Symbols counter (handles retriggers)
+					// Compute spinsLeft from spin data - ALWAYS use spin data as source of truth
 					const serverSpinsLeft = this.computeDisplaySpinsLeft(spinData);
-					let displaySpins = serverSpinsLeft;
-					let symbolsRemaining: number | null = null;
-					let isAutoplayActive = false;
+					const displaySpins = isFake ? Math.max(0, serverSpinsLeft - 1) : serverSpinsLeft;
 					try {
 						const symbolsComponent = (this.scene as any)?.symbols;
-						if (symbolsComponent) {
-							if (typeof symbolsComponent.isFreeSpinAutoplayActive === 'function') {
-								isAutoplayActive = symbolsComponent.isFreeSpinAutoplayActive();
-							}
-							if (typeof symbolsComponent.freeSpinAutoplaySpinsRemaining === 'number') {
-								symbolsRemaining = symbolsComponent.freeSpinAutoplaySpinsRemaining;
-								displaySpins = symbolsRemaining !== null ? symbolsRemaining : 0;
-							} else if (this.freeSpinDisplayOverride !== null) {
-								displaySpins = this.freeSpinDisplayOverride as number;
-							}
-							if (typeof symbolsComponent.setFreeSpinAutoplaySpinsRemaining === 'function') {
-								if (!isAutoplayActive || symbolsRemaining === null) {
-									symbolsComponent.setFreeSpinAutoplaySpinsRemaining(serverSpinsLeft);
-									displaySpins = serverSpinsLeft;
-								}
-							}
+						if (!isFake && symbolsComponent && typeof symbolsComponent.setFreeSpinAutoplaySpinsRemaining === 'function') {
+							symbolsComponent.setFreeSpinAutoplaySpinsRemaining(serverSpinsLeft);
 						}
 					} catch (e) {
 						console.warn('[SlotController] Failed to sync Symbols free spin counter during autoplay:', e);
 					}
 					this.updateFreeSpinNumber(displaySpins);
-					console.log(`[SlotController] Updated free spin display to ${displaySpins} remaining (from spin data)`);
-					
-					// Check if there are any more free spins available
-					let remainingAfterSpin = displaySpins;
-					if (isAutoplayActive && typeof symbolsRemaining === 'number') {
-						if (serverSpinsLeft >= symbolsRemaining && symbolsRemaining > 0) {
-							remainingAfterSpin = symbolsRemaining - 1;
-						} else {
-							remainingAfterSpin = serverSpinsLeft;
-						}
-					}
+					console.log(`[SlotController] Updated free spin display to ${displaySpins} remaining (from spin data spinsLeft)`);
+
+					// Check if there are any more free spins - spinsLeft from spin data
+					const remainingAfterSpin = serverSpinsLeft;
 					if (remainingAfterSpin <= 0) {
 						// No more free spins - mark bonus finished and show total win dialog
 						console.log('[SlotController] No more free spins available - marking bonus finished');
@@ -4088,6 +4090,10 @@ export class SlotController {
 
 				} catch (error) {
 					console.error('[SlotController] Free spin simulation failed:', error);
+				} finally {
+					if (isFake) {
+						this.freeSpinAutoplaySimInFlight = false;
+					}
 				}
 			} else {
 				console.warn('[SlotController] Not in bonus mode or GameAPI not available for free spin autoplay');
@@ -4135,9 +4141,12 @@ export class SlotController {
 		this.scene.events.on('dialogShown', (dialogType: string) => {
 			console.log(`[SlotController] Dialog shown: ${dialogType}, isBuyFeatureFreeSpinsActive: ${this.isBuyFeatureFreeSpinsActive}`);
 			
-			// If the TotalW_BZ dialog is shown and we're in buy feature free spins, re-enable buttons
-			if (dialogType === 'TotalW_BZ' && this.isBuyFeatureFreeSpinsActive) {
-				console.log('[SlotController] TotalW_BZ dialog shown - re-enabling buttons');
+			// If the TotalW_BZ dialog is shown at the end of bonus, release buy-feature locks
+			// and re-evaluate control states so buttons are not left disabled.
+			if (dialogType === 'TotalW_BZ' && (this.isBuyFeatureFreeSpinsActive || this.buyFeatureController?.isSpinLocked?.())) {
+				if (gameStateManager.isBonusFinished) {
+					this.buyFeatureController?.setSpinLock(false);
+				}
 				this.isBuyFeatureFreeSpinsActive = false;
 				this.updateBetButtonsStateWithLock();
 				this.updateAutoplayButtonStateWithLock();
@@ -4462,47 +4471,6 @@ export class SlotController {
 				console.log(`  dropReelsDelay: ${sceneGameData.dropReelsDelay}`);
 				console.log(`  dropReelsDuration: ${sceneGameData.dropReelsDuration}`);
 			}
-		}
-	}
-
-	/**
-	 * Apply turbo mode to winline animations via Symbols component
-	 */
-	public applyTurboToWinlineAnimations(): void {
-		if (!this.scene) {
-			console.warn('[SlotController] Scene not available for winline turbo');
-			return;
-		}
-
-		// Try to access the Symbols component from the scene
-		const symbolsComponent = (this.scene as any).symbols;
-		if (symbolsComponent && typeof symbolsComponent.setTurboMode === 'function') {
-			const gameData = this.getGameData();
-			if (gameData) {
-				symbolsComponent.setTurboMode(gameData.isTurbo);
-				console.log(`[SlotController] Turbo mode ${gameData.isTurbo ? 'enabled' : 'disabled'} for winline animations via Symbols component`);
-			}
-		} else {
-			console.warn('[SlotController] Symbols component or setTurboMode method not available');
-		}
-	}
-
-	/**
-	 * Reset winline animations to default timing via Symbols component
-	 */
-	public resetWinlineTiming(): void {
-		if (!this.scene) {
-			console.warn('[SlotController] Scene not available for winline timing reset');
-			return;
-		}
-
-		// Try to access the Symbols component from the scene
-		const symbolsComponent = (this.scene as any).symbols;
-		if (symbolsComponent && typeof symbolsComponent.resetWinlineTiming === 'function') {
-			symbolsComponent.resetWinlineTiming();
-			console.log('[SlotController] Winline timing reset to default values via Symbols component');
-		} else {
-			console.warn('[SlotController] Symbols component or resetWinlineTiming method not available');
 		}
 	}
 
