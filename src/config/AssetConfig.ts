@@ -34,7 +34,7 @@ export class AssetConfig {
 			images: {
 				'BG-Default': `${prefix}/background/NormalGame_BZ.webp`,
 				'normal-bg-cover': `assets/portrait/high/background/ControllerNormal_BZ.png`,
-				'candy-overlay': `assets/portrait/high/background/candy-overlay.png`,
+				'loading-spinner': `assets/portrait/high/loading/loading-spinner.png`,
 				'shine': `assets/portrait/high/background/shine.png`
 			},
 			spine: {
@@ -460,8 +460,10 @@ export class AssetConfig {
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
 				'bomb_bz': 'assets/sounds/SFX/bomb_sw.ogg',
 				'tbomb_bz': 'assets/sounds/SFX/tbomb_BB.ogg',
-				// Transition_BZ whisper SFX
-				'ghost_whisper_bz': 'assets/sounds/SFX/ghost-whisper.mp3',
+				// Transition_BZ SFX (anticipation_BB)
+				'ghost_whisper_bz': 'assets/sounds/SFX/anticipation_BB.ogg',
+				// Radial light transition whistle SFX
+				'whistle_bz': 'assets/sounds/SFX/whistle_BB.ogg',
 				'scatter_bz': 'assets/sounds/SFX/scatter_BB.ogg',
 				// Tumble symbol-win SFX (play per tumble index)
 				'twin1_bz': 'assets/sounds/SFX/symbol_win/twin1_BB.ogg',

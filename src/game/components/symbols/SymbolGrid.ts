@@ -23,6 +23,7 @@ import {
   SYMBOL_HORIZONTAL_SPACING,
   SYMBOL_VERTICAL_SPACING,
   GRID_MASK_PADDING,
+  GRID_MASK_GRADIENT_FADE_HEIGHT,
   GRID_OVERLAY_PADDING,
   DEPTH_SYMBOL_DEFAULT,
 } from './constants';
@@ -92,27 +93,52 @@ export class SymbolGrid {
   }
 
   /**
-   * Create the container with mask for symbol clipping
+   * Create the container with mask for symbol clipping.
+   * Uses a gradient mask at top/bottom when GRID_MASK_GRADIENT_FADE_HEIGHT > 0 to avoid hard cut-off.
    */
   private createContainer(): void {
     this.container = this.scene.add.container(0, 0);
 
-    const maskShape = this.scene.add.graphics();
-
-    // Adjust mask y position to match grid y position (slotY)
+    const maskX = this.slotX - this.totalGridWidth * 0.5 - GRID_MASK_PADDING.left;
     const maskY = this.slotY - this.totalGridHeight * 0.5 - GRID_MASK_PADDING.top;
-    maskShape.fillRect(
-      this.slotX - this.totalGridWidth * 0.5 - GRID_MASK_PADDING.left,
-      maskY,
-      this.totalGridWidth + GRID_MASK_PADDING.left + GRID_MASK_PADDING.right,
-      this.totalGridHeight + GRID_MASK_PADDING.top + GRID_MASK_PADDING.bottom
-    );
+    const maskW = this.totalGridWidth + GRID_MASK_PADDING.left + GRID_MASK_PADDING.right;
+    const maskH = this.totalGridHeight + GRID_MASK_PADDING.top + GRID_MASK_PADDING.bottom;
 
-    const mask = maskShape.createGeometryMask();
-    this.container.setMask(mask);
-    maskShape.setVisible(false);
+    if (GRID_MASK_GRADIENT_FADE_HEIGHT > 0 && maskH > GRID_MASK_GRADIENT_FADE_HEIGHT * 2) {
+      this.createGradientMask(maskX, maskY, maskW, maskH);
+    } else {
+      const maskShape = this.scene.add.graphics();
+      maskShape.fillRect(maskX, maskY, maskW, maskH);
+      const mask = maskShape.createGeometryMask();
+      this.container.setMask(mask);
+      maskShape.setVisible(false);
+    }
 
-    console.log(`[SymbolGrid] Mask created with padding - Left: ${GRID_MASK_PADDING.left}, Right: ${GRID_MASK_PADDING.right}, Top: ${GRID_MASK_PADDING.top}, Bottom: ${GRID_MASK_PADDING.bottom}, Mask Y: ${maskY}`);
+    console.log(`[SymbolGrid] Mask created with padding - Left: ${GRID_MASK_PADDING.left}, Right: ${GRID_MASK_PADDING.right}, Top: ${GRID_MASK_PADDING.top}, Bottom: ${GRID_MASK_PADDING.bottom}, Gradient: ${GRID_MASK_GRADIENT_FADE_HEIGHT}px`);
+  }
+
+  /**
+   * Create a soft-edge mask using a vertical gradient (opaque in center, fade at top/bottom).
+   */
+  private createGradientMask(maskX: number, maskY: number, maskW: number, maskH: number): void {
+    const key = `symbolGridMaskGradient_${maskW}_${maskH}`;
+    const fade = Math.min(GRID_MASK_GRADIENT_FADE_HEIGHT, Math.floor(maskH * 0.2));
+    if (!this.scene.textures.exists(key)) {
+      const texture = this.scene.textures.createCanvas(key, maskW, maskH);
+      const ctx = texture.getContext();
+      const gradient = ctx.createLinearGradient(0, 0, 0, maskH);
+      gradient.addColorStop(0, 'rgba(255,255,255,0)');
+      gradient.addColorStop(fade / maskH, 'rgba(255,255,255,1)');
+      gradient.addColorStop(1 - fade / maskH, 'rgba(255,255,255,1)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, maskW, maskH);
+      texture.refresh();
+    }
+    const maskImage = this.scene.add.image(maskX, maskY, key).setOrigin(0, 0);
+    const bitmapMask = new (Phaser.Display.Masks as any).BitmapMask(this.scene, maskImage);
+    this.container.setMask(bitmapMask);
+    maskImage.setVisible(false);
   }
 
   // ============================================================================
@@ -381,15 +407,9 @@ export class SymbolGrid {
       this.container.setAlpha(1);
     }
     
-    let visibleCount = 0;
     this.forEachSymbol((symbol) => {
-      if (typeof symbol.setVisible === 'function') {
-        symbol.setVisible(true);
-        visibleCount++;
-      }
+      if (typeof symbol.setVisible === 'function') symbol.setVisible(true);
     });
-    
-    console.log(`[SymbolGrid] Restored visibility for ${visibleCount} symbols`);
   }
 
   /**

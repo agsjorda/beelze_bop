@@ -124,9 +124,8 @@ export class ScatterAnimationManager {
         } catch { }
       }
 
-      if (isBuyFeature) {
-        await this.waitForBuyFeatureTransitions();
-      }
+      // Wait for Symbols transition (merge + Transition_BZ) before showing dialog - same for normal and buy feature
+      await this.waitForBuyFeatureTransitions();
 
       // Directly show free spins dialog without wheel
       this.showFreeSpinsDialog(data);

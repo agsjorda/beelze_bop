@@ -70,7 +70,7 @@ export class Header {
 			fontSize: '18px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
-			stroke: '#99030A',
+			stroke: '#004D00',
 			strokeThickness: 3
 		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
 		// Don't add to container - add directly to scene so depth works correctly
@@ -83,9 +83,9 @@ export class Header {
 		const currencyPrefixInitial = isDemoInitial ? '' : CurrencyManager.getInlinePrefix();
 		this.amountText = scene.add.text(x, y + 18, `${currencyPrefixInitial}0.00`, {
 			fontSize: '24px',
-			color: '#FFB837',
+			color: '#00ff00',
 			fontFamily: 'Poppins-Bold',
-			stroke: '#99030A',
+			stroke: '#004D00',
 			strokeThickness: 3
 		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
 		// Don't add to container - add directly to scene so depth works correctly

@@ -612,7 +612,7 @@ export class FreeSpinController {
           const currentSpinsLeft = Number(items[idx]?.spinsLeft ?? 0);
           const nextItemSpinsLeft = Number(items[idx + 1]?.spinsLeft ?? 0);
           if (nextItemSpinsLeft > 0) {
-            added = nextItemSpinsLeft - currentSpinsLeft; // added = next - current
+            added = nextItemSpinsLeft - currentSpinsLeft + 1; // added = next - current + 1
             nextSpinsLeft = nextItemSpinsLeft;
           }
         }

@@ -184,8 +184,8 @@ export class SlotController {
 			return;
 		}
 
-		// Get the center position of the symbols grid
-		const centerX = this.scene.scale.width * 0.5 - 5;
+		// Center horizontally on screen; keep existing Y offset
+		const centerX = this.scene.scale.width * 0.5;
 		const centerY = this.scene.scale.height * 0.445;
 
 		this.loadingSpinner = new LoadingSpinner(this.scene, centerX, centerY);
@@ -440,7 +440,7 @@ export class SlotController {
 		
 		// Update loading spinner position at center of symbols grid
 		if (this.loadingSpinner && this.scene) {
-			const centerX = this.scene.scale.width * 0.5 - 5;
+			const centerX = this.scene.scale.width * 0.5;
 			const centerY = this.scene.scale.height * 0.445; // Same as symbols center
 			this.loadingSpinner.updatePosition(centerX, centerY);
 			console.log('[SlotController] Loading spinner position updated to symbols center');
@@ -468,7 +468,7 @@ export class SlotController {
 		this.scene = scene;
 		
 		// Initialize loading spinner at center of symbols grid
-		const centerX = scene.scale.width * 0.5 - 20;
+		const centerX = scene.scale.width * 0.5;
 		const centerY = scene.scale.height * 0.445;
 		this.loadingSpinner = new LoadingSpinner(scene, centerX, centerY);
 		
@@ -874,6 +874,21 @@ export class SlotController {
 		this.autoplaySpinsRemainingText.setOrigin(0.5, 0.5);
 		this.autoplaySpinsRemainingText.setDepth(20);
 		this.autoplaySpinsRemainingText.setVisible(false);
+
+		// Clicking the count (or the overlay area) stops autoplay when active
+		const hitW = Math.max(spinButton.displayWidth, this.autoplaySpinsRemainingText.width);
+		const hitH = Math.max(spinButton.displayHeight, this.autoplaySpinsRemainingText.height);
+		this.autoplaySpinsRemainingText.setInteractive(
+			new Phaser.Geom.Rectangle(-hitW * 0.5, -hitH * 0.5, hitW, hitH),
+			Phaser.Geom.Rectangle.Contains
+		);
+		if (this.autoplaySpinsRemainingText.input) this.autoplaySpinsRemainingText.input.cursor = 'pointer';
+		this.autoplaySpinsRemainingText.on('pointerdown', () => {
+			if (gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested) {
+				this.playSpinButtonClickSfx();
+				this.stopAutoplay();
+			}
+		});
 
 		if (this.primaryControllers) {
 			this.primaryControllers.add(this.autoplaySpinsRemainingText);

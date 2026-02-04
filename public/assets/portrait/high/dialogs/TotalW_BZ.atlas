@@ -1,91 +1,94 @@
 TotalW_BZ.webp
-size:1986,2048
+size:1956,1972
 filter:Linear,Linear
 pma:false
-scale:0.6
+scale:0.5
 CATS
-bounds:2,2,595,392
+bounds:2,1320,496,327
+MEOW
+bounds:500,1205,536,327
+offsets:55,0,592,328
 NOTE 2
-bounds:1598,62,69,87
-offsets:1,1,71,89
+bounds:388,1912,58,73
+offsets:1,1,60,75
 rotate:90
 NOTE 3
-bounds:1757,78,69,53
-offsets:1,0,70,54
+bounds:270,1926,57,44
+offsets:1,0,58,45
 NOTE 4
-bounds:1188,434,42,92
-offsets:0,0,43,92
+bounds:81,1935,35,77
+offsets:0,0,36,77
+rotate:90
 NOTE 5
-bounds:1891,91,40,93
-offsets:0,1,40,94
+bounds:2,1936,34,77
+offsets:0,1,34,78
 rotate:90
 NOTE 6
-bounds:1828,80,51,61
-offsets:0,1,51,62
+bounds:217,1927,43,51
+offsets:0,1,43,52
 rotate:90
 NOTE 7
-bounds:1188,528,43,66
-offsets:0,1,44,67
+bounds:160,1934,36,55
+offsets:0,1,37,56
+rotate:90
+PaintLayer-38
+bounds:2,1649,751,247
+SAX LINE
+bounds:2,2,751,721
+offsets:0,1,751,722
+rotate:90
 TOTAL SACKS ARM 1
-bounds:1239,17,125,114
-offsets:1,0,126,114
+bounds:808,1875,105,95
 TOTAL SACKS ARM 2
-bounds:1513,57,83,74
-TOTAL SACKS BG
-bounds:2,396,901,1650
+bounds:463,1908,69,62
+offsets:0,0,70,62
+TOTAL SACKS BEEL
+bounds:740,660,601,464
 TOTAL SACKS BODY
-bounds:1100,596,128,193
-offsets:1,0,129,193
+bounds:915,1862,108,161
+rotate:90
+TOTAL SACKS CACTUS
+bounds:755,1534,296,569
+rotate:90
 TOTAL SACKS FACE
-bounds:905,402,184,183
+bounds:1358,1817,153,153
 TOTAL SACKS FEET 1
-bounds:905,587,202,193
-offsets:121,0,323,290
-rotate:90
+bounds:1513,1809,168,161
+offsets:101,0,270,242
 TOTAL SACKS FEET 2
-bounds:1100,416,86,178
-TOTAL SACKS LIGHT
-bounds:1239,133,733,656
-TOTAL SACKS PUPILS
-bounds:1687,70,68,61
-offsets:0,1,69,62
-TOTAL SACKS SAX
-bounds:1799,1874,172,166
+bounds:657,1898,72,149
 rotate:90
-TOTAL SACKS STAGE
-bounds:905,791,892,1255
+TOTAL SACKS LIGHT
+bounds:1343,577,611,547
+TOTAL SACKS PUPILS
+bounds:329,1918,57,52
+offsets:0,0,58,52
+TOTAL SACKS RAT
+bounds:1038,1126,373,802
+rotate:90
+TOTAL SACKS SAX
+bounds:1213,1832,143,138
+offsets:0,0,144,138
 TOTAL SACKS TAIL
-bounds:1366,52,145,79
+bounds:534,1904,121,66
 TOTAL SACKS TUX
-bounds:1799,1713,152,159
+bounds:1078,1843,127,133
+rotate:90
 curtain 1
-bounds:599,27,367,638
-offsets:0,123,367,761
+bounds:1326,1501,306,531
+offsets:0,103,306,634
+rotate:90
+curtain 2
+bounds:2,755,448,736
+offsets:0,211,449,947
 rotate:90
 
 TotalW_BZ_2.webp
-size:2005,1549
+size:1500,1379
 filter:Linear,Linear
 pma:false
-scale:0.6
-MEOW
-bounds:725,2,642,393
-offsets:67,0,710,393
-rotate:90
-PaintLayer-38
-bounds:1318,646,901,296
-rotate:90
-SAX LINE
-bounds:451,646,901,865
-offsets:0,1,901,866
-rotate:90
-TOTAL SACKS BEEL
-bounds:2,27,721,556
-TOTAL SACKS CACTUS
-bounds:1616,864,355,683
-TOTAL SACKS RAT
-bounds:2,585,447,962
-curtain 2
-bounds:1120,107,537,883
-offsets:0,253,538,1136
-rotate:90
+scale:0.5
+TOTAL SACKS BG
+bounds:2,2,751,1375
+TOTAL SACKS STAGE
+bounds:755,331,743,1046

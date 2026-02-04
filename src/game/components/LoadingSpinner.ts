@@ -9,7 +9,7 @@ import { Scene } from 'phaser';
 export class LoadingSpinner {
 	private scene: Scene;
 	private container: Phaser.GameObjects.Container | null = null;
-	private candyImage: Phaser.GameObjects.Image | null = null;
+	private loadingSpinner: Phaser.GameObjects.Image | null = null;
 	private spinnerTween: Phaser.Tweens.Tween | null = null;
 	private showTimeout: any | null = null;
 	private isVisible: boolean = false;
@@ -36,10 +36,10 @@ export class LoadingSpinner {
 		this.container.setAlpha(0);
 
 		// Create the candy overlay image
-		this.candyImage = this.scene.add.image(0, 0, 'candy-overlay');
-		this.candyImage.setOrigin(0.5, 0.5);
-		this.candyImage.setScale(0.15); // Scale down the candy to fit nicely
-		this.container.add(this.candyImage);
+		this.loadingSpinner = this.scene.add.image(0, 0, 'loading-spinner');
+		this.loadingSpinner.setOrigin(0.5, 0.5);
+		this.loadingSpinner.setScale(0.20); // Scale down the candy to fit nicely
+		this.container.add(this.loadingSpinner);
 
 		console.log('[LoadingSpinner] Candy spinner created at position:', this.centerX, this.centerY);
 	}
@@ -85,8 +85,8 @@ export class LoadingSpinner {
 		this.container.setVisible(true);
 
 		// Reset candy angle to 0 before starting
-		if (this.candyImage) {
-			this.candyImage.setAngle(0);
+		if (this.loadingSpinner) {
+			this.loadingSpinner.setAngle(0);
 		}
 
 		// Fade in animation
@@ -99,7 +99,7 @@ export class LoadingSpinner {
 
 		// Rotate the candy continuously with smooth linear motion (counter-clockwise)
 		this.spinnerTween = this.scene.tweens.add({
-			targets: this.candyImage,
+			targets: this.loadingSpinner,
 			angle: -360,
 			duration: 1200, // Slightly slower for smoother rotation
 			ease: 'Linear',
@@ -127,8 +127,8 @@ export class LoadingSpinner {
 		// This prevents an awkward empty moment before new symbols drop
 		setTimeout(() => {
 			// Stop rotation smoothly at the nearest complete rotation (0 or -360 degrees)
-			if (this.spinnerTween && this.candyImage) {
-				const currentAngle = this.candyImage.angle % 360;
+			if (this.spinnerTween && this.loadingSpinner) {
+				const currentAngle = this.loadingSpinner.angle % 360;
 				// For counter-clockwise, rotate to 0 or -360
 				const targetAngle = currentAngle > -180 ? 0 : -360;
 				const angleToRotate = targetAngle - currentAngle;
@@ -139,14 +139,14 @@ export class LoadingSpinner {
 				
 				// Smoothly rotate to 0 or 360 degrees
 				this.scene.tweens.add({
-					targets: this.candyImage,
+					targets: this.loadingSpinner,
 					angle: `+=${angleToRotate}`,
 					duration: Math.abs(angleToRotate) * 2, // Proportional duration
 					ease: 'Linear',
 					onComplete: () => {
 						// Reset to 0 degrees after completing rotation
-						if (this.candyImage) {
-							this.candyImage.setAngle(0);
+						if (this.loadingSpinner) {
+							this.loadingSpinner.setAngle(0);
 						}
 					}
 				});
@@ -211,7 +211,7 @@ export class LoadingSpinner {
 			this.container = null;
 		}
 
-		this.candyImage = null;
+		this.loadingSpinner = null;
 		this.isVisible = false;
 	}
 }

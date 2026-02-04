@@ -242,7 +242,7 @@ export class Game extends Scene {
 			offsetY: 5,
 			fontSize: 16,
 			fontFamily: 'poppins-regular',
-			color: '#000000',
+			color: '#FFFFFF',
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
@@ -251,7 +251,7 @@ export class Game extends Scene {
 			additionalTextOffsetX: 5,
 			additionalTextOffsetY: 0,
 			additionalTextScale: 0.7,
-			additionalTextColor: '#000000',
+			additionalTextColor: '#FFFFFF',
 			additionalTextFontSize: 16,
 			additionalTextFontFamily: 'poppins-regular'
 		});
@@ -277,7 +277,7 @@ export class Game extends Scene {
 		// ADJUST HERE: WinTracker position and icon size
 		// offsetY: negative values move it UP, positive values move it DOWN (default: -45)
 		// iconScale: size of symbol icons (default: 0.3, current: 0.05)
-		this.winTracker.setLayout({ iconScale: 0.03, offsetY: -115 });
+		this.winTracker.setLayout({ iconScale: 0.02, offsetY: -115 });
 		console.log(`[Game] Creating symbols...`);
 		this.symbols.create(this);
 

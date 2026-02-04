@@ -19,13 +19,16 @@ export const SYMBOL_HORIZONTAL_SPACING = 9;
 /** Vertical spacing between symbols in pixels */
 export const SYMBOL_VERTICAL_SPACING = 4;
 
-/** Mask padding around the symbol grid */
+/** Mask padding around the symbol grid (increase top if symbols are cut at the top) */
 export const GRID_MASK_PADDING = {
   left: 14,
   right: 14,
-  top: 20,
+  top: 40,
   bottom: 50,
 } as const;
+
+/** Height of soft gradient fade at top/bottom of reel mask (0 = hard edge) */
+export const GRID_MASK_GRADIENT_FADE_HEIGHT = 24;
 
 /** Overlay padding around the symbol grid */
 export const GRID_OVERLAY_PADDING = {
