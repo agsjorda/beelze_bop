@@ -575,11 +575,45 @@ export class AutoplayOptions {
 		}
 	}
 
+	/**
+	 * Update - / + button states: disable - at minimum bet, disable + at maximum bet
+	 * (same behavior as BetController and BetOptions).
+	 */
+	private updateBetLimitButtons(): void {
+		const isAtMin = this.selectedBetIndex <= 0;
+		const isAtMax = this.selectedBetIndex >= this.betOptions.length - 1;
+
+		if (this.minusButton) {
+			if (isAtMin) {
+				this.minusButton.setAlpha(0.5);
+				this.minusButton.setTint(0x555555);
+				this.minusButton.disableInteractive();
+			} else {
+				this.minusButton.setAlpha(1.0);
+				this.minusButton.clearTint();
+				this.minusButton.setInteractive();
+			}
+		}
+
+		if (this.plusButton) {
+			if (isAtMax) {
+				this.plusButton.setAlpha(0.5);
+				this.plusButton.setTint(0x555555);
+				this.plusButton.disableInteractive();
+			} else {
+				this.plusButton.setAlpha(1.0);
+				this.plusButton.clearTint();
+				this.plusButton.setInteractive();
+			}
+		}
+	}
+
 	private selectBet(index: number, value: number): void {
 		this.selectedBetIndex = index;
 		this.currentBet = value;
 		this.updateAutoplayDisplay();
 		this.updateStartAutoplayButtonState();
+		this.updateBetLimitButtons();
 	}
 
 	private selectPreviousBet(): void {

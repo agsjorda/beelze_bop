@@ -95,7 +95,7 @@ export interface HistoryItem {
 
 export class GameAPI {  
     private static readonly GAME_ID: string = '00120925';
-    private static DEMO_BALANCE: number = 15000;
+    private static DEMO_BALANCE: number = 10000;
 
     gameData: GameData;
     exitURL: string = '';

@@ -35,7 +35,7 @@ export class WinTracker {
   private offsetX: number = 0;
   private offsetY: number = -45;
   private itemSpacing: number = 80;
-  private iconScale: number = 0.25;
+  private iconScale: number = 0.01;
   private innerGap: number = 13;
   private horizontalGap: number = 20;
   private multiplierIconScale: number = 2;
@@ -336,7 +336,7 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#99030A',
+        stroke: '#004D00',
         strokeThickness: 4,
         align: 'center'
       }
@@ -355,7 +355,7 @@ export class WinTracker {
             fontSize: `${this.labelFontSize}px`,
             color: '#ffffff',
             fontFamily: this.labelFontFamily,
-            stroke: '#99030A',
+            stroke: '#004D00',
             strokeThickness: 4,
             align: 'center'
           }
@@ -373,7 +373,7 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#99030A',
+        stroke: '#004D00',
         strokeThickness: 4,
         align: 'center'
       }
@@ -393,7 +393,7 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#99030A',
+        stroke: '#004D00',
         strokeThickness: 4,
         align: 'center'
       }

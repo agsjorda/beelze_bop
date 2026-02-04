@@ -381,15 +381,9 @@ export class SymbolGrid {
       this.container.setAlpha(1);
     }
     
-    let visibleCount = 0;
     this.forEachSymbol((symbol) => {
-      if (typeof symbol.setVisible === 'function') {
-        symbol.setVisible(true);
-        visibleCount++;
-      }
+      if (typeof symbol.setVisible === 'function') symbol.setVisible(true);
     });
-    
-    console.log(`[SymbolGrid] Restored visibility for ${visibleCount} symbols`);
   }
 
   /**

@@ -107,6 +107,8 @@ export class HelpScreen {
 
     // Scatter section
     private readonly scatterSymbolKey: string = 'symbol0';
+    /** Scale of Symbol0 (scatter) in the Payout section. Change this to resize it. */
+    private readonly scatterPayoutSymbolScale: number = 0.7;
     private readonly scatterHeaderLeftPadding: number = 30;
     private readonly scatterHeaderTopPadding: number = 20;
     private readonly scatterBottomPadding: number = 20;
@@ -438,9 +440,9 @@ export class HelpScreen {
         scatterHeader.setY(scatterHeader.y + this.scatterHeaderTopPadding);
         scatterHeader.setX(scatterHeader.x + this.scatterHeaderLeftPadding);
 
-        // Add symbol
-        const symbol = scene.add.sprite(0, 0, this.scatterSymbolKey);
-        symbol.setScale(1);
+        // Add symbol (Symbol0 in Payout – resize via scatterPayoutSymbolScale above)
+        const symbol = scene.add.image(0, 0, this.scatterSymbolKey);
+        symbol.setScale(this.scatterPayoutSymbolScale);
         symbol.setOrigin(0.5, 0.5);
         symbolContainer.add(symbol);
 

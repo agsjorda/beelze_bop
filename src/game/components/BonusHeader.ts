@@ -98,7 +98,7 @@ export class BonusHeader {
 			fontSize: '18px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
-			stroke: '#99030A',
+			stroke: '#004D00',
 			strokeThickness: 3
 		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
 		// Don't add to container - add directly to scene so depth works correctly
@@ -109,9 +109,9 @@ export class BonusHeader {
 		const prefixInitial = isDemoInitial ? '' : CurrencyManager.getInlinePrefix();
 		this.amountText = scene.add.text(x, y + 18, `${prefixInitial}0.00`, {
 			fontSize: '24px',
-			color: '#FFB837',
+			color: '#00ff00',
 			fontFamily: 'Poppins-Bold',
-			stroke: '#99030A',
+			stroke: '#004D00',
 			strokeThickness: 3
 		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
 		// Don't add to container - add directly to scene so depth works correctly
@@ -728,9 +728,19 @@ export class BonusHeader {
 					console.log('[BonusHeader] Cleared justSeededWin flag - first bonus spin starting');
 				}
 
-				// Hide winnings display at the start of each bonus spin
-				// It will show "YOU WON" during tumbles/multipliers, then "TOTAL WIN" at the end
-				this.hideWinningsDisplay();
+				// At the start of each bonus spin, show the cumulative TOTAL WIN so far.
+				// During the spin, per-tumble updates will switch the label to "YOU WON".
+				if (totalWinSoFar > 0) {
+					if (this.youWonText) {
+						this.youWonText.setText('TOTAL WIN');
+					}
+					this.showWinningsDisplay(totalWinSoFar);
+				} else {
+					this.hideWinningsDisplay();
+					if (this.youWonText) {
+						this.youWonText.setText('YOU WON');
+					}
+				}
 			} else {
 				// Normal mode behavior: hide winnings at the start of the spin
 				this.hasStartedBonusTracking = false;
@@ -920,8 +930,9 @@ export class BonusHeader {
 						this.showWinningsDisplay(spinWin);
 						console.log(`[BonusHeader] WIN_STOP (bonus): ✅ SHOWING "TOTAL WIN" with spin total=$${spinWin}`);
 					} else {
-						console.log('[BonusHeader] WIN_STOP (bonus): spinWin is 0, hiding display');
-						this.hideWinningsDisplay();
+						// No win this spin – leave the existing TOTAL WIN (or previous state)
+						// visible and do not change the label or hide the display.
+						console.log('[BonusHeader] WIN_STOP (bonus): spinWin is 0, leaving existing winnings display unchanged');
 					}
 
 					// Always emit event to signal that spin display phase is complete

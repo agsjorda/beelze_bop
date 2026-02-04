@@ -17,6 +17,7 @@ export enum SoundEffectType {
 	SPIN_CLICK = 'spin_click',
 	MULTIPLIER_TRIGGER = 'multitrigger',
 	TRANSITION_BZ = 'transition_bz',
+	WHISTLE_BB = 'whistle_bb',
 	SCATTER = 'scatter',
 	// Tumble-driven symbol-win SFX (play per tumble index)
 	SYMBOL_WIN_1 = 'symbol_win_1',
@@ -84,7 +85,8 @@ export class AudioManager {
 		this.scene.load.audio('nomnom_bz', 'assets/sounds/SFX/nomnom_sw.ogg');
 		this.scene.load.audio('coin_throw_bz', 'assets/sounds/SFX/coin_throw_ka.ogg');
 		this.scene.load.audio('coin_drop_bz', 'assets/sounds/SFX/coin_drop_ka.ogg');
-		this.scene.load.audio('ghost_whisper_bz', 'assets/sounds/SFX/ghost-whisper.mp3');
+		this.scene.load.audio('ghost_whisper_bz', 'assets/sounds/SFX/anticipation_BB.ogg');
+		this.scene.load.audio('whistle_bz', 'assets/sounds/SFX/whistle_BB.ogg');
 		
 		console.log('[AudioManager] Audio files preloaded successfully');
 	}
@@ -226,13 +228,22 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create tbomb_bz SFX instance:', e);
 			}
 
-			// Transition_BZ whisper SFX instance
+			// Transition_BZ SFX instance (anticipation_BB)
 			try {
-				const whisperSfx = this.scene.sound.add('ghost_whisper_bz', { volume: this.sfxVolume, loop: false });
-				this.sfxInstances.set(SoundEffectType.TRANSITION_BZ, whisperSfx);
-				console.log('[AudioManager] Transition_BZ whisper SFX instance created');
+				const transitionBzSfx = this.scene.sound.add('ghost_whisper_bz', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.TRANSITION_BZ, transitionBzSfx);
+				console.log('[AudioManager] Transition_BZ (anticipation_BB) SFX instance created');
 			} catch (e) {
-				console.warn('[AudioManager] Failed to create ghost_whisper_bz SFX instance:', e);
+				console.warn('[AudioManager] Failed to create Transition_BZ (anticipation_BB) SFX instance:', e);
+			}
+
+			// Radial light transition whistle SFX
+			try {
+				const whistleSfx = this.scene.sound.add('whistle_bz', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.WHISTLE_BB, whistleSfx);
+				console.log('[AudioManager] Whistle (radial light) SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create whistle_bz SFX instance:', e);
 			}
 
 			// Create scatter SFX instance

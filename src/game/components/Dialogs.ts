@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
+import { SoundEffectType } from '../../managers/AudioManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
 // import { SymbolExplosionTransition } from './SymbolExplosionTransition';
 import { RadialDimmerTransition } from './RadialDimmerTransition';
@@ -1294,13 +1295,10 @@ export class Dialogs {
 				// by the "scatter + autoplay" check inside Game.checkAndShowWinDialog.
 				try {
 					gameStateManager.isScatter = false;
-					console.log('[Dialogs] Retrigger FreeSpinDialog - cleared isScatter before dialogAnimationsComplete');
 				} catch { }
-				// Re-enable symbols immediately (match win dialog behavior)
 				try {
 					scene.events.emit('enableSymbols');
 				} catch { }
-				// Notify listeners that dialog animations are complete so retrigger flow can continue
 				try {
 					scene.events.emit('dialogAnimationsComplete');
 				} catch { }
@@ -1401,6 +1399,12 @@ export class Dialogs {
 		if (!scene || !this.radialLightTransition) {
 			return;
 		}
+		try {
+			const am = (window as any)?.audioManager;
+			if (am && typeof am.playSoundEffect === 'function') {
+				am.playSoundEffect(SoundEffectType.WHISTLE_BB);
+			}
+		} catch { }
 		const centerX = options?.centerX ?? scene.scale.width * 0.5;
 		const centerY = options?.centerY ?? scene.scale.height * 0.5;
 		await this.radialLightTransition.playRevealTransition({

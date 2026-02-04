@@ -381,6 +381,7 @@ export class BetOptions {
 		selectedBg.strokeRoundedRect(0, 0, 60, 50, 5);
 		
 		this.updateBetDisplay();
+		this.updateBetLimitButtons();
 	}
 
 	private updateBetDisplay(): void {
@@ -454,6 +455,39 @@ export class BetOptions {
 			this.showEnhanceBetIdleLoop();
 		} else {
 			this.hideEnhanceBetIdleLoop();
+		}
+	}
+
+	/**
+	 * Update - / + button states: disable - at minimum bet, disable + at maximum bet
+	 * (same behavior as BetController in SlotController).
+	 */
+	private updateBetLimitButtons(): void {
+		const isAtMin = this.selectedButtonIndex <= 0;
+		const isAtMax = this.selectedButtonIndex >= this.betOptions.length - 1;
+
+		if (this.minusButton) {
+			if (isAtMin) {
+				this.minusButton.setAlpha(0.5);
+				this.minusButton.setTint(0x555555);
+				this.minusButton.disableInteractive();
+			} else {
+				this.minusButton.setAlpha(1.0);
+				this.minusButton.clearTint();
+				this.minusButton.setInteractive();
+			}
+		}
+
+		if (this.plusButton) {
+			if (isAtMax) {
+				this.plusButton.setAlpha(0.5);
+				this.plusButton.setTint(0x555555);
+				this.plusButton.disableInteractive();
+			} else {
+				this.plusButton.setAlpha(1.0);
+				this.plusButton.clearTint();
+				this.plusButton.setInteractive();
+			}
 		}
 	}
 

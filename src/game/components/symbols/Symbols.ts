@@ -60,7 +60,6 @@ import {
   SCATTER_SHRINK_DURATION_MS,
   SCATTER_MOVE_DURATION_MS,
   MULTIPLIER_STAGGER_MS,
-  MULTIPLIER_OVERLAY_DELAY_MS,
 } from './constants';
 
 /**
@@ -340,37 +339,27 @@ export class Symbols {
   }
 
   private handleEnableSymbolsAfterDialog(): void {
-    console.log('[Symbols] Re-enabling symbols after dialog');
-    this.grid.restoreVisibility();
-    this.resetSymbolsState();
     const sceneAny = this.scene as any;
     const skipScatterReset = !!sceneAny?.__skipScatterResetOnNextEnableSymbols;
+    this.grid.restoreVisibility();
+    this.resetSymbolsState();
     if (skipScatterReset) {
-      // Flag is cleared when retrigger dialog closes (dialogAnimationsComplete in retrigger handlers).
-      console.log('[Symbols] Skipping resetScatterSymbolsToGrid (retrigger flow - symbols already reset)');
+      this.resetSymbol0ScalesOnGrid();
+      this.startSymbol0ScalePin(1000);
+      return;
     }
     if (gameStateManager.isBonus) {
       this.scatterResetHandledForBonusStart = true;
-      // During bonus, skip scatter reset — each spin creates fresh symbols via processSpinDataSymbols,
-      // and resetting here clears Symbol0s needed for retrigger detection/animation.
-      console.log('[Symbols] Skipping resetScatterSymbolsToGrid (bonus mode - symbols managed per spin)');
       return;
-    }
-    if (!skipScatterReset) {
-      this.resetScatterSymbolsToGrid(true).catch((e) => {
-        console.warn('[Symbols] Failed to reset scatter symbols on dialog close:', e);
-      });
     }
   }
 
   private handleScatterBonusActivated(data: PendingFreeSpinsData): void {
-    console.log(`[Symbols] Scatter bonus activated: ${data.actualFreeSpins} free spins`);
     this.freeSpinItemIndex = 0;
     this.freeSpinController.setPendingFreeSpinsData(data);
   }
 
   private handleScatterBonusCompleted(): void {
-    console.log('[Symbols] Scatter bonus completed');
     this.restoreSymbolVisibility();
     this.ensureScatterSymbolsVisible();
     let dialogShowing = false;
@@ -383,7 +372,6 @@ export class Symbols {
     let resetPromise: Promise<void> = Promise.resolve();
     if (this.scatterResetHandledForBonusStart) {
       this.scatterResetHandledForBonusStart = false;
-      console.log('[Symbols] Scatter reset already handled on bonus start - skipping duplicate reset');
     } else {
       resetPromise = this.resetScatterSymbolsToGrid(resetImmediate).catch((e) => {
         console.warn('[Symbols] Failed to reset scatter symbol scale after bonus dialog:', e);
@@ -396,17 +384,13 @@ export class Symbols {
     this.dialogListenerSetup = true;
 
     if (dialogShowing || gameStateManager.isShowingWinDialog) {
-      this.scene.events.once('dialogAnimationsComplete', () => {
-        console.log('[Symbols] Dialog complete - triggering free spin autoplay');
-        this.triggerAutoplayAfterScatterReset(resetPromise);
-      });
+      this.scene.events.once('dialogAnimationsComplete', () => this.triggerAutoplayAfterScatterReset(resetPromise));
     } else {
       this.triggerAutoplayAfterScatterReset(resetPromise);
     }
   }
 
   private triggerAutoplayAfterScatterReset(resetPromise: Promise<void>): void {
-    console.log('[Symbols] Triggering free spin autoplay');
     resetPromise.finally(() => {
       this.scene.time.delayedCall(1000, () => {
         this.freeSpinController.triggerAutoplay();
@@ -419,7 +403,6 @@ export class Symbols {
       return;
     }
     const retrigger = this.pendingScatterRetrigger;
-    console.log('[Symbols] WIN_STOP: Running scatter retrigger sequence (bonus flow: win→explosion→win dialogs→retrigger anim→FreeSpinRetri)');
 
     try {
       await this.waitForAnimationsAndTumblesToFinish();
@@ -473,7 +456,6 @@ export class Symbols {
     (this.scene as any).__skipScatterResetOnNextEnableSymbols = true;
 
     const retrigger = this.pendingSymbol0Retrigger;
-    console.log('[Symbols] Symbol0 retrigger flow: win dialogs finish → Symbol0 win anim → FreeSpinRetri_BZ → continue');
 
     try {
       await this.waitForAnimationsAndTumblesToFinish();
@@ -485,7 +467,6 @@ export class Symbols {
 
     try {
       const symbol0Grids = retrigger.symbol0Grids;
-      console.log(`[Symbols] Playing Symbol0 win animation for ${symbol0Grids.length} symbols`);
       await this.playSymbol0RetriggerSequence(symbol0Grids);
       // Clearing/resetting Symbol0 symbols after retrigger is disabled for now
       gameEventManager.emit(GameEventType.SYMBOL0_RETRIGGER_ANIMATION_COMPLETE);
@@ -495,7 +476,6 @@ export class Symbols {
     }
 
     try {
-      (this.scene as any).__skipScatterResetOnNextEnableSymbols = true;
       this.applyRetriggerDialogAndCount('Symbol0');
     } catch (e) {
       console.warn('[Symbols] Failed to show Symbol0 retrigger dialog:', e);
@@ -518,6 +498,63 @@ export class Symbols {
       gameStateManager.isAutoPlaySpinRequested = true;
       if (this.scene?.gameData) this.scene.gameData.isAutoPlaying = true;
     } catch { }
+  }
+
+  private isSymbol0(symbol: any): boolean {
+    if (!symbol || symbol.destroyed) return false;
+    const val = symbol?.symbolValue;
+    return val === 0 || symbol?.texture?.key === 'symbol_0';
+  }
+
+  private applySymbol0Scale(symbol: any, targetX: number, targetY: number): void {
+    try {
+      if (typeof symbol?.setScale === 'function') {
+        symbol.setScale(targetX, targetY);
+      } else {
+        symbol.scaleX = targetX;
+        symbol.scaleY = targetY;
+      }
+    } catch { /* ignore */ }
+  }
+
+  /** Restore Symbol0 scales from __symbol0ScaleBeforeWin (captured before retrigger win anim). */
+  private resetSymbol0ScalesOnGrid(): void {
+    const fallbackScale = this.getSpineSymbolScale(0);
+    this.grid.forEachSymbol((symbol) => {
+      if (!this.isSymbol0(symbol)) return;
+      const s = symbol as any;
+      const stored = s.__symbol0ScaleBeforeWin as { scaleX: number; scaleY: number } | undefined;
+      const scaleX = stored?.scaleX ?? Number(s.scaleX);
+      const scaleY = stored?.scaleY ?? Number(s.scaleY);
+      const targetX = isFinite(scaleX) && scaleX > 0 ? scaleX : fallbackScale;
+      const targetY = isFinite(scaleY) && scaleY > 0 ? scaleY : fallbackScale;
+      try {
+        this.scene.tweens.killTweensOf(symbol);
+        if (s.__overlayImage) this.scene.tweens.killTweensOf(s.__overlayImage);
+      } catch { /* ignore */ }
+      try {
+        if (typeof s.skeleton?.setToSetupPose === 'function') s.skeleton.setToSetupPose();
+      } catch { /* ignore */ }
+      this.applySymbol0Scale(symbol, targetX, targetY);
+    });
+  }
+
+  /** Re-apply Symbol0 scales every frame for durationMs to override Spine/tweens that change scale after dialog close. */
+  private startSymbol0ScalePin(durationMs: number): void {
+    const endTime = this.scene.time.now + durationMs;
+    const listener = () => {
+      if (this.scene.time.now >= endTime) {
+        this.scene.events.off('postupdate', listener);
+        return;
+      }
+      this.grid.forEachSymbol((symbol) => {
+        if (!this.isSymbol0(symbol)) return;
+        const stored = (symbol as any).__symbol0ScaleBeforeWin as { scaleX: number; scaleY: number } | undefined;
+        if (!stored) return;
+        this.applySymbol0Scale(symbol, stored.scaleX, stored.scaleY);
+      });
+    };
+    this.scene.events.on('postupdate', listener);
   }
 
   private resetScatterSymbolsAfterRetrigger(scatterGrids: GridPosition[]): void {
@@ -547,8 +584,6 @@ export class Symbols {
             this.scene.tweens.killTweensOf(overlayObj);
           }
         } catch { }
-
-        console.log(`[Symbols] Reset scatter symbol at (${grid.x}, ${grid.y}) to normal state`);
       } catch (e) {
         console.warn(`[Symbols] Failed to reset scatter at (${grid.x}, ${grid.y}):`, e);
       }
@@ -556,11 +591,8 @@ export class Symbols {
   }
 
   private async playSymbol0RetriggerSequence(symbol0Grids: GridPosition[]): Promise<void> {
-    if (!symbol0Grids.length) {
-      return;
-    }
+    if (!symbol0Grids.length) return;
 
-    console.log(`[Symbols] Animating ${symbol0Grids.length} Symbol0 symbols`);
     const winAnimName = 'Symbol0_BZ_win';
     const idleAnimName = 'Symbol0_BZ_idle';
 
@@ -574,6 +606,13 @@ export class Symbols {
             resolve();
             return;
           }
+
+          // Capture scale before win animation so we can restore it after dialog closes
+          const scaleX = Number((symbol as any).scaleX);
+          const scaleY = Number((symbol as any).scaleY);
+          const capturedScale = (isFinite(scaleX) && scaleX > 0 && isFinite(scaleY) && scaleY > 0)
+            ? { scaleX, scaleY }
+            : null;
 
           // Ensure Symbol0 is a Spine symbol so it can play win/idle animations.
           let animState = (symbol as any).animationState;
@@ -602,6 +641,7 @@ export class Symbols {
                   } catch {
                     try { this.animationsModule.fitSpineToSymbolBox(spineSymbol); } catch { }
                   }
+                  if (capturedScale) (spineSymbol as any).__symbol0ScaleBeforeWin = capturedScale;
                   symbol = spineSymbol;
                   this.grid.setSymbol(grid.x, grid.y, symbol);
                   try { this.container.add(spineSymbol); } catch { }
@@ -609,6 +649,8 @@ export class Symbols {
                 }
               }
             } catch { }
+          } else if (capturedScale) {
+            (symbol as any).__symbol0ScaleBeforeWin = capturedScale;
           }
 
           if (!animState?.setAnimation) {
@@ -689,7 +731,6 @@ export class Symbols {
     });
 
     await Promise.all(animationPromises);
-    console.log('[Symbols] All Symbol0 animations complete');
   }
 
   private getLiveSymbol0Grids(): GridPosition[] {
@@ -718,10 +759,6 @@ export class Symbols {
     const spinsLeftFromSpinData = Math.max(0, retriggerInfo.spinsLeft);
     const retriggerSpins = Math.max(0, retriggerInfo.added);
     this.freeSpinController?.setSpinsRemaining?.(spinsLeftFromSpinData);
-    console.log(`[Symbols] ${logLabel} retrigger: using spinsLeft from spin data`, {
-      spinsLeftFromSpinData,
-      retriggerSpins
-    });
     try {
       this.scene?.events?.emit('fakeDataRetriggerComputed', {
         nextSpinsLeft: spinsLeftFromSpinData,
@@ -814,7 +851,6 @@ export class Symbols {
 
   public setPendingSymbol0Retrigger(symbol0Grids: GridPosition[]): void {
     this.pendingSymbol0Retrigger = { symbol0Grids };
-    console.log(`[Symbols] Symbol0 retrigger pending: ${symbol0Grids.length} Symbol0s`);
   }
 
   public hasPendingSymbol0Retrigger(): boolean {
@@ -1264,6 +1300,10 @@ export class Symbols {
       sceneAny.__skipScatterResetOnNextEnableSymbols = false;
       return;
     }
+    // During bonus free spins, skip scatter reset so no scale tween runs on Symbol0s
+    if (gameStateManager.isBonus) {
+      return;
+    }
     if (!immediate && this.scatterResetInProgress) {
       return;
     }
@@ -1322,7 +1362,6 @@ export class Symbols {
   private async playScatterRetriggerSequence(scatterGrids: GridPosition[]): Promise<void> {
     if (!scatterGrids.length) return;
 
-    console.log(`[Symbols] Playing retrigger sequence for ${scatterGrids.length} scatters`);
     const disableScaling = gameStateManager.isBonus || gameStateManager.isBuyFeatureSpin;
 
     const spineKey = `symbol_${SCATTER_SYMBOL_ID}_sugar_spine`;
@@ -1648,15 +1687,11 @@ export class Symbols {
     const isRetrigger = gameStateManager.isBonus && scatterCount >= SCATTER_RETRIGGER_COUNT;
     const isTrigger = !gameStateManager.isBonus && scatterCount >= SCATTER_TRIGGER_COUNT;
     if (isRetrigger || isTrigger) {
-      console.log(`[Symbols] Scatter detected! Found ${scatterCount} scatter symbols`);
       gameStateManager.isScatter = true;
 
-      // Animate and handle scatter
       if (isRetrigger) {
-        console.log('[Symbols] Bonus retrigger detected');
         this.setPendingScatterRetrigger(scatterGrids);
       } else {
-        console.log('[Symbols] Starting scatter animation sequence');
         await this.animateScatterSymbols(mockData, scatterGrids);
         this.startScatterAnimationSequence(mockData);
       }
@@ -1673,13 +1708,8 @@ export class Symbols {
         // Trigger when spin data area has 3+ Symbol0s (what the backend says) and we have at least one to animate.
         const shouldRetrigger = symbol0CountFromArea >= 3 && symbol0Grids.length > 0;
         if (shouldRetrigger) {
-          console.log(`[Symbols] Symbol0 retrigger from spin data: area has ${symbol0CountFromArea} Symbol0s, live grid has ${symbol0CountLive} to animate`);
           this.setPendingSymbol0Retrigger(symbol0Grids);
-          // Symbol0 retrigger takes priority – clear scatter retrigger to avoid duplicate
-          if (this.pendingScatterRetrigger) {
-            console.log('[Symbols] Clearing scatter retrigger in favour of Symbol0 retrigger');
-            this.pendingScatterRetrigger = null;
-          }
+          if (this.pendingScatterRetrigger) this.pendingScatterRetrigger = null;
         }
       } catch (e) {
         console.warn('[Symbols] Failed to check for Symbol0 retrigger:', e);
@@ -2025,12 +2055,8 @@ export class Symbols {
 
     await Promise.all(gatherPromises);
 
-    if (gameStateManager.isBuyFeatureSpin) {
-      await this.buyFeatureTransition(scatterSymbols, winAnimName, idleAnimName);
-      return;
-    }
-
-    await this.playTransitionBzWin(scatterSymbols);
+    // Use same transition as buy feature (merge + explosion + Transition_BZ) for both normal and buy feature trigger
+    await this.buyFeatureTransition(scatterSymbols, winAnimName, idleAnimName);
   }
 
   private async playTransitionBzWin(scatterSymbols: SymbolObject[]): Promise<void> {
@@ -2889,7 +2915,6 @@ export class Symbols {
   }
 
   private async dropReels(data: Data): Promise<void> {
-    console.log('[Symbols] dropReels called');
     this.reelDropInProgress = true;
 
     const numRows = (this.symbols && this.symbols[0] && this.symbols[0].length)
@@ -2942,9 +2967,6 @@ export class Symbols {
 
         const p = (async () => {
           await this.delayOrSkip(startDelay);
-          console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
-
-          // Drop old symbols first with same animation as new symbols
           await this.dropOldSymbols(actualRow);
 
           // Then drop new symbols
@@ -2955,7 +2977,6 @@ export class Symbols {
 
       try {
         await Promise.all(reelPromises);
-        console.log('[Symbols] All reels completed');
         this.clearSkipReelDrops();
       } finally {
         this.reelDropInProgress = false;
@@ -2966,7 +2987,6 @@ export class Symbols {
     if (isTurbo && (window as any).audioManager) {
       try {
         (window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
-        console.log('[Symbols] Playing turbo drop sound effect');
       } catch (e) {
         console.warn('[Symbols] Failed to play turbo drop sound effect:', e);
       }
@@ -2995,7 +3015,6 @@ export class Symbols {
                                    this.scatterRetriggerAnimationInProgress;
 
       if (shouldSkipAnimation) {
-        console.log(`[Symbols] Fast cleanup for row ${rowIndex} (scatter/retrigger in progress)`);
         // Use immediate disposal for maximum performance
         for (let col = 0; col < this.symbols.length; col++) {
           const symbol = this.symbols[col]?.[rowIndex];
@@ -3646,15 +3665,14 @@ export class Symbols {
           }
         } catch { }
         const explosionDurationMs = Math.max(1200, winDurationMs);
-        const winStartDelayMs = Math.max(0, explosionDurationMs - winDurationMs);
 
         const pos = this.getSymbolWorldPosition(obj);
         if (pos) {
           this.playExplosionVfx(pos.x, pos.y, false, explosionDurationMs);
         }
-        this.scene.time.delayedCall(winStartDelayMs, () => startWinAnimation());
+        startWinAnimation();
         // Safety: ensure flight starts even if win completion doesn't fire.
-        const fallbackMs = winStartDelayMs + winDurationMs + 900;
+        const fallbackMs = winDurationMs + 900;
         this.scene.time.delayedCall(fallbackMs, () => startFlyingOverlay());
       };
 
@@ -4113,7 +4131,9 @@ export class Symbols {
                         obj.animationState.addListener(listener);
                       }
                       if (canPlayMultiplierWin) {
-                        this.showMultiplierOverlayAfterExplosion(obj);
+                        const pos = this.getSymbolWorldPosition(obj);
+                        if (pos) this.playExplosionVfx(pos.x, pos.y, false);
+                        this.showMultiplierOverlay(obj);
                       }
                       obj.animationState.setAnimation(0, winAnim, false);
                       // Log the tumble index when win animation starts
@@ -4613,9 +4633,6 @@ export class Symbols {
           // Defer retrigger to run after all wins/tumbles/multipliers complete (WIN_STOP)
           if (!(self as any).pendingScatterRetrigger) {
             self.setPendingScatterRetrigger(grids);
-            console.log('[Symbols] Scheduled retrigger sequence to run after WIN_STOP');
-          } else {
-            console.log('[Symbols] Retrigger already scheduled; skipping duplicate schedule');
           }
         }
       } else {
@@ -4882,10 +4899,7 @@ export class Symbols {
     }
 
     this.playExplosionVfx(pos.x, pos.y, false);
-    this.scene.time.delayedCall(MULTIPLIER_OVERLAY_DELAY_MS, () => {
-      if (!baseObj || (baseObj as any).destroyed) return;
-      this.showMultiplierOverlay(baseObj);
-    });
+    this.showMultiplierOverlay(baseObj);
   }
 
   private showMultiplierOverlay(baseObj: any): void {
