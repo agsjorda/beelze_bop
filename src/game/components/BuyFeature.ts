@@ -34,11 +34,6 @@ export class BuyFeature {
 	private minusButton!: Phaser.GameObjects.Text;
 	private plusButton!: Phaser.GameObjects.Text;
 	
-	// Continuous button press functionality
-	private minusButtonTimer: Phaser.Time.TimerEvent | null = null;
-	private plusButtonTimer: Phaser.Time.TimerEvent | null = null;
-	private readonly CONTINUOUS_DELAY: number = 500; // 1 second initial delay
-	private readonly CONTINUOUS_INTERVAL: number = 200; // 150ms interval for continuous press
 	private priceDisplay!: Phaser.GameObjects.Text;
 	private featureLogo!: Phaser.GameObjects.Image;
 	private backgroundImage!: Phaser.GameObjects.Image;
@@ -546,7 +541,7 @@ export class BuyFeature {
 		inputBg.setPosition(x, y);
 		this.container.add(inputBg);
 		
-		// Minus button
+		// Minus button (single click only - same as BetOptions, no continuous press)
 		this.minusButton = scene.add.text(x - 150, y, '-', {
 			fontSize: '30px',
 			color: '#ffffff',
@@ -554,23 +549,9 @@ export class BuyFeature {
 		});
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
-		
-		// Handle pointer down for continuous press
 		this.minusButton.on('pointerdown', () => {
 			this.selectPreviousBet();
-			this.startContinuousDecrement(scene);
 		});
-		
-		// Handle pointer up to stop continuous press
-		this.minusButton.on('pointerup', () => {
-			this.stopContinuousDecrement();
-		});
-		
-		// Handle pointer out to stop continuous press
-		this.minusButton.on('pointerout', () => {
-			this.stopContinuousDecrement();
-		});
-		
 		this.container.add(this.minusButton);
 		
 		// Bet display - show current bet value
@@ -592,7 +573,7 @@ export class BuyFeature {
 		this.container.bringToTop(this.betDisplay);
 		console.log('[BuyFeature] betDisplay created with color GREEN, Arial:', this.betDisplay.style.color, 'tint:', this.betDisplay.tintTopLeft, 'blendMode:', this.betDisplay.blendMode, 'alpha:', this.betDisplay.alpha);
 		
-		// Plus button
+		// Plus button (single click only - same as BetOptions, no continuous press)
 		this.plusButton = scene.add.text(x + 150, y, '+', {
 			fontSize: '30px',
 			color: '#ffffff',
@@ -600,23 +581,9 @@ export class BuyFeature {
 		});
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
-		
-		// Handle pointer down for continuous press
 		this.plusButton.on('pointerdown', () => {
 			this.selectNextBet();
-			this.startContinuousIncrement(scene);
 		});
-		
-		// Handle pointer up to stop continuous press
-		this.plusButton.on('pointerup', () => {
-			this.stopContinuousIncrement();
-		});
-		
-		// Handle pointer out to stop continuous press
-		this.plusButton.on('pointerout', () => {
-			this.stopContinuousIncrement();
-		});
-		
 		this.container.add(this.plusButton);
 	}
 
@@ -626,6 +593,7 @@ export class BuyFeature {
 			this.currentBet = this.betOptions[this.currentBetIndex];
 			this.updateBetDisplay();
 			this.updatePriceDisplay();
+			this.updateBetLimitButtons();
 			console.log(`[BuyFeature] Previous bet selected: $${this.currentBet.toFixed(2)}`);
 		}
 	}
@@ -636,67 +604,41 @@ export class BuyFeature {
 			this.currentBet = this.betOptions[this.currentBetIndex];
 			this.updateBetDisplay();
 			this.updatePriceDisplay();
+			this.updateBetLimitButtons();
 			console.log(`[BuyFeature] Next bet selected: $${this.currentBet.toFixed(2)}`);
 		}
 	}
 
 	/**
-	 * Start continuous decrement after initial delay
+	 * Update - / + button states: disable - at minimum bet, disable + at maximum bet
+	 * (same behavior as AutoplayOptions).
 	 */
-	private startContinuousDecrement(scene: Scene): void {
-		// Clear any existing timer
-		this.stopContinuousDecrement();
-		
-		// Start timer after initial delay
-		this.minusButtonTimer = scene.time.delayedCall(this.CONTINUOUS_DELAY, () => {
-			// Start continuous decrement
-			this.minusButtonTimer = scene.time.addEvent({
-				delay: this.CONTINUOUS_INTERVAL,
-				callback: () => {
-					this.selectPreviousBet();
-				},
-				loop: true
-			});
-		});
-	}
+	private updateBetLimitButtons(): void {
+		const isAtMin = this.currentBetIndex <= 0;
+		const isAtMax = this.currentBetIndex >= this.betOptions.length - 1;
 
-	/**
-	 * Stop continuous decrement
-	 */
-	private stopContinuousDecrement(): void {
-		if (this.minusButtonTimer) {
-			this.minusButtonTimer.destroy();
-			this.minusButtonTimer = null;
+		if (this.minusButton) {
+			if (isAtMin) {
+				this.minusButton.setAlpha(0.5);
+				this.minusButton.setTint(0x555555);
+				this.minusButton.disableInteractive();
+			} else {
+				this.minusButton.setAlpha(1.0);
+				this.minusButton.clearTint();
+				this.minusButton.setInteractive();
+			}
 		}
-	}
 
-	/**
-	 * Start continuous increment after initial delay
-	 */
-	private startContinuousIncrement(scene: Scene): void {
-		// Clear any existing timer
-		this.stopContinuousIncrement();
-		
-		// Start timer after initial delay
-		this.plusButtonTimer = scene.time.delayedCall(this.CONTINUOUS_DELAY, () => {
-			// Start continuous increment
-			this.plusButtonTimer = scene.time.addEvent({
-				delay: this.CONTINUOUS_INTERVAL,
-				callback: () => {
-					this.selectNextBet();
-				},
-				loop: true
-			});
-		});
-	}
-
-	/**
-	 * Stop continuous increment
-	 */
-	private stopContinuousIncrement(): void {
-		if (this.plusButtonTimer) {
-			this.plusButtonTimer.destroy();
-			this.plusButtonTimer = null;
+		if (this.plusButton) {
+			if (isAtMax) {
+				this.plusButton.setAlpha(0.5);
+				this.plusButton.setTint(0x555555);
+				this.plusButton.disableInteractive();
+			} else {
+				this.plusButton.setAlpha(1.0);
+				this.plusButton.clearTint();
+				this.plusButton.setInteractive();
+			}
 		}
 	}
 
@@ -735,6 +677,7 @@ export class BuyFeature {
 		
 		this.updatePriceDisplay();
 		this.updateBetDisplay();
+		this.updateBetLimitButtons();
 		this.animateIn();
 		this.scatterShouldLoopWin = true;
 		this.playLogoWinAnimation();
@@ -788,10 +731,6 @@ export class BuyFeature {
 	public hide(): void {
 		console.log("[BuyFeature] Hiding buy feature drawer");
 		
-		// Stop any continuous button presses
-		this.stopContinuousDecrement();
-		this.stopContinuousIncrement();
-		
 		this.animateOut();
 		
 		// Hide the mask when the panel is hidden (same as BetOptions)
@@ -811,10 +750,6 @@ export class BuyFeature {
 	}
 
 	public destroy(): void {
-		// Stop any continuous button presses
-		this.stopContinuousDecrement();
-		this.stopContinuousIncrement();
-		
 		if (this.scatterSpine) {
 			try { this.scatterSpine.destroy(); } catch {}
 			this.scatterSpine = undefined;

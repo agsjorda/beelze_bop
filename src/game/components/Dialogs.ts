@@ -511,7 +511,7 @@ export class Dialogs {
 			console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
 			console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
 
-			this.currentDialog = scene.add.spine(
+			this.currentDialog = (scene.add as any).spine(
 				position.x,
 				position.y,
 				assetKey,
@@ -590,7 +590,7 @@ export class Dialogs {
 				try {
 					const overlayKey = 'TotalW_BZ_meow';
 					const overlayAtlasKey = 'TotalW_BZ-atlas';
-					this.currentDialogOverlay = scene.add.spine(
+					this.currentDialogOverlay = (scene.add as any).spine(
 						position.x,
 						position.y,
 						overlayKey,
