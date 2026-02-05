@@ -471,20 +471,7 @@ export class ScatterAnimationManager {
     console.log('[ScatterAnimationManager] Ending bonus mode');
     gameStateManager.isBonus = false;
     
-    // Note: We should NOT modify freespin.count as it represents the original total won
-    // Only clear the items array and totalWin for cleanup
-    if (this.scene) {
-      const gameScene = this.scene as any; // Cast to access symbols property
-      if (gameScene.symbols && gameScene.symbols.currentSpinData) {
-        if (gameScene.symbols.currentSpinData.slot && gameScene.symbols.currentSpinData.slot.freespin) {
-          // Keep original count - don't modify freespin.count
-          gameScene.symbols.currentSpinData.slot.freespin.totalWin = 0;
-          gameScene.symbols.currentSpinData.slot.freespin.items = [];
-        }
-      }
-    }
-    
-    // Free spins data cleared from SpinData (except original count)
+    // Do not mutate spinData here; other components rely on it for final totals.
     
     // Emit events to switch back to normal mode
     if (this.scene) {

@@ -165,9 +165,9 @@ export class Header {
 				return;
 			}
 			
-			// Keep winnings visible during scatter/bonus transitions
-			if (gameStateManager.isScatter || gameStateManager.isBonus) {
-				console.log('[Header] Skipping hide on SPIN (scatter/bonus active)');
+			// Keep winnings visible during scatter, bonus, or buy feature flow
+			if (gameStateManager.isScatter || gameStateManager.isBonus || gameStateManager.isBuyFeatureSpin) {
+				console.log('[Header] Skipping hide on SPIN (scatter/bonus/buy-feature active)');
 			} else {
 				// Show the winnings display with the stored winnings
 				this.hideWinningsDisplay();
@@ -178,9 +178,9 @@ export class Header {
 		// Listen for autoplay start to hide winnings display
 		gameEventManager.on(GameEventType.AUTO_START, () => {
 			console.log('[Header] Auto play started - showing winnings display');
-			// Keep winnings visible during scatter/bonus transitions (e.g., free spin autoplay)
-			if (gameStateManager.isScatter || gameStateManager.isBonus) {
-				console.log('[Header] Skipping hide on AUTO_START (scatter/bonus active)');
+			// Keep winnings visible during scatter/bonus/buy-feature (e.g., free spin autoplay)
+			if (gameStateManager.isScatter || gameStateManager.isBonus || gameStateManager.isBuyFeatureSpin) {
+				console.log('[Header] Skipping hide on AUTO_START (scatter/bonus/buy-feature active)');
 				return;
 			}
 			this.hideWinningsDisplay();
@@ -189,9 +189,9 @@ export class Header {
 		// Listen for reels start to hide winnings display
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[Header] Reels started - hiding winnings display');
-			// Keep winnings visible during scatter transition and bonus start
-			if (gameStateManager.isScatter || gameStateManager.isBonus) {
-				console.log('[Header] Skipping hide on REELS_START (scatter/bonus active)');
+			// Keep winnings visible during scatter, bonus, or buy feature first-spin
+			if (gameStateManager.isScatter || gameStateManager.isBonus || gameStateManager.isBuyFeatureSpin) {
+				console.log('[Header] Skipping hide on REELS_START (scatter/bonus/buy-feature active)');
 				return;
 			}
 			this.hideWinningsDisplay();

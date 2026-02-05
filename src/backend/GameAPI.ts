@@ -355,15 +355,31 @@ export class GameAPI {
             }
         }
 
+        const baseSlot: any = baseSpin?.slot || {};
+        const baseFs: any = baseSlot?.freespin || baseSlot?.freeSpin || {};
+        const baseTotalWinRaw = baseSlot?.totalWin ?? (baseSpin as any)?.totalWin;
+        const baseTotalWin = (typeof baseTotalWinRaw === 'number') ? baseTotalWinRaw : undefined;
+        const baseMultiplierValue = (typeof baseFs?.multiplierValue === 'number') ? baseFs.multiplierValue : undefined;
+
         const slotObj: any = {
             area: currentItem.area,
             paylines: currentItem.payline,
             freespin: {
-                count: baseSpin.slot?.freespin?.count ?? baseSpin.slot?.freeSpin?.count,
-                totalWin: baseSpin.slot?.freespin?.totalWin ?? baseSpin.slot?.freeSpin?.totalWin,
+                count: baseSlot?.freespin?.count ?? baseSlot?.freeSpin?.count,
+                totalWin: baseSlot?.freespin?.totalWin ?? baseSlot?.freeSpin?.totalWin,
                 items
             }
         };
+        if (typeof baseMultiplierValue === 'number') {
+            slotObj.freespin.multiplierValue = baseMultiplierValue;
+        }
+        if (typeof baseTotalWin === 'number') {
+            slotObj.totalWin = baseTotalWin;
+        }
+        // Keep both shapes around for compatibility with callers checking either key.
+        if (!slotObj.freeSpin) {
+            slotObj.freeSpin = slotObj.freespin;
+        }
 
         try {
             const sourceTumbles =
