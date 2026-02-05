@@ -172,6 +172,8 @@ export class Symbols {
   private dialogListenerSetup: boolean = false;
   private scatterResetHandledForBonusStart: boolean = false;
   private freeSpinItemIndex: number = 0;
+  // Cached total win calculated before freespin dialog is shown (buy feature / scatter trigger)
+  private cachedTotalWin: number = 0;
   private skipReelDropsActive: boolean = false;
   private skipReelDropsPending: boolean = false;
   private skipInputEnabled: boolean = false;
@@ -1017,6 +1019,11 @@ export class Symbols {
 
   public startScatterAnimationSequence(mockData: any): void {
     console.log('[Symbols] Starting scatter animation sequence');
+    // Cache total win from the trigger spin data so TotalW_BZ uses the buy-feature freeSpin data
+    if (this.cachedTotalWin <= 0) {
+      this.cachedTotalWin = this.calculateTotalWinFromSpinData();
+      console.log(`[Symbols] Cached total win before freespin dialog: ${this.cachedTotalWin}`);
+    }
     this.hideWinningOverlay();
     const scatterRevealDelay = gameStateManager.isBuyFeatureSpin ? 0 : 300;
     this.scatterAnimationManager?.setConfig({ scatterRevealDelay });
@@ -1474,6 +1481,84 @@ export class Symbols {
     console.log('[Symbols] Retrigger animation completed');
   }
 
+  /**
+   * Calculate total win from spinData using sugar_wonderland logic.
+   */
+  private calculateTotalWinFromSpinData(): number {
+    let totalWin = 0;
+    try {
+      const slot: any = this.currentSpinData?.slot;
+      if (!slot) return 0;
+
+      if (typeof slot.totalWin === 'number') {
+        totalWin = slot.totalWin;
+        if (totalWin > 0) {
+          console.log(`[Symbols] Using spinData.slot.totalWin: ${totalWin}`);
+          return totalWin;
+        }
+      }
+
+      const freespinData = slot.freespin || slot.freeSpin;
+      let itemsSum = 0;
+      let hasItems = false;
+
+      // Sum wins from freespin items
+      if (freespinData?.items && Array.isArray(freespinData.items)) {
+        hasItems = true;
+        itemsSum = freespinData.items.reduce((sum: number, item: any) => {
+          const perSpinTotal =
+            (typeof item?.totalWin === 'number' && item.totalWin > 0)
+              ? item.totalWin
+              : (item?.subTotalWin || 0);
+          return sum + perSpinTotal;
+        }, 0);
+        totalWin += itemsSum;
+      }
+
+      // Add multiplierValue if present (may live on freeSpin or freespin)
+      try {
+        const mvRaw =
+          (slot as any)?.freeSpin?.multiplierValue ??
+          (slot as any)?.freespin?.multiplierValue ??
+          (freespinData as any)?.multiplierValue ??
+          0;
+        const multiplierValue = Number(mvRaw) || 0;
+        if (multiplierValue > 0) {
+          totalWin += multiplierValue;
+        }
+      } catch { }
+
+      // Sum wins from slot.paylines/tumbles only when item totals are absent.
+      if (!hasItems || itemsSum <= 0) {
+        if (Array.isArray(slot.paylines) && slot.paylines.length > 0) {
+          totalWin += this.calculateTotalWinFromPaylines(slot.paylines);
+        }
+
+        if (Array.isArray(slot.tumbles) && slot.tumbles.length > 0) {
+          const tumblesWin = slot.tumbles.reduce((sum: number, tumble: any) => {
+            const win = Number(tumble?.win || 0);
+            return sum + (isNaN(win) ? 0 : win);
+          }, 0);
+          totalWin += tumblesWin;
+        }
+      }
+    } catch (e) {
+      console.warn('[Symbols] Failed to calculate total win from spinData', e);
+    }
+
+    return totalWin;
+  }
+
+  private calculateTotalWinFromPaylines(paylines: any[]): number {
+    if (!Array.isArray(paylines) || paylines.length === 0) return 0;
+    let total = 0;
+    for (const payline of paylines) {
+      const win = Number(payline?.win ?? 0);
+      total += isNaN(win) ? 0 : win;
+    }
+    return total;
+  }
+
   private async showCongratsDialogAfterDelay(): Promise<void> {
     console.log('[Symbols] Showing congrats dialog');
 
@@ -1502,23 +1587,26 @@ export class Symbols {
       gameScene.dialogs.hideDialog();
     }
 
-    // Calculate total win
+    // Calculate total win (prefer cached total from trigger spin, then spinData, then cumulative)
     let totalWin = 0;
-    try {
-      const bonusHeader = gameScene?.bonusHeader;
-      if (bonusHeader?.getCumulativeBonusWin) {
-        totalWin = Number(bonusHeader.getCumulativeBonusWin()) || 0;
-      }
-    } catch { /* ignore */ }
-
-    if (totalWin === 0 && this.currentSpinData?.slot) {
-      const freespinData = this.currentSpinData.slot.freespin || this.currentSpinData.slot.freeSpin;
-      if (typeof freespinData?.totalWin === 'number') {
-        totalWin = Number(freespinData.totalWin) || 0;
-      } else if (freespinData?.items) {
-        totalWin = freespinData.items.reduce((sum: number, item: any) => {
-          return sum + (item.totalWin || item.subTotalWin || 0);
-        }, 0);
+    if (this.cachedTotalWin > 0) {
+      totalWin = this.cachedTotalWin;
+      this.cachedTotalWin = 0;
+      console.log(`[Symbols] Using cached total win for TotalW_BZ: ${totalWin}`);
+    } else {
+      let spinDataTotal = 0;
+      try {
+        spinDataTotal = this.calculateTotalWinFromSpinData();
+      } catch { }
+      if (spinDataTotal > 0) {
+        totalWin = spinDataTotal;
+      } else {
+        try {
+          const bonusHeader = gameScene?.bonusHeader;
+          if (bonusHeader?.getCumulativeBonusWin) {
+            totalWin = Number(bonusHeader.getCumulativeBonusWin()) || 0;
+          }
+        } catch { /* ignore */ }
       }
     }
 
@@ -1576,14 +1664,25 @@ export class Symbols {
         }
       } catch { }
 
-      // Fallbacks: single item or lowest spinsLeft (latest spin)
+      // Prefer matching by remaining spins when available (current spin = remaining + 1)
+      try {
+        const rem = this.freeSpinAutoplaySpinsRemaining;
+        if (typeof rem === 'number' && rem > 0) {
+          const targetB = items.find((item: any) => Number(item?.spinsLeft) === rem + 1);
+          if (targetB) return targetB;
+          const targetA = items.find((item: any) => Number(item?.spinsLeft) === rem);
+          if (targetA) return targetA;
+        }
+      } catch { }
+
+      // Fallbacks: single item or highest spinsLeft (earliest spin)
       if (items.length === 1) return items[0];
       const withSpinsLeft = items
         .filter((item: any) => typeof item?.spinsLeft === 'number' && item.spinsLeft > 0)
-        .sort((a: any, b: any) => a.spinsLeft - b.spinsLeft);
+        .sort((a: any, b: any) => b.spinsLeft - a.spinsLeft);
       if (withSpinsLeft.length) return withSpinsLeft[0];
 
-      return items[items.length - 1];
+      return items[0];
     } catch {
       return null;
     }
@@ -2301,12 +2400,11 @@ export class Symbols {
     idleAnimName: string
   ): Promise<void> {
     this.isBuyFeatureTransitionComplete = false;
-    // Hide win tracker + win bar text before merge/transition begins
+    // Hide win tracker only; keep total win visible so it carries through to end of free spins
     try {
       const gameScene: any = this.scene as any;
       gameScene?.winTracker?.hideWithFade?.(150);
-      gameScene?.header?.hideWinningsDisplay?.();
-      gameScene?.bonusHeader?.hideWinningsDisplay?.();
+      // Do NOT hide header/bonusHeader winnings - total win must stay visible for cumulative tracking
     } catch {}
     await this.playBuyFeatureScatterMerge(scatterSymbols, winAnimName, idleAnimName);
     // Transition_BZ already started immediately after explosion in playBuyFeatureScatterMerge

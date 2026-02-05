@@ -17,6 +17,8 @@ export class BonusHeader {
 	private hasStartedBonusTracking: boolean = false;
 		// Seed value from scatter trigger to start cumulative tracking in bonus
 	private scatterBaseWin: number = 0;
+	// If true, the next bonus spin's total should NOT be added (already seeded).
+	private skipNextSpinAccumulation: boolean = false;
 	// Track if we've already accumulated this spin's total (prevents double add with WIN_STOP)
 	private accumulatedThisSpin: boolean = false;
 	// Multiplier arrival progressive display
@@ -31,6 +33,8 @@ export class BonusHeader {
 	private scene: Scene | null = null;
 	// Track if we just seeded the win to prevent immediate text overrides
 	private justSeededWin: boolean = false;
+	// Suppress win bar text while TotalW_BZ dialog is showing
+	private suppressWinbarDisplay: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -61,9 +65,30 @@ export class BonusHeader {
 		
 		// Set up event listeners for winnings updates (like regular header)
 		this.setupWinningsEventListener();
+
+		// Hide win bar text while TotalW_BZ dialog is visible
+		this.setupWinbarSuppressionListeners(scene);
 		
 		// Initialize winnings display - start hidden
 		this.initializeWinnings();
+	}
+
+	private setupWinbarSuppressionListeners(scene: Scene): void {
+		scene.events.on('dialogShown', (dialogType: string) => {
+			if (dialogType === 'TotalW_BZ') {
+				this.suppressWinbarDisplay = true;
+				this.forceHideWinningsDisplay();
+				console.log('[BonusHeader] TotalW_BZ shown - suppressing winbar display');
+			}
+		});
+		scene.events.on('hideBonusHeader', () => {
+			this.suppressWinbarDisplay = false;
+		});
+		scene.events.on('setBonusMode', (isBonus: boolean) => {
+			if (!isBonus) {
+				this.suppressWinbarDisplay = false;
+			}
+		});
 	}
 
 	private createBonusHeaderElements(scene: Scene, assetScale: number): void {
@@ -92,6 +117,9 @@ export class BonusHeader {
 		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.18);
 	}
 
+	// Depth above RadialLightTransition overlay (20000) so Total win stays visible during candy/radial light
+	private static readonly WIN_BAR_DEPTH = 20001;
+
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
 		this.youWonText = scene.add.text(x, y - 7, 'YOU WON', {
@@ -100,7 +128,7 @@ export class BonusHeader {
 			fontFamily: 'Poppins-Bold',
 			stroke: '#004D00',
 			strokeThickness: 3
-		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
+		}).setOrigin(0.5, 0.5).setDepth(BonusHeader.WIN_BAR_DEPTH); // Above radial light overlay (20000)
 		// Don't add to container - add directly to scene so depth works correctly
 
 		// Line 2: amount value
@@ -113,7 +141,7 @@ export class BonusHeader {
 			fontFamily: 'Poppins-Bold',
 			stroke: '#004D00',
 			strokeThickness: 3
-		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
+		}).setOrigin(0.5, 0.5).setDepth(BonusHeader.WIN_BAR_DEPTH); // Above radial light overlay (20000)
 		// Don't add to container - add directly to scene so depth works correctly
 		
 		// Store winbar center for multiplier flight target
@@ -129,6 +157,9 @@ export class BonusHeader {
 	 * Update the winnings display in the bonus header with scale in animation
 	 */
 	public updateWinningsDisplay(winnings: number): void {
+		if (this.suppressWinbarDisplay) {
+			return;
+		}
 		if (this.amountText && this.youWonText) {
 			this.currentWinnings = winnings;
 			const formattedWinnings = this.formatCurrency(winnings);
@@ -204,10 +235,153 @@ export class BonusHeader {
 		this.cumulativeBonusWin = this.scatterBaseWin;
 		this.hasStartedBonusTracking = true;
 		this.justSeededWin = true; // Flag that we just seeded to prevent immediate text overrides
+		this.skipNextSpinAccumulation = false;
 		
 		// For bonus mode, we only show per-tumble "YOU WON" values.
 		// Seed the cumulative tracker silently; UI will be driven by tumble events.
 		console.log(`[BonusHeader] Seeded cumulative bonus win with scatter base (tracking only): $${this.scatterBaseWin}`);
+	}
+
+	/**
+	 * Seed cumulative total from the first free spin item total (buy feature flow).
+	 * This shows the first spin's total at the start of free spins and avoids double-adding it later.
+	 */
+	public seedFromFirstFreeSpinItem(spinData: any): void {
+		try {
+			const triggerWin = this.calculateTriggerSpinWin(spinData);
+			if (triggerWin > 0) {
+				this.scatterBaseWin = triggerWin;
+				this.cumulativeBonusWin = triggerWin;
+				this.hasStartedBonusTracking = true;
+				this.justSeededWin = true;
+				this.skipNextSpinAccumulation = false;
+				console.log(`[BonusHeader] Seeded cumulative from trigger spin win: $${triggerWin}`);
+				return;
+			}
+		} catch { }
+	}
+
+	private calculateTriggerSpinWin(spinData: any): number {
+		try {
+			const slot: any = spinData?.slot;
+			if (!slot) return 0;
+			let total = 0;
+			if (Array.isArray(slot.paylines)) {
+				for (const payline of slot.paylines) {
+					const win = Number(payline?.win ?? 0);
+					total += isNaN(win) ? 0 : win;
+				}
+			}
+			if (Array.isArray(slot.tumbles)) {
+				for (const tumble of slot.tumbles) {
+					const win = Number(tumble?.win ?? 0);
+					total += isNaN(win) ? 0 : win;
+				}
+			}
+			return total;
+		} catch {
+			return 0;
+		}
+	}
+
+	private getCurrentFreeSpinItem(spinData: any): any | null {
+		try {
+			const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+			const items = Array.isArray(fs?.items) ? fs.items : [];
+			if (!items.length) return null;
+
+			// Prefer matching area when available (most reliable)
+			const slotArea = spinData?.slot?.area;
+			if (Array.isArray(slotArea)) {
+				const areaJson = JSON.stringify(slotArea);
+				const match = items.find((item: any) =>
+					Array.isArray(item?.area) && JSON.stringify(item.area) === areaJson
+				);
+				if (match) return match;
+			}
+
+			if (items.length === 1) return items[0];
+
+			// Try to align with Symbols' remaining counter when available
+			try {
+				const symbolsComponent = (this.bonusHeaderContainer.scene as any)?.symbols;
+				const rem = symbolsComponent?.freeSpinAutoplaySpinsRemaining;
+				if (typeof rem === 'number') {
+					const targetB = items.find((item: any) => Number(item?.spinsLeft) === rem + 1);
+					if (targetB) return targetB;
+					const targetA = items.find((item: any) => Number(item?.spinsLeft) === rem);
+					if (targetA) return targetA;
+				}
+			} catch { }
+
+			// Fallbacks: highest spinsLeft (earliest spin) or first item
+			const withSpinsLeft = items
+				.filter((item: any) => typeof item?.spinsLeft === 'number' && item.spinsLeft > 0)
+				.sort((a: any, b: any) => b.spinsLeft - a.spinsLeft);
+			if (withSpinsLeft.length) return withSpinsLeft[0];
+
+			return items[0];
+		} catch {
+			return null;
+		}
+	}
+
+	private calculateBackendTotalWin(spinData: any): number {
+		try {
+			const slot: any = spinData?.slot;
+			if (!slot) return 0;
+
+			// Prefer backend totalWin if provided
+			if (typeof slot.totalWin === 'number' && slot.totalWin > 0) {
+				return Number(slot.totalWin);
+			}
+
+			let totalWin = 0;
+			const freespinData = slot.freespin || slot.freeSpin;
+			let itemsSum = 0;
+			let hasItems = false;
+
+			// Sum wins from freespin items
+			if (freespinData?.items && Array.isArray(freespinData.items)) {
+				hasItems = true;
+				itemsSum = freespinData.items.reduce((sum: number, item: any) => {
+					const perSpinTotal =
+						(typeof item?.totalWin === 'number' && item.totalWin > 0)
+							? item.totalWin
+							: (item?.subTotalWin || 0);
+					return sum + perSpinTotal;
+				}, 0);
+				totalWin += itemsSum;
+			}
+
+			// Add multiplierValue if present (may live on freeSpin or freespin)
+			try {
+				const mvRaw =
+					(slot as any)?.freeSpin?.multiplierValue ??
+					(slot as any)?.freespin?.multiplierValue ??
+					(freespinData as any)?.multiplierValue ??
+					0;
+				const multiplierValue = Number(mvRaw) || 0;
+				if (multiplierValue > 0) {
+					totalWin += multiplierValue;
+				}
+			} catch { }
+
+			// As a last resort, include paylines/tumbles if we have no item totals.
+			// Avoid double-counting per-spin tumbles that are already included in item totals.
+			if (!hasItems || itemsSum <= 0) {
+				if (Array.isArray(slot.paylines) && slot.paylines.length > 0) {
+					totalWin += this.calculateTotalWinFromPaylines(slot.paylines);
+				}
+				if (Array.isArray(slot.tumbles) && slot.tumbles.length > 0) {
+					totalWin += this.calculateTotalWinFromTumbles(slot.tumbles);
+				}
+			}
+
+			return totalWin;
+		} catch {
+			return 0;
+		}
 	}
 
 	/**
@@ -231,9 +405,28 @@ export class BonusHeader {
 	}
 
 	/**
-	 * Hide the winnings display (both "YOU WON" text and amount) with shrink animation
+	 * Show the cumulative total immediately (e.g. when bonus header becomes visible).
+	 * Used so the first spin's win (buy feature scatter) is not hidden - seamless transition from main header.
+	 */
+	public showCumulativeTotalIfReady(): void {
+		if (this.cumulativeBonusWin > 0 && this.youWonText && this.amountText) {
+			this.youWonText.setText('TOTAL WIN');
+			this.showWinningsDisplay(this.cumulativeBonusWin);
+			this.showingTotalWin = true;
+			console.log(`[BonusHeader] Showing cumulative total immediately: $${this.cumulativeBonusWin}`);
+		}
+	}
+
+	/**
+	 * Hide the winnings display (both "YOU WON" text and amount) with shrink animation.
+	 * During bonus mode with a cumulative total, never hide – keep the total win visible in the win bar.
 	 */
 	public hideWinningsDisplay(): void {
+		// Never hide Total win during bonus – keep it visible when bonus game starts and throughout
+		if (gameStateManager.isBonus || gameStateManager.isBonusFinished) {
+			console.log('[BonusHeader] Skipping hide – keeping total win visible during bonus');
+			return;
+		}
 		if (this.amountText && this.youWonText) {
 			// Stop any existing tweens on these objects
 			if (this.scene) {
@@ -274,9 +467,31 @@ export class BonusHeader {
 	}
 
 	/**
+	 * Force-hide the win bar text (used when TotalW_BZ dialog is shown).
+	 */
+	public forceHideWinningsDisplay(): void {
+		if (this.amountText && this.youWonText) {
+			try {
+				if (this.scene) {
+					this.scene.tweens.killTweensOf(this.youWonText);
+					this.scene.tweens.killTweensOf(this.amountText);
+				}
+			} catch { }
+			this.youWonText.setVisible(false);
+			this.amountText.setVisible(false);
+			this.youWonText.setScale(1);
+			this.amountText.setScale(1);
+			console.log('[BonusHeader] Winbar display force-hidden');
+		}
+	}
+
+	/**
 	 * Show the winnings display with both "YOU WON" text and amount with scale in animation
 	 */
 	public showWinningsDisplay(winnings: number): void {
+		if (this.suppressWinbarDisplay) {
+			return;
+		}
 		if (this.amountText && this.youWonText) {
 			const formattedWinnings = this.formatCurrency(winnings);
 			
@@ -458,31 +673,21 @@ export class BonusHeader {
 				const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
 				const spinData = symbolsComponent?.currentSpinData;
 				
-				// Prefer totalWin from the matching freespin item (backend per-spin total),
-				// matched by area so we always use the correct item for this spin.
+				// Prefer totalWin from the current freespin item (backend per-spin total).
 				// Fall back to subTotalWin, then to a manual tumble+payline sum.
 				let spinWin = 0;
 				try {
 					const slotAny: any = spinData?.slot || {};
-					const fs = slotAny.freespin || slotAny.freeSpin;
-					const items = Array.isArray(fs?.items) ? fs.items : [];
-					const area = slotAny.area;
-
-					if (items.length > 0 && Array.isArray(area)) {
-						const areaJson = JSON.stringify(area);
-						const currentFreeSpinItem = items.find((item: any) =>
-							Array.isArray(item?.area) && JSON.stringify(item.area) === areaJson
-						);
-						if (currentFreeSpinItem) {
-							const rawItemTotal =
-								(currentFreeSpinItem as any).totalWin ??
-								(currentFreeSpinItem as any).subTotalWin ??
-								0;
-							const itemTotal = Number(rawItemTotal);
-							if (!isNaN(itemTotal) && itemTotal > 0) {
-								spinWin = itemTotal;
-								console.log(`[BonusHeader] TUMBLE_SEQUENCE_DONE: using freespin item totalWin=$${itemTotal}`);
-							}
+					const currentItem = this.getCurrentFreeSpinItem(spinData);
+					if (currentItem) {
+						const rawItemTotal =
+							(currentItem as any).totalWin ??
+							(currentItem as any).subTotalWin ??
+							0;
+						const itemTotal = Number(rawItemTotal);
+						if (!isNaN(itemTotal) && itemTotal > 0) {
+							spinWin = itemTotal;
+							console.log(`[BonusHeader] TUMBLE_SEQUENCE_DONE: using freespin item totalWin=$${itemTotal}`);
 						}
 					}
 
@@ -512,8 +717,14 @@ export class BonusHeader {
 				// appears after *all* win mechanics for the spin (tumbles + multipliers)
 				// have finished, avoiding any label flicker during tumble updates.
 				if (spinWin > 0) {
-					this.cumulativeBonusWin += spinWin;
-					this.accumulatedThisSpin = true;
+					if (this.skipNextSpinAccumulation) {
+						this.accumulatedThisSpin = true;
+						this.skipNextSpinAccumulation = false;
+						console.log('[BonusHeader] TUMBLE_SEQUENCE_DONE: skipping accumulation (first spin already seeded)');
+					} else {
+						this.cumulativeBonusWin += spinWin;
+						this.accumulatedThisSpin = true;
+					}
 					console.log(`[BonusHeader] TUMBLE_SEQUENCE_DONE: added spinWin=$${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}, multipliersActive=${this.multipliersActive}`);
 				}
 			} catch {}
@@ -687,17 +898,36 @@ export class BonusHeader {
 			}
 		});
 
-		// Listen for spin events to hide winnings display at start of manual spin
+		// Listen for spin events - do NOT hide winnings during bonus; keep cumulative total visible
 		gameEventManager.on(GameEventType.SPIN, () => {
+			if (gameStateManager.isBonus && this.cumulativeBonusWin > 0) {
+				console.log('[BonusHeader] SPIN during bonus - keeping total win visible for cumulative tracking');
+				return;
+			}
 			console.log('[BonusHeader] Manual spin started - hiding winnings display');
 			this.hideWinningsDisplay();
 		});
 
-		// Listen for autoplay start to hide winnings display
+		// Listen for autoplay start - do NOT hide winnings during bonus; keep cumulative total visible
 		gameEventManager.on(GameEventType.AUTO_START, () => {
+			if (gameStateManager.isBonus && this.cumulativeBonusWin > 0) {
+				console.log('[BonusHeader] AUTO_START during bonus - keeping total win visible for cumulative tracking');
+				return;
+			}
 			console.log('[BonusHeader] Auto play started - hiding winnings display');
 			this.hideWinningsDisplay();
 		});
+
+		// After radial light transition (dialogAnimationsComplete), re-show cumulative total
+		// so it stays visible when transitioning from Free Spin dialog to first bonus spin
+		if (this.scene) {
+			this.scene.events.on('dialogAnimationsComplete', () => {
+				if (gameStateManager.isBonus && this.cumulativeBonusWin > 0 && this.bonusHeaderContainer?.visible) {
+					this.showCumulativeTotalIfReady();
+					console.log('[BonusHeader] dialogAnimationsComplete: re-showing cumulative total after radial light transition');
+				}
+			});
+		}
 
 		// Listen for reels start to reset per-spin bonus state
 		gameEventManager.on(GameEventType.REELS_START, () => {
@@ -841,24 +1071,13 @@ export class BonusHeader {
 			// Calculate the total win for this spin (includes paylines + tumbles + multipliers)
 			let spinWin = 0;
 			try {
-				const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
-				if (fs?.items && Array.isArray(fs.items)) {
-					// Find the current freespin item by matching the area
-					const slotAny: any = spinData?.slot || {};
-					const area = slotAny.area;
-					if (Array.isArray(area)) {
-						const areaJson = JSON.stringify(area);
-						const currentFreeSpinItem = fs.items.find((item: any) =>
-							Array.isArray(item?.area) && JSON.stringify(item.area) === areaJson
-						);
-						if (currentFreeSpinItem) {
-							// Use totalWin if available (includes multipliers), otherwise use subTotalWin
-							const rawWin = (currentFreeSpinItem as any).totalWin ?? (currentFreeSpinItem as any).subTotalWin;
-							if (typeof rawWin === 'number' && rawWin > 0) {
-								spinWin = rawWin;
-								console.log(`[BonusHeader] WIN_STOP (bonus): using item win=$${spinWin} from freespin item`);
-							}
-						}
+				const currentItem = this.getCurrentFreeSpinItem(spinData);
+				if (currentItem) {
+					// Use totalWin if available (includes multipliers), otherwise use subTotalWin
+					const rawWin = (currentItem as any).totalWin ?? (currentItem as any).subTotalWin;
+					if (typeof rawWin === 'number' && rawWin > 0) {
+						spinWin = rawWin;
+						console.log(`[BonusHeader] WIN_STOP (bonus): using item win=$${spinWin} from freespin item`);
 					}
 				}
 				// Fallback: if freespin item total not available, manually sum paylines + tumbles
@@ -887,16 +1106,51 @@ export class BonusHeader {
 			// If this spin's win has not yet been accumulated (no TUMBLE_SEQUENCE_DONE or it had 0),
 			// add it now. Otherwise, keep the already-accumulated total.
 			if (!this.accumulatedThisSpin) {
-				this.cumulativeBonusWin += (spinWin || 0);
-				this.accumulatedThisSpin = true;
+				if (this.skipNextSpinAccumulation) {
+					this.accumulatedThisSpin = true;
+					this.skipNextSpinAccumulation = false;
+					console.log('[BonusHeader] WIN_STOP (bonus): skipping accumulation (first spin already seeded)');
+				} else {
+					this.cumulativeBonusWin += (spinWin || 0);
+					this.accumulatedThisSpin = true;
+				}
 			}
 
 			console.log(`[BonusHeader] WIN_STOP (bonus): finalized cumulativeBonusWin=$${this.cumulativeBonusWin} (spinWin=$${spinWin})`);
 			console.log(`[BonusHeader] WIN_STOP (bonus): multiplier status - expected=${this.expectedMultiplierCount}, received=${this.receivedMultiplierCount}, complete=${this.allMultipliersComplete}`);
 
-			// Show "TOTAL WIN" with the current spin's total after multipliers complete
+			// If this was the last free spin, align the cumulative total to backend totalWin
+			try {
+				let isFinalSpin = false;
+				if (gameStateManager.isBonusFinished) {
+					isFinalSpin = true;
+				} else {
+					const currentItem = this.getCurrentFreeSpinItem(spinData);
+					if (typeof currentItem?.spinsLeft === 'number' && currentItem.spinsLeft <= 1) {
+						isFinalSpin = true;
+					}
+					try {
+						const symbolsComponent = (this.bonusHeaderContainer.scene as any)?.symbols;
+						const rem = symbolsComponent?.freeSpinAutoplaySpinsRemaining;
+						if (typeof rem === 'number' && rem <= 0) {
+							isFinalSpin = true;
+						}
+					} catch { }
+				}
+
+				if (isFinalSpin) {
+					const backendTotal = this.calculateBackendTotalWin(spinData);
+					if (backendTotal > 0) {
+						this.cumulativeBonusWin = backendTotal;
+						this.hasStartedBonusTracking = true;
+						console.log(`[BonusHeader] WIN_STOP (bonus): aligned cumulative total to backend totalWin=$${backendTotal}`);
+					}
+				}
+			} catch { }
+
+			// Show "TOTAL WIN" with the cumulative total (all spins including scatter trigger) after multipliers complete
 			const showTotalWinForSpin = () => {
-				console.log(`[BonusHeader] showTotalWinForSpin called: spinWin=${spinWin}, expectedMultipliers=${this.expectedMultiplierCount}, received=${this.receivedMultiplierCount}, complete=${this.allMultipliersComplete}`);
+				console.log(`[BonusHeader] showTotalWinForSpin called: spinWin=${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}, expectedMultipliers=${this.expectedMultiplierCount}, received=${this.receivedMultiplierCount}, complete=${this.allMultipliersComplete}`);
 
 				// SAFETY: Only show TOTAL WIN if all multipliers are truly complete
 				if (this.expectedMultiplierCount > 0 && !this.allMultipliersComplete) {
@@ -912,7 +1166,8 @@ export class BonusHeader {
 				const displayDelay = this.expectedMultiplierCount > 0 ? 300 : 0;
 
 				this.scene?.time.delayedCall(displayDelay, () => {
-					if (spinWin > 0) {
+					// Always show cumulative total (includes scatter trigger win + all bonus spins)
+					if (this.cumulativeBonusWin > 0) {
 						// Stop any existing tweens to prevent conflicts
 						if (this.scene) {
 							this.scene.tweens.killTweensOf(this.youWonText);
@@ -926,13 +1181,12 @@ export class BonusHeader {
 							console.log('[BonusHeader] Set youWonText to "TOTAL WIN" and visible');
 						}
 
-						// Show the display with the spin total
-						this.showWinningsDisplay(spinWin);
-						console.log(`[BonusHeader] WIN_STOP (bonus): ✅ SHOWING "TOTAL WIN" with spin total=$${spinWin}`);
+						// Show the cumulative total (scatter + all spins so far)
+						this.showWinningsDisplay(this.cumulativeBonusWin);
+						console.log(`[BonusHeader] WIN_STOP (bonus): ✅ SHOWING "TOTAL WIN" with cumulative total=$${this.cumulativeBonusWin}`);
 					} else {
-						// No win this spin – leave the existing TOTAL WIN (or previous state)
-						// visible and do not change the label or hide the display.
-						console.log('[BonusHeader] WIN_STOP (bonus): spinWin is 0, leaving existing winnings display unchanged');
+						// No cumulative win yet – leave the existing display unchanged
+						console.log('[BonusHeader] WIN_STOP (bonus): cumulativeBonusWin is 0, leaving existing winnings display unchanged');
 					}
 
 					// Always emit event to signal that spin display phase is complete

@@ -338,6 +338,9 @@ export class AudioManager {
 				if ('setVolume' in to && typeof (to as any).setVolume === 'function') {
 					(to as any).setVolume(0);
 				}
+				if ('loop' in to && typeof (to as any).loop !== 'undefined') {
+					(to as any).loop = true;
+				}
 				to.play();
 				this.currentMusic = nextType;
 				const steps = 10;
@@ -369,6 +372,9 @@ export class AudioManager {
 			// Ensure target starts at 0 volume
 			if ('setVolume' in to && typeof (to as any).setVolume === 'function') {
 				(to as any).setVolume(0);
+			}
+			if ('loop' in to && typeof (to as any).loop !== 'undefined') {
+				(to as any).loop = true;
 			}
 			if (!to.isPlaying) to.play();
 
@@ -418,9 +424,13 @@ export class AudioManager {
 		const music = this.musicInstances.get(musicType);
 		if (music) {
 			try {
+				// Ensure loop is set so bonus/free-spin music continues during bonus game
+				if ('loop' in music && typeof (music as any).loop !== 'undefined') {
+					(music as any).loop = true;
+				}
 				music.play();
 				this.currentMusic = musicType;
-				console.log(`[AudioManager] Playing ${musicType} background music`);
+				console.log(`[AudioManager] Playing ${musicType} background music (loop: true)`);
 				this.startAmbientAudio();
 			} catch (error) {
 				console.error(`[AudioManager] Error playing ${musicType} music:`, error);
