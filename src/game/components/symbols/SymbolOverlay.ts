@@ -233,18 +233,34 @@ export class SymbolOverlay {
     isDemo: boolean = false
   ): Phaser.GameObjects.Text {
     const fontSize = Math.max(40, Math.round(displayHeight * 0.5));
-    const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
     
     // Format the amount
     let textValue: string;
     try {
-      if (Number.isInteger(amount)) {
-        textValue = `${currencyPrefix}${amount}`;
+      const isDemoMode = isDemo || 
+        (this.scene as any)?.gameAPI?.getDemoState?.() ||
+        localStorage.getItem('demo') === 'true' ||
+        sessionStorage.getItem('demo') === 'true';
+      
+      if (isDemoMode) {
+        // Demo mode: show amount without currency prefix
+        if (Number.isInteger(amount)) {
+          textValue = `${amount}`;
+        } else {
+          textValue = Number(amount).toFixed(2);
+        }
       } else {
-        textValue = `${currencyPrefix}${Number(amount).toFixed(2)}`;
+        // Use currency code (prefer code over symbol, matching WinTracker pattern)
+        const formattedAmount = amount.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+        const currencyCode = CurrencyManager.getCurrencyCode();
+        textValue = currencyCode ? `${currencyCode}\u00A0${formattedAmount}` : formattedAmount;
       }
     } catch {
-      textValue = `${currencyPrefix}${amount}`;
+      // Fallback to basic formatting if anything fails
+      textValue = `${amount}`;
     }
     
     // Create the text object

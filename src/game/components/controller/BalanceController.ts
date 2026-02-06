@@ -17,6 +17,7 @@ export class BalanceController {
   private callbacks: BalanceControllerCallbacks;
   private balanceAmountText!: Phaser.GameObjects.Text;
   private balanceDollarText!: Phaser.GameObjects.Text;
+  private balanceLabelContainer!: Phaser.GameObjects.Container;
   private pendingBalanceUpdate: { balance: number; bet: number; winnings?: number } | null = null;
 
   constructor(
@@ -47,18 +48,71 @@ export class BalanceController {
     balanceBg.setDepth(8);
     this.controllerContainer.add(balanceBg);
 
-    const balanceLabel = scene.add.text(
-      balanceX,
-      balanceY - 8,
-      'BALANCE',
+    // Create container for balance label parts
+    this.balanceLabelContainer = scene.add.container(balanceX, balanceY - 8);
+    this.balanceLabelContainer.setDepth(9);
+
+    const balanceText = 'BALANCE';
+    const currencyCode = isDemoBalance ? '' : CurrencyManager.getCurrencyCode();
+
+    let currentX = 0;
+
+    // "BALANCE" - green, poppins-bold
+    const balanceWordText = scene.add.text(
+      currentX, 0, balanceText,
       {
         fontSize: '12px',
-        color: '#00ff00',
+        color: '#00ff00', // Green color
         fontFamily: 'poppins-bold'
       }
-    ).setOrigin(0.5, 0.5).setDepth(9);
-    this.controllerContainer.add(balanceLabel);
+    ).setOrigin(0, 0.5);
+    this.balanceLabelContainer.add(balanceWordText);
+    currentX += balanceWordText.width;
 
+    // Add currency code in parentheses if available
+    if (currencyCode) {
+      // " (" - green, poppins-regular
+      const leftParenText = scene.add.text(
+        currentX, 0, ' (',
+        {
+          fontSize: '12px',
+          color: '#00ff00', // Green color
+          fontFamily: 'poppins-regular'
+        }
+      ).setOrigin(0, 0.5);
+      this.balanceLabelContainer.add(leftParenText);
+      currentX += leftParenText.width;
+      
+      // Currency code - white, poppins-regular
+      const currencyText = scene.add.text(
+        currentX, 0, currencyCode,
+        {
+          fontSize: '12px',
+          color: '#ffffff', // White color
+          fontFamily: 'poppins-regular'
+        }
+      ).setOrigin(0, 0.5);
+      this.balanceLabelContainer.add(currencyText);
+      currentX += currencyText.width;
+      
+      // ")" - green, poppins-regular
+      const rightParenText = scene.add.text(
+        currentX, 0, ')',
+        {
+          fontSize: '12px',
+          color: '#00ff00', // Green color
+          fontFamily: 'poppins-regular'
+        }
+      ).setOrigin(0, 0.5);
+      this.balanceLabelContainer.add(rightParenText);
+    }
+
+    // Center the container by adjusting its position
+    const totalWidth = currentX;
+    this.balanceLabelContainer.setX(balanceX - totalWidth / 2);
+    this.controllerContainer.add(this.balanceLabelContainer);
+
+    // Amount text (no currency prefix)
     this.balanceAmountText = scene.add.text(
       balanceX,
       balanceY + 8,
@@ -71,6 +125,7 @@ export class BalanceController {
     ).setOrigin(0.5, 0.5).setDepth(9);
     this.controllerContainer.add(this.balanceAmountText);
 
+    // Hide old currency text (kept for compatibility but not visible)
     this.balanceDollarText = scene.add.text(
       balanceX,
       balanceY + 8,
@@ -81,10 +136,8 @@ export class BalanceController {
         fontFamily: 'poppins-regular'
       }
     ).setOrigin(0.5, 0.5).setDepth(9);
-    this.balanceDollarText.setVisible(!isDemoBalance);
+    this.balanceDollarText.setVisible(false);
     this.controllerContainer.add(this.balanceDollarText);
-
-    this.layoutCurrencyPair(balanceX, balanceY + 8, this.balanceDollarText, this.balanceAmountText, !!isDemoBalance, 6);
   }
 
   public updateBalanceAmount(balanceAmount: number): void {
@@ -92,14 +145,7 @@ export class BalanceController {
       this.balanceAmountText.setText(
         balanceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       );
-
-      const isDemo = this.callbacks.getGameAPI()?.getDemoState();
-      const scene = this.callbacks.getScene();
-      if (scene) {
-        const balanceX = scene.scale.width * 0.19;
-        const balanceY = this.balanceAmountText.y;
-        this.layoutCurrencyPair(balanceX, balanceY, this.balanceDollarText, this.balanceAmountText, !!isDemo, 6);
-      }
+      // Amount text is already centered, no need to reposition
     }
   }
 
@@ -143,12 +189,71 @@ export class BalanceController {
 
   public refreshCurrencySymbols(): void {
     const scene = this.callbacks.getScene();
-    if (!scene || !this.balanceAmountText || !this.balanceDollarText) return;
+    if (!scene || !this.balanceLabelContainer) return;
     const isDemo = this.callbacks.getGameAPI()?.getDemoState();
     const balanceX = scene.scale.width * 0.19;
-    const balanceY = this.balanceAmountText.y;
-    this.balanceDollarText.setText(CurrencyManager.getCurrencyGlyph());
-    this.layoutCurrencyPair(balanceX, balanceY, this.balanceDollarText, this.balanceAmountText, !!isDemo, 6);
+    
+    // Rebuild the label container with updated currency
+    this.balanceLabelContainer.removeAll(true);
+    
+    const balanceText = 'BALANCE';
+    const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
+
+    let currentX = 0;
+
+    // "BALANCE" - green, poppins-bold
+    const balanceWordText = scene.add.text(
+      currentX, 0, balanceText,
+      {
+        fontSize: '12px',
+        color: '#00ff00',
+        fontFamily: 'poppins-bold'
+      }
+    ).setOrigin(0, 0.5);
+    this.balanceLabelContainer.add(balanceWordText);
+    currentX += balanceWordText.width;
+
+    // Add currency code in parentheses if available
+    if (currencyCode) {
+      // " (" - green, poppins-regular
+      const leftParenText = scene.add.text(
+        currentX, 0, ' (',
+        {
+          fontSize: '12px',
+          color: '#00ff00',
+          fontFamily: 'poppins-regular'
+        }
+      ).setOrigin(0, 0.5);
+      this.balanceLabelContainer.add(leftParenText);
+      currentX += leftParenText.width;
+      
+      // Currency code - white, poppins-regular
+      const currencyText = scene.add.text(
+        currentX, 0, currencyCode,
+        {
+          fontSize: '12px',
+          color: '#ffffff',
+          fontFamily: 'poppins-regular'
+        }
+      ).setOrigin(0, 0.5);
+      this.balanceLabelContainer.add(currencyText);
+      currentX += currencyText.width;
+      
+      // ")" - green, poppins-regular
+      const rightParenText = scene.add.text(
+        currentX, 0, ')',
+        {
+          fontSize: '12px',
+          color: '#00ff00',
+          fontFamily: 'poppins-regular'
+        }
+      ).setOrigin(0, 0.5);
+      this.balanceLabelContainer.add(rightParenText);
+    }
+
+    // Center the container
+    const totalWidth = currentX;
+    this.balanceLabelContainer.setX(balanceX - totalWidth / 2);
   }
 
   private layoutCurrencyPair(

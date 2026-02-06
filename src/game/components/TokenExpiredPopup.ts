@@ -6,7 +6,7 @@ export class TokenExpiredPopup extends GameObjects.Container {
     private buttonImage: GameObjects.Image;
     private buttonText: GameObjects.Text;
     private backgroundColor: number = 0x000000; // Black
-    private backgroundAlpha: number = 0.4; // Default opacity (0.6 = 60%)
+    private backgroundAlpha: number = 0.8; // Default opacity (0.6 = 60%)
     private cornerRadius: number = 20; // Default corner radius
     private buttonOffsetY: number = 130; // Vertical offset from center
     private buttonScale: number = 0.8; // Scale factor for the button

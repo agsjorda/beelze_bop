@@ -89,7 +89,10 @@ export class CurrencyManager {
 
 	public static formatAmount(amount: number, decimals = 2): string {
 		const safe = Number.isFinite(amount) ? amount : 0;
-		return `${CurrencyManager.getInlinePrefix()}${safe.toFixed(decimals)}`;
+		const currencyCode = CurrencyManager.getCurrencyCode();
+		// Ensure there's always a space between currency and amount
+		const space = currencyCode ? ' ' : '';
+		return currencyCode ? `${currencyCode}${space}${safe.toFixed(decimals)}` : safe.toFixed(decimals);
 	}
 
 	/**

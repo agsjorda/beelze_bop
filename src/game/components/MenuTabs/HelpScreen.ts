@@ -364,7 +364,7 @@ export class HelpScreen {
 
         // Check if demo mode is active - if so, use blank currency symbol
         const isDemo = (scene as any)?.gameAPI?.getDemoState();
-        const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+        const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
         for (let row = 0; row < 3; row++) {
             const y = 0;
@@ -383,7 +383,8 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = payoutData[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = `${currencyPrefix}${this.formatPayout(adjustedValue)}`;
+            const formattedAmount = this.formatPayout(adjustedValue);
+            const valueText = currencyCode ? `${currencyCode} ${formattedAmount}` : formattedAmount;
             const payoutText = scene.add.text(0, y, valueText, {
                 fontSize: this.payoutTextFontSize + 'px',
                 color: '#FFFFFF',
@@ -459,7 +460,7 @@ export class HelpScreen {
 
         // Check if demo mode is active - if so, use blank currency symbol
         const isDemo = (scene as any)?.gameAPI?.getDemoState();
-        const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+        const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
         for (let row = 0; row < 3; row++) {
             const adjustedTextY = baseTextY + row * this.scatterPayoutTextRowSpacing;
@@ -480,7 +481,8 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = SCATTER_PAYOUTS[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = `${currencyPrefix}${this.formatPayout(adjustedValue)}`;
+            const formattedAmount = this.formatPayout(adjustedValue);
+            const valueText = currencyCode ? `${currencyCode} ${formattedAmount}` : formattedAmount;
             const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
             const payoutText = scene.add.text(payoutTextX, adjustedTextY, valueText, {
                 fontSize: this.scatterPayoutTextFontSize + 'px',
