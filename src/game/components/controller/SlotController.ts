@@ -53,11 +53,13 @@ export class SlotController {
 	private baseBetAmount: number = 0.2;
 	private betAmountText!: Phaser.GameObjects.Text;
 	private betDollarText!: Phaser.GameObjects.Text;
+	private betLabelContainer!: Phaser.GameObjects.Container;
 	
 	// UI elements not managed by controllers
 	private featureAmountText!: Phaser.GameObjects.Text;
 	private featureDollarText!: Phaser.GameObjects.Text;
 	private featureLabelText: Phaser.GameObjects.Text | null = null;
+	private featureLabelContainer!: Phaser.GameObjects.Container;
 	private featureButtonHitZone: Phaser.GameObjects.Zone | null = null;
 	private primaryControllers!: Phaser.GameObjects.Container;
 	private controllerTexts: Phaser.GameObjects.Text[] = [];
@@ -1644,20 +1646,71 @@ export class SlotController {
 		// Bet background is visual only; bet options open via bet amount text
 		
 
-		// "BET" label (1st line)
-		const betLabel = scene.add.text(
-			betX,
-			betY - 8,
-			'BET',
+		// Create container for bet label parts
+		this.betLabelContainer = scene.add.container(betX, betY - 8);
+		this.betLabelContainer.setDepth(9);
+
+		const betText = 'BET';
+		const currencyCode = isDemoBet ? '' : CurrencyManager.getCurrencyCode();
+
+		let currentX = 0;
+
+		// "BET" - green, poppins-bold
+		const betWordText = scene.add.text(
+			currentX, 0, betText,
 			{
 				fontSize: '12px',
 				color: '#00ff00', // Green color
 				fontFamily: 'poppins-bold'
 			}
-		).setOrigin(0.5, 0.5).setDepth(9);
-		this.controllerContainer.add(betLabel);
+		).setOrigin(0, 0.5);
+		this.betLabelContainer.add(betWordText);
+		currentX += betWordText.width;
 
-		// "0.60" amount (2nd line, right part)
+		// Add currency code in parentheses if available
+		if (currencyCode) {
+			// " (" - green, poppins-regular
+			const leftParenText = scene.add.text(
+				currentX, 0, ' (',
+				{
+					fontSize: '12px',
+					color: '#00ff00', // Green color
+					fontFamily: 'poppins-regular'
+				}
+			).setOrigin(0, 0.5);
+			this.betLabelContainer.add(leftParenText);
+			currentX += leftParenText.width;
+			
+			// Currency code - white, poppins-regular
+			const currencyText = scene.add.text(
+				currentX, 0, currencyCode,
+				{
+					fontSize: '12px',
+					color: '#ffffff', // White color
+					fontFamily: 'poppins-regular'
+				}
+			).setOrigin(0, 0.5);
+			this.betLabelContainer.add(currencyText);
+			currentX += currencyText.width;
+			
+			// ")" - green, poppins-regular
+			const rightParenText = scene.add.text(
+				currentX, 0, ')',
+				{
+					fontSize: '12px',
+					color: '#00ff00', // Green color
+					fontFamily: 'poppins-regular'
+				}
+			).setOrigin(0, 0.5);
+			this.betLabelContainer.add(rightParenText);
+		}
+
+		// Center the container by adjusting its position
+		const totalWidth = currentX;
+		this.betLabelContainer.setX(betX - totalWidth / 2);
+		this.controllerContainer.add(this.betLabelContainer);
+
+		// "0.20" amount (2nd line, no currency prefix)
 		this.betAmountText = scene.add.text(
 			betX,
 			betY + 8,
@@ -1710,7 +1763,7 @@ export class SlotController {
 		// Initialize base bet amount
 		this.baseBetAmount = 0.20;
 
-		// "$" symbol (2nd line, left part) - positioned dynamically
+		// Hide old currency text (kept for compatibility but not visible)
 		this.betDollarText = scene.add.text(
 			betX,
 			betY + 8,
@@ -1721,10 +1774,8 @@ export class SlotController {
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
-		// Hide currency symbol in demo mode
-		this.betDollarText.setVisible(!isDemoBet);
+		this.betDollarText.setVisible(false);
 		this.controllerContainer.add(this.betDollarText);
-		this.layoutCurrencyPair(betX, betY + 8, this.betDollarText, this.betAmountText, !!isDemoBet, 5);
 
 		// Decrease bet button (left side within container)
 		const decreaseBetButton = scene.add.image(
@@ -1820,23 +1871,74 @@ export class SlotController {
 		this.buttons.set('feature', featureButton);
 		this.controllerContainer.add(featureButton);
 
-		// "BUY FEATURE" label (1st line)
-		const featureLabel1 = scene.add.text(
-			featureX,
-			featureY - 8,
-			'BUY FEATURE',
+		// Create container for feature label parts
+		this.featureLabelContainer = scene.add.container(featureX, featureY - 8);
+		this.featureLabelContainer.setDepth(9);
+
+		const featureText = 'BUY';
+		const currencyCode = isDemoFeature ? '' : CurrencyManager.getCurrencyCode();
+
+		let currentX = 0;
+
+		// "BUY" - black, poppins-bold
+		const featureWordText = scene.add.text(
+			currentX, 0, featureText,
 			{
 				fontSize: '12px',
-				color: '#000000',
-				fontFamily: 'poppins-regular'
+				color: '#000000', // Black color
+				fontFamily: 'poppins-bold'
 			}
-		).setOrigin(0.5, 0.5).setDepth(9);
-		this.controllerContainer.add(featureLabel1);
-		this.featureLabelText = featureLabel1;
-		featureLabel1.setInteractive();
-		featureLabel1.on('pointerdown', () => this.handleBuyFeaturePress());
+		).setOrigin(0, 0.5);
+		this.featureLabelContainer.add(featureWordText);
+		currentX += featureWordText.width;
 
-		// Amount (2nd line, right part) - bound to current bet x100
+		// Add currency code in parentheses if available
+		if (currencyCode) {
+			// " (" - black, poppins-regular
+			const leftParenText = scene.add.text(
+				currentX, 0, ' (',
+				{
+					fontSize: '12px',
+					color: '#000000', // Black color
+					fontFamily: 'poppins-regular'
+				}
+			).setOrigin(0, 0.5);
+			this.featureLabelContainer.add(leftParenText);
+			currentX += leftParenText.width;
+			
+			// Currency code - black, poppins-regular
+			const currencyText = scene.add.text(
+				currentX, 0, currencyCode,
+				{
+					fontSize: '12px',
+					color: '#000000', // Black color
+					fontFamily: 'poppins-regular'
+				}
+			).setOrigin(0, 0.5);
+			this.featureLabelContainer.add(currencyText);
+			currentX += currencyText.width;
+			
+			// ")" - black, poppins-regular
+			const rightParenText = scene.add.text(
+				currentX, 0, ')',
+				{
+					fontSize: '12px',
+					color: '#000000', // Black color
+					fontFamily: 'poppins-regular'
+				}
+			).setOrigin(0, 0.5);
+			this.featureLabelContainer.add(rightParenText);
+		}
+
+		// Center the container by adjusting its position
+		const totalWidth = currentX;
+		this.featureLabelContainer.setX(featureX - totalWidth / 2);
+		this.controllerContainer.add(this.featureLabelContainer);
+		this.featureLabelText = featureWordText as any; // Keep reference for compatibility
+		this.featureLabelContainer.setInteractive();
+		this.featureLabelContainer.on('pointerdown', () => this.handleBuyFeaturePress());
+
+		// Amount (2nd line, no currency prefix) - bound to current bet x100
 		this.featureAmountText = scene.add.text(
 			featureX,
 			featureY + 8,
@@ -1851,7 +1953,7 @@ export class SlotController {
 		this.featureAmountText.setInteractive();
 		this.featureAmountText.on('pointerdown', () => this.handleBuyFeaturePress());
 
-		// "$" symbol (2nd line, left part) - positioned dynamically
+		// Hide old currency text (kept for compatibility but not visible)
 		this.featureDollarText = scene.add.text(
 			featureX,
 			featureY + 8,
@@ -1862,12 +1964,8 @@ export class SlotController {
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
-		// Hide currency symbol in demo mode
-		this.featureDollarText.setVisible(!isDemoFeature);
+		this.featureDollarText.setVisible(false);
 		this.controllerContainer.add(this.featureDollarText);
-		this.featureDollarText.setInteractive();
-		this.featureDollarText.on('pointerdown', () => this.handleBuyFeaturePress());
-		this.layoutCurrencyPair(featureX, featureY + 8, this.featureDollarText, this.featureAmountText, !!isDemoFeature, 5);
 
 		// Initialize amount from current bet
 		this.updateFeatureAmountFromCurrentBet();
@@ -2075,14 +2173,7 @@ export class SlotController {
 			if (gameData && gameData.isEnhancedBet && this.betAmountText) {
 				const increasedBet = betAmount * 1.25;
 				this.betAmountText.setText(increasedBet.toFixed(2));
-
-				// Update currency symbol position based on new bet amount width
-				const isDemo = this.gameAPI?.getDemoState();
-				if (this.betDollarText && this.scene) {
-					const betX = this.scene.scale.width * 0.81;
-					const betY = this.betAmountText.y;
-					this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
-				}
+				// Amount text is already centered, no need to reposition
 			}
 		} finally {
 			this.isInternalBetChange = false;
@@ -2092,13 +2183,7 @@ export class SlotController {
 	updateBetAmount(betAmount: number): void {
 		if (this.betAmountText) {
 			this.betAmountText.setText(betAmount.toFixed(2));
-
-			const isDemo = this.gameAPI?.getDemoState();
-			if (this.scene && this.betDollarText) {
-				const betX = this.scene.scale.width * 0.81;
-				const betY = this.betAmountText.y;
-				this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
-			}
+			// Amount text is already centered, no need to reposition
 		}
 
 		// Update base bet amount when changed externally (not by amplify bet)
@@ -2127,29 +2212,144 @@ export class SlotController {
 		const price = baseBet * 100;
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-		const isDemo = this.gameAPI?.getDemoState();
-		if (this.scene) {
-			const featureX = this.scene.scale.width * 0.5;
-			const y = this.featureAmountText.y;
-			this.featureDollarText.setColor && this.featureDollarText.setColor('#000000');
-			this.layoutCurrencyPair(featureX, y, this.featureDollarText, this.featureAmountText, !!isDemo, 5);
-		}
+		// Amount text is already centered, no need to reposition
 	}
 
 	public refreshCurrencySymbols(): void {
 		this.balanceController?.refreshCurrencySymbols();
-		if (this.scene && this.betAmountText && this.betDollarText) {
+		
+		// Rebuild bet label container
+		if (this.scene && this.betLabelContainer) {
 			const isDemo = this.gameAPI?.getDemoState();
 			const betX = this.scene.scale.width * 0.81;
-			const betY = this.betAmountText.y;
-			this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
+			
+			this.betLabelContainer.removeAll(true);
+			
+			const betText = 'BET';
+			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
+
+			let currentX = 0;
+
+			// "BET" - green, poppins-bold
+			const betWordText = this.scene.add.text(
+				currentX, 0, betText,
+				{
+					fontSize: '12px',
+					color: '#00ff00',
+					fontFamily: 'poppins-bold'
+				}
+			).setOrigin(0, 0.5);
+			this.betLabelContainer.add(betWordText);
+			currentX += betWordText.width;
+
+			// Add currency code in parentheses if available
+			if (currencyCode) {
+				// " (" - green, poppins-regular
+				const leftParenText = this.scene.add.text(
+					currentX, 0, ' (',
+					{
+						fontSize: '12px',
+						color: '#00ff00',
+						fontFamily: 'poppins-regular'
+					}
+				).setOrigin(0, 0.5);
+				this.betLabelContainer.add(leftParenText);
+				currentX += leftParenText.width;
+				
+				// Currency code - white, poppins-regular
+				const currencyText = this.scene.add.text(
+					currentX, 0, currencyCode,
+					{
+						fontSize: '12px',
+						color: '#ffffff',
+						fontFamily: 'poppins-regular'
+					}
+				).setOrigin(0, 0.5);
+				this.betLabelContainer.add(currencyText);
+				currentX += currencyText.width;
+				
+				// ")" - green, poppins-regular
+				const rightParenText = this.scene.add.text(
+					currentX, 0, ')',
+					{
+						fontSize: '12px',
+						color: '#00ff00',
+						fontFamily: 'poppins-regular'
+					}
+				).setOrigin(0, 0.5);
+				this.betLabelContainer.add(rightParenText);
+			}
+
+			// Center the container
+			const totalWidth = currentX;
+			this.betLabelContainer.setX(betX - totalWidth / 2);
 		}
-		if (this.scene && this.featureAmountText && this.featureDollarText) {
+		
+		// Rebuild feature label container
+		if (this.scene && this.featureLabelContainer) {
 			const isDemo = this.gameAPI?.getDemoState();
 			const featureX = this.scene.scale.width * 0.5;
-			const featureY = this.featureAmountText.y;
-			this.featureDollarText.setColor && this.featureDollarText.setColor('#000000');
-			this.layoutCurrencyPair(featureX, featureY, this.featureDollarText, this.featureAmountText, !!isDemo, 5);
+			
+			this.featureLabelContainer.removeAll(true);
+			
+			const featureText = 'BUY';
+			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
+
+			let currentX = 0;
+
+			// "BUY" - black, poppins-bold
+			const featureWordText = this.scene.add.text(
+				currentX, 0, featureText,
+				{
+					fontSize: '12px',
+					color: '#000000',
+					fontFamily: 'poppins-bold'
+				}
+			).setOrigin(0, 0.5);
+			this.featureLabelContainer.add(featureWordText);
+			currentX += featureWordText.width;
+
+			// Add currency code in parentheses if available
+			if (currencyCode) {
+				// " (" - black, poppins-regular
+				const leftParenText = this.scene.add.text(
+					currentX, 0, ' (',
+					{
+						fontSize: '12px',
+						color: '#000000',
+						fontFamily: 'poppins-regular'
+					}
+				).setOrigin(0, 0.5);
+				this.featureLabelContainer.add(leftParenText);
+				currentX += leftParenText.width;
+				
+				// Currency code - black, poppins-regular
+				const currencyText = this.scene.add.text(
+					currentX, 0, currencyCode,
+					{
+						fontSize: '12px',
+						color: '#000000',
+						fontFamily: 'poppins-regular'
+					}
+				).setOrigin(0, 0.5);
+				this.featureLabelContainer.add(currencyText);
+				currentX += currencyText.width;
+				
+				// ")" - black, poppins-regular
+				const rightParenText = this.scene.add.text(
+					currentX, 0, ')',
+					{
+						fontSize: '12px',
+						color: '#000000',
+						fontFamily: 'poppins-regular'
+					}
+				).setOrigin(0, 0.5);
+				this.featureLabelContainer.add(rightParenText);
+			}
+
+			// Center the container
+			const totalWidth = currentX;
+			this.featureLabelContainer.setX(featureX - totalWidth / 2);
 		}
 	}
 
