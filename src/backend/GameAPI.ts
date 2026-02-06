@@ -106,7 +106,7 @@ export interface RefreshTokenResponse {
 
 export class GameAPI {  
     private static readonly GAME_ID: string = '00120925';
-    private static DEMO_BALANCE: number = 10000;
+    private static DEMO_BALANCE: number = 10;
     private static readonly REFRESH_TOKEN_KEY: string = 'refresh_token';
 
     gameData: GameData;

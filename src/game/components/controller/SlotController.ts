@@ -80,6 +80,9 @@ export class SlotController {
 	// Loading spinner for when API requests take > 2 seconds (after symbols clear)
 	private loadingSpinner: LoadingSpinner | null = null;
 	
+	// Reference to the out of balance popup instance
+	private outOfBalancePopup: any = null;
+	
 	// When true, prevent the free spin display from being shown (e.g., after congrats)
 	private freeSpinDisplaySuppressed: boolean = false;
 	
@@ -218,9 +221,13 @@ export class SlotController {
 		if (!scene) return;
 		import('../OutOfBalancePopup').then(module => {
 			const Popup = module.OutOfBalancePopup;
-			const popup = new Popup(scene);
-			if (message) popup.updateMessage(message);
-			popup.show();
+			this.outOfBalancePopup = new Popup(scene, 0, 0, {
+				onClose: () => {
+					this.enableSpinButton();
+				}
+			});
+			if (message) this.outOfBalancePopup.updateMessage(message);
+			this.outOfBalancePopup.show();
 		}).catch(() => {});
 	}
 
@@ -364,6 +371,31 @@ export class SlotController {
 		this.disableFeatureButton();
 		this.disableAutoplayButton();
 		this.disableTurboButton();
+	}
+
+	/**
+	 * Re-enable controls when a spin attempt fails (e.g., insufficient balance, API error, etc.)
+	 */
+	private reenableControlsOnSpinFailure(): void {
+		// Clear spin lock before re-enabling buttons to prevent them from being disabled again
+		this.isSpinLocked = false;
+		
+		// Only re-enable if reels aren't actually spinning (spin failed before reels started)
+		if (gameStateManager.isReelSpinning) {
+			console.log('[SlotController] Reels are spinning - skipping button re-enable on spin failure');
+			return;
+		}
+		
+		this.updateSpinButtonState();
+		// Don't re-enable auxiliary buttons if buy feature flow is active
+		if (!this.isBuyFeatureControlsLocked()) {
+			this.enableAutoplayButton();
+			// Force enable bet buttons since we're handling a failure case (bypasses isSpinLocked check)
+			this.enableBetButtons(true);
+			this.enableTurboButton();
+			this.enableAmplifyButton();
+		}
+		this.enableFeatureButton();
 	}
 
 	/**
@@ -944,14 +976,15 @@ export class SlotController {
 
 	/**
 	 * Enable bet buttons (restore opacity and enable interaction)
+	 * @param force - If true, bypass spin lock and reel spinning checks (for failure recovery)
 	 */
-	private enableBetButtons(): void {
+	private enableBetButtons(force: boolean = false): void {
 		if (this.isBuyFeatureControlsLocked()) {
 			this.disableBetButtons();
 			return;
 		}
 
-		if (this.isSpinLocked || gameStateManager.isReelSpinning) {
+		if (!force && (this.isSpinLocked || gameStateManager.isReelSpinning)) {
 			this.disableBetButtons();
 			return;
 		}
@@ -2604,7 +2637,7 @@ export class SlotController {
 			// Re-enable spin button, autoplay button, bet buttons, feature button, and bet background
 			this.updateSpinButtonState();
 			// Deferred retry: pending balance or other async state may clear shortly after AUTO_STOP
-			this.scene.time.delayedCall(150, () => this.updateSpinButtonState());
+			this.scene?.time.delayedCall(150, () => this.updateSpinButtonState());
 			// Don't re-enable auxiliary buttons if buy feature spin lock is active
 			if (!this.isBuyFeatureControlsLocked()) {
 				this.enableAutoplayButton();
@@ -3535,6 +3568,7 @@ export class SlotController {
 		try {
 			if (!this.gameAPI) {
 				console.warn('[SlotController] GameAPI not available, falling back to EventBus');
+				this.reenableControlsOnSpinFailure();
 				EventBus.emit('spin');
 				return;
 			}
@@ -3562,14 +3596,7 @@ export class SlotController {
 						this.stopAutoplay();
 					}
 					this.showOutOfBalancePopup();
-					this.updateSpinButtonState();
-					// Don't re-enable auxiliary buttons if buy feature flow is active
-					if (!this.isBuyFeatureControlsLocked()) {
-						this.enableAutoplayButton();
-						this.enableBetButtons();
-						this.enableAmplifyButton();
-					}
-					this.enableFeatureButton();
+					this.reenableControlsOnSpinFailure();
 					return;
 			}
 		} catch {}
@@ -3604,6 +3631,7 @@ export class SlotController {
 				if (gameStateManager.isBonus) {
 					console.log('[SlotController] handleSpin ignored in bonus mode (FREE_SPIN_AUTOPLAY drives free spins)');
 					this.hideSpinner();
+					this.reenableControlsOnSpinFailure();
 					return;
 				}
 				{
@@ -3712,6 +3740,8 @@ export class SlotController {
 			} catch (error) {
 				console.error('[SlotController] ❌ Spin failed:', error);
 				// Don't emit the spin event if the API call failed
+				this.hideSpinner();
+				this.reenableControlsOnSpinFailure();
 			}
 		} finally {
 			this.isSpinLocked = false;

@@ -6,7 +6,7 @@ export class OutOfBalancePopup extends GameObjects.Container {
     private buttonImage: GameObjects.Image;
     private buttonText: GameObjects.Text;
     private backgroundColor: number = 0x000000;
-    private backgroundAlpha: number = 0.4;
+    private backgroundAlpha: number = 0.8;
     private cornerRadius: number = 20;
     private buttonOffsetY: number = 130;
     private buttonScale: number = 0.8;
@@ -14,6 +14,7 @@ export class OutOfBalancePopup extends GameObjects.Container {
     private buttonHeight: number = 62;
     private animationDuration: number = 300;
     private overlay: Phaser.GameObjects.Graphics;
+    private onCloseCallback?: () => void;
 
     constructor(scene: Scene, x: number = 0, y: number = 0, options: {
         opacity?: number,
@@ -21,7 +22,8 @@ export class OutOfBalancePopup extends GameObjects.Container {
         buttonOffsetY?: number,
         buttonScale?: number,
         overlayColor?: number,
-        overlayAlpha?: number
+        overlayAlpha?: number,
+        onClose?: () => void
     } = {}) {
         super(scene, x, y);
         this.scene = scene;
@@ -49,6 +51,9 @@ export class OutOfBalancePopup extends GameObjects.Container {
         }
         if (options.buttonScale !== undefined) {
             this.buttonScale = Phaser.Math.Clamp(options.buttonScale, 0.1, 2);
+        }
+        if (options.onClose !== undefined) {
+            this.onCloseCallback = options.onClose;
         }
 
         this.background = new Phaser.GameObjects.Graphics(scene);
@@ -103,7 +108,7 @@ export class OutOfBalancePopup extends GameObjects.Container {
             if ((window as any).audioManager) {
                 (window as any).audioManager.playSoundEffect('button_fx');
             }
-            this.hide();
+            this.hide(this.onCloseCallback);
         });
         this.buttonImage.on('pointerover', () => {
             this.buttonImage.setTint(0xcccccc);
