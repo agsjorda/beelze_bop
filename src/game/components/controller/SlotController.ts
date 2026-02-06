@@ -641,7 +641,7 @@ export class SlotController {
 	}
 
 	/**
-	 * Handle autoplay start from AutoplayController
+	 * Handle autoplay start from AutoplayController (called after user confirms autoplay dialog)
 	 */
 	private handleAutoplayStart(): void {
 		console.log('[SlotController] Autoplay started via controller');
@@ -649,6 +649,7 @@ export class SlotController {
 		if (gameData) {
 			gameData.isAutoPlaying = true;
 		}
+		this.updateTurboButtonStateWithLock();
 	}
 
 	/**
@@ -2560,6 +2561,7 @@ export class SlotController {
 			if (this.autoplaySpinsRemainingText && this.primaryControllers) {
 				this.primaryControllers.bringToTop(this.autoplaySpinsRemainingText);
 			}
+			this.updateTurboButtonStateWithLock();
 			// No need to update spin button state here - will be handled when reels finish
 		});
 
@@ -2610,6 +2612,7 @@ export class SlotController {
 				this.enableAmplifyButton();
 				this.enableBetBackgroundInteraction('after autoplay stop');
 			}
+			this.updateTurboButtonStateWithLock();
 			this.enableFeatureButton();
 		// Show and resume spin icon after autoplay stops, hide stop icon
 			if (this.spinIcon) {
@@ -2828,10 +2831,15 @@ export class SlotController {
 	}
 
 	/**
-	 * Enable the turbo button (remove grey tint and enable interaction)
+	 * Enable the turbo button (remove grey tint and enable interaction).
+	 * Never enables during autoplay - keeps turbo disabled until autoplay ends or is canceled.
 	 */
 	public enableTurboButton(): void {
 		if (this.isBuyFeatureControlsLocked()) {
+			this.disableTurboButton();
+			return;
+		}
+		if (gameStateManager.isAutoPlaying || this.getAutoplaySpinsRemaining() > 0) {
 			this.disableTurboButton();
 			return;
 		}
@@ -2861,6 +2869,10 @@ export class SlotController {
 	 */
 	public updateTurboButtonState(): void {
 		if (this.isBuyFeatureControlsLocked()) {
+			this.disableTurboButton();
+			return;
+		}
+		if (gameStateManager.isAutoPlaying || this.getAutoplaySpinsRemaining() > 0) {
 			this.disableTurboButton();
 			return;
 		}

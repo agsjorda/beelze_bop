@@ -176,8 +176,7 @@ export class Symbols {
   private cachedTotalWin: number = 0;
   private skipReelDropsActive: boolean = false;
   private skipReelDropsPending: boolean = false;
-  private skipInputEnabled: boolean = false;
-  private skipPointerHandler?: (pointer: Phaser.Input.Pointer) => void;
+  private skipHitbox?: Phaser.GameObjects.Zone;
   private skipTumblesActive: boolean = false;
   private tumbleInProgress: boolean = false;
   private reelDropInProgress: boolean = false;
@@ -278,7 +277,7 @@ export class Symbols {
 
     // Create overlay
     this.overlayModule.createOverlayRect(this.grid.getGridBounds());
-    this.setupSkipInputListener();
+    this.createSkipHitbox();
   }
 
   // ============================================================================
@@ -2791,29 +2790,70 @@ export class Symbols {
     } catch { }
   }
 
-  private setupSkipInputListener(): void {
-    const enable = () => { this.skipInputEnabled = true; };
-    const disable = () => { this.skipInputEnabled = false; };
-    gameEventManager.on(GameEventType.REELS_START, enable);
-    gameEventManager.on(GameEventType.REELS_STOP, disable);
-    const handler = () => {
-      if (this.tumbleInProgress) return;
-      if (!this.skipInputEnabled) return;
-      if (gameStateManager.isShowingWinDialog) return;
-      if (gameStateManager.isTurbo) return;
-      if (gameStateManager.isReelSpinning && this.reelDropInProgress) {
-        this.requestSkipReelDrops();
-        return;
-      }
-    };
-    this.skipPointerHandler = handler;
-    this.scene.input.on('pointerdown', handler);
-    this.scene.events.once('shutdown', () => {
-      try { gameEventManager.off(GameEventType.REELS_START, enable); } catch { }
-      try { gameEventManager.off(GameEventType.REELS_STOP, disable); } catch { }
-      try { if (this.skipPointerHandler) this.scene.input.off('pointerdown', this.skipPointerHandler); } catch { }
-      this.skipPointerHandler = undefined;
-    });
+  /**
+   * Create a zone over the symbol grid for skip input. Only taps on the grid trigger skip;
+   * taps on controller buttons (spin, autoplay, bet, etc.) do not.
+   */
+  private createSkipHitbox(): void {
+    try {
+      try { this.skipHitbox?.destroy(); } catch {}
+      const zone = this.scene.add.zone(
+        this.slotX,
+        this.slotY,
+        this.totalGridWidth,
+        this.totalGridHeight
+      ).setOrigin(0.5, 0.5);
+      zone.setDepth(20);
+      zone.disableInteractive();
+
+      zone.on('pointerdown', () => {
+        try {
+          if (this.tumbleInProgress) return;
+          if (gameStateManager.isShowingWinDialog) return;
+          if (gameStateManager.isTurbo) return;
+          if (gameStateManager.isReelSpinning && this.reelDropInProgress) {
+            this.requestSkipReelDrops();
+          }
+        } catch {}
+      });
+
+      this.skipHitbox = zone;
+
+      const enable = () => {
+        try { this.updateSkipHitboxGeometry(); } catch {}
+        if (gameStateManager.isTurbo || gameStateManager.isShowingWinDialog) {
+          try { this.skipHitbox?.disableInteractive(); } catch {}
+        } else {
+          try { this.skipHitbox?.setInteractive({ useHandCursor: false }); } catch {}
+        }
+      };
+      const disable = () => {
+        try { this.skipHitbox?.disableInteractive(); } catch {}
+      };
+
+      gameEventManager.on(GameEventType.REELS_START, enable);
+      gameEventManager.on(GameEventType.REELS_STOP, disable);
+      const onTurboOn = () => { try { this.skipHitbox?.disableInteractive(); } catch {} };
+      const onTurboOff = () => { try { if (gameStateManager.isReelSpinning) enable(); } catch {} };
+      gameEventManager.on(GameEventType.TURBO_ON, onTurboOn);
+      gameEventManager.on(GameEventType.TURBO_OFF, onTurboOff);
+
+      this.scene.events.once('shutdown', () => {
+        try { gameEventManager.off(GameEventType.REELS_START, enable); } catch {}
+        try { gameEventManager.off(GameEventType.REELS_STOP, disable); } catch {}
+        try { gameEventManager.off(GameEventType.TURBO_ON, onTurboOn); } catch {}
+        try { gameEventManager.off(GameEventType.TURBO_OFF, onTurboOff); } catch {}
+        try { this.skipHitbox?.destroy(); this.skipHitbox = undefined; } catch {}
+      });
+    } catch {}
+  }
+
+  private updateSkipHitboxGeometry(): void {
+    try {
+      if (!this.skipHitbox) return;
+      this.skipHitbox.setPosition(this.slotX, this.slotY);
+      try { (this.skipHitbox as any).setSize(this.totalGridWidth, this.totalGridHeight); } catch {}
+    } catch {}
   }
 
   //change Transition_BZ to cover and fade faster
