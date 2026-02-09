@@ -3,6 +3,7 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameStateManager } from "../../managers/GameStateManager";
 import { ensureSpineFactory } from "../../utils/SpineGuard";
+import { REEL_FRAME_Y_OFFSET_PX } from "../../config/GameConfig";
 
 export class Background {
 	private bgContainer!: Phaser.GameObjects.Container;
@@ -202,7 +203,7 @@ export class Background {
 		}
 
 		if (this.normalGameSpine) {
-			this.normalGameSpine.setPosition(width * 0.5, 0);
+			this.normalGameSpine.setPosition(width * 0.5, REEL_FRAME_Y_OFFSET_PX);
 			// ADJUST HERE (Spine background): Direct width-based scaling.
 			// The Spine reference width is 428px (full canvas width at 1x asset scale).
 			// Change `spineContainFitMultiplier` at the top to zoom in/out (0.8 = 80% of width).

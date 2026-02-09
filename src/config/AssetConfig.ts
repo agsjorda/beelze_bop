@@ -453,15 +453,15 @@ export class AssetConfig {
 				'turbodrop_bz': 'assets/sounds/SFX/turbodrop_BB.ogg',
 				// Candy explosion transition SFX (used by SymbolExplosionTransition)
 				'candy_transition_bz': 'assets/sounds/SFX/candy_transition.ogg',
-				// Scatter win "nom nom" SFX – played when scatter win animation runs
-				'nomnom_bz': 'assets/sounds/SFX/nomnom_sw.ogg',
+				// Scatter win SFX (paper_roll) – played when scatter win animation runs
+				'paper_roll_bz': 'assets/sounds/SFX/paper_roll_BB.ogg',
 				'coin_throw_bz': 'assets/sounds/SFX/coin_throw_ka.ogg',
 				'coin_drop_bz': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
 				'bomb_bz': 'assets/sounds/SFX/bomb_sw.ogg',
 				'tbomb_bz': 'assets/sounds/SFX/tbomb_BB.ogg',
-				// Transition_BZ SFX (anticipation_BB)
-				'ghost_whisper_bz': 'assets/sounds/SFX/anticipation_BB.ogg',
+				// Transition_BZ SFX (laugh_transition)
+				'laugh_transition_bz': 'assets/sounds/SFX/laugh_transition_BB.ogg',
 				// Radial light transition whistle SFX
 				'whistle_bz': 'assets/sounds/SFX/whistle_BB.ogg',
 				'scatter_bz': 'assets/sounds/SFX/scatter_BB.ogg',

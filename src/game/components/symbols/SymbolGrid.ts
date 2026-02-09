@@ -27,7 +27,7 @@ import {
   GRID_OVERLAY_PADDING,
   DEPTH_SYMBOL_DEFAULT,
 } from './constants';
-import { SLOT_ROWS, SLOT_COLUMNS } from '../../../config/GameConfig';
+import { SLOT_ROWS, SLOT_COLUMNS, GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX } from '../../../config/GameConfig';
 
 /**
  * Manages the symbol grid for the slot game
@@ -77,7 +77,7 @@ export class SymbolGrid {
    */
   private initializeVariables(): void {
     const centerX = this.scene.scale.width * 0.5 - 5;
-    const centerY = this.scene.scale.height * 0.56; // Move grid higher
+    const centerY = this.scene.scale.height * GRID_CENTER_Y_RATIO + GRID_CENTER_Y_OFFSET_PX;
 
     this.symbols = [];
     this.newSymbols = [];

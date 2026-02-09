@@ -9,6 +9,13 @@
 export const SLOT_COLUMNS: number = 6; // number of columns (vertical reels)
 export const SLOT_ROWS: number = 5; // number of rows (horizontal)
 
+/** Symbol reel center: slotY = scene.scale.height * GRID_CENTER_Y_RATIO + GRID_CENTER_Y_OFFSET_PX */
+export const GRID_CENTER_Y_RATIO = 0.56;
+export const GRID_CENTER_Y_OFFSET_PX = 0; // negative = up, positive = down
+
+/** Reel frame (NormalGame_BZ Spine) Y offset in pixels. negative = up, positive = down */
+export const REEL_FRAME_Y_OFFSET_PX = 0;
+
 // =============================================================================
 // SYMBOL CONFIGURATION
 // =============================================================================
