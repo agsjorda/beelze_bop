@@ -159,6 +159,12 @@ export class Game extends Scene {
 		return 1;
 	}
 
+	/** Base bet for payout table display (excludes amplify multiplier so payouts stay consistent) */
+	public getBaseBetAmount(): number {
+		const base = this.slotController?.getBaseBetAmount?.();
+		return typeof base === 'number' && base > 0 ? base : 1;
+	}
+
 	preload() {
 		// Assets are now loaded in Preloader scene
 		console.log(`[Game] Assets already loaded in Preloader scene`);

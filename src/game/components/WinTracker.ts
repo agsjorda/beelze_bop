@@ -5,6 +5,7 @@ import { MIN_CLUSTER_SIZE, UI_CONFIG } from '../../config/GameConfig';
 import { Logger } from '../../utils/Logger';
 import { getMultiplierValue, isMultiplierSymbol } from '../../types/SymbolTypes';
 import { CurrencyManager } from './CurrencyManager';
+import { gameStateManager } from '../../managers/GameStateManager';
 
 interface WinTrackerLayoutOptions {
   offsetX?: number;
@@ -294,9 +295,9 @@ export class WinTracker {
         }
       }
     } catch {}
-    // Show multiplier numeric total in WinTracker
+    // Show multiplier numeric total in WinTracker (hidden during bonus game)
     const multiplierIcons: Array<{ symbol: number; count: number }> = [];
-    const multiplierCount = multiplierSum;
+    const multiplierCount = gameStateManager.isBonus ? 0 : multiplierSum;
 
     for (const [symbolId, data] of Array.from(summary.entries())) {
       if (data.totalWin > 0 && data.lines > 0) {
@@ -536,9 +537,9 @@ export class WinTracker {
         }
       }
     } catch {}
-    // Show multiplier numeric total in WinTracker
+    // Show multiplier numeric total in WinTracker (hidden during bonus game)
     const multiplierIcons: Array<{ symbol: number; count: number }> = [];
-    const multiplierCount = multiplierSum;
+    const multiplierCount = gameStateManager.isBonus ? 0 : multiplierSum;
 
     for (const [symbolId, data] of Array.from(summary.entries())) {
       data.baseValue = data.totalWin > 0 && data.lines > 0 ? (data.totalWin / data.lines) : 0;

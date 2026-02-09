@@ -2045,6 +2045,13 @@ export class Symbols {
               try {
                 const animState = (lead as any).animationState;
                 if (animState && typeof animState.setAnimation === 'function') {
+                  // Play paper_roll sound for merge win animation
+                  try {
+                    const audio = (window as any)?.audioManager;
+                    if (audio && typeof audio.playSoundEffect === 'function') {
+                      audio.playSoundEffect(SoundEffectType.SCATTER_NOMNOM);
+                    }
+                  } catch { }
                   // Slow down animation by half
                   if (animState.timeScale !== undefined) {
                     animState.timeScale = 0.5;
@@ -2276,6 +2283,13 @@ export class Symbols {
             try {
               const animState = (mergedSymbol as any).animationState;
               if (animState && typeof animState.setAnimation === 'function') {
+                // Play paper_roll sound for merge win animation
+                try {
+                  const audio = (window as any)?.audioManager;
+                  if (audio && typeof audio.playSoundEffect === 'function') {
+                    audio.playSoundEffect(SoundEffectType.SCATTER_NOMNOM);
+                  }
+                } catch { }
                 // Slow down animation by half
                 if (animState.timeScale !== undefined) {
                   animState.timeScale = 0.5;

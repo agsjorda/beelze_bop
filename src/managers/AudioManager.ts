@@ -11,7 +11,7 @@ export enum SoundEffectType {
 	REEL_DROP = 'reeldrop',
 	TURBO_DROP = 'turbodrop',
 	CANDY_TRANSITION = 'candy_transition',
-	// Scatter win "nom nom" SFX (Symbol0 win animation)
+	// Scatter win SFX (Symbol0 win animation – paper_roll)
 	SCATTER_NOMNOM = 'scatter_nomnom',
 	MENU_CLICK = 'menu_click',
 	SPIN_CLICK = 'spin_click',
@@ -82,10 +82,9 @@ export class AudioManager {
 		this.scene.load.audio('reeldrop_bz', 'assets/sounds/SFX/reeldrop_BB.ogg');
 		this.scene.load.audio('turbodrop_bz', 'assets/sounds/SFX/turbodrop_ka.ogg');
 		this.scene.load.audio('tbomb_bz', 'assets/sounds/SFX/tbomb_BB.ogg');
-		this.scene.load.audio('nomnom_bz', 'assets/sounds/SFX/nomnom_sw.ogg');
-		this.scene.load.audio('coin_throw_bz', 'assets/sounds/SFX/coin_throw_ka.ogg');
+		this.scene.load.audio('paper_roll_bz', 'assets/sounds/SFX/paper_roll_BB.ogg');
 		this.scene.load.audio('coin_drop_bz', 'assets/sounds/SFX/coin_drop_ka.ogg');
-		this.scene.load.audio('ghost_whisper_bz', 'assets/sounds/SFX/anticipation_BB.ogg');
+		this.scene.load.audio('laugh_transition_bz', 'assets/sounds/SFX/laugh_transition_BB.ogg');
 		this.scene.load.audio('whistle_bz', 'assets/sounds/SFX/whistle_BB.ogg');
 		
 		console.log('[AudioManager] Audio files preloaded successfully');
@@ -228,13 +227,13 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create tbomb_bz SFX instance:', e);
 			}
 
-			// Transition_BZ SFX instance (anticipation_BB)
+			// Transition_BZ SFX instance (laugh_transition)
 			try {
-				const transitionBzSfx = this.scene.sound.add('ghost_whisper_bz', { volume: this.sfxVolume, loop: false });
+				const transitionBzSfx = this.scene.sound.add('laugh_transition_bz', { volume: this.sfxVolume, loop: false });
 				this.sfxInstances.set(SoundEffectType.TRANSITION_BZ, transitionBzSfx);
-				console.log('[AudioManager] Transition_BZ (anticipation_BB) SFX instance created');
+				console.log('[AudioManager] Transition_BZ (laugh_transition) SFX instance created');
 			} catch (e) {
-				console.warn('[AudioManager] Failed to create Transition_BZ (anticipation_BB) SFX instance:', e);
+				console.warn('[AudioManager] Failed to create Transition_BZ (laugh_transition) SFX instance:', e);
 			}
 
 			// Radial light transition whistle SFX
@@ -255,13 +254,13 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create scatter_bz SFX instance:', e);
 			}
 
-			// Create scatter win "nom nom" SFX instance
+			// Create scatter win SFX instance (paper_roll)
 			try {
-				const scatterNomnom = this.scene.sound.add('nomnom_bz', { volume: this.sfxVolume, loop: false });
+				const scatterNomnom = this.scene.sound.add('paper_roll_bz', { volume: this.sfxVolume, loop: false });
 				this.sfxInstances.set(SoundEffectType.SCATTER_NOMNOM, scatterNomnom);
-				console.log('[AudioManager] Scatter nomnom SFX instance created');
+				console.log('[AudioManager] Scatter win (paper_roll) SFX instance created');
 			} catch (e) {
-				console.warn('[AudioManager] Failed to create nomnom_bz SFX instance:', e);
+				console.warn('[AudioManager] Failed to create paper_roll_bz SFX instance:', e);
 			}
 
 			// Create win dialog SFX instances

@@ -3,7 +3,7 @@ import { CurrencyManager } from '../CurrencyManager';
 
 type TextStyle = Phaser.Types.GameObjects.Text.TextStyle;
 
-const PAYOUT_RANGES = ['12+', '10', '8'] as const;
+const PAYOUT_RANGES = ['12+', '10-11', '8-9'] as const;
 
 const SYMBOL_PAYOUTS: Record<number, [number, number, number]> = {
     1: [50.0, 25.0, 10.0],
@@ -380,10 +380,9 @@ export class HelpScreen {
             symbolContainer.add(rangeText);
             rangeTexts.push({ text: rangeText, row });
 
-            // Right column: payout value, right-aligned
+            // Right column: payout value from SYMBOL_PAYOUTS (display as-is, no bet scaling)
             const value = payoutData[row] ?? 0;
-            const adjustedValue = this.applyBetToPayout(value);
-            const formattedAmount = this.formatPayout(adjustedValue);
+            const formattedAmount = this.formatPayout(value);
             const valueText = currencyCode ? `${currencyCode} ${formattedAmount}` : formattedAmount;
             const payoutText = scene.add.text(0, y, valueText, {
                 fontSize: this.payoutTextFontSize + 'px',
@@ -478,10 +477,9 @@ export class HelpScreen {
             symbolContainer.add(rangeText);
             rangeTexts.push({ text: rangeText, row });
 
-            // Right column: payout value, right-aligned
+            // Right column: payout value from SCATTER_PAYOUTS (display as-is, no bet scaling)
             const value = SCATTER_PAYOUTS[row] ?? 0;
-            const adjustedValue = this.applyBetToPayout(value);
-            const formattedAmount = this.formatPayout(adjustedValue);
+            const formattedAmount = this.formatPayout(value);
             const valueText = currencyCode ? `${currencyCode} ${formattedAmount}` : formattedAmount;
             const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
             const payoutText = scene.add.text(payoutTextX, adjustedTextY, valueText, {
@@ -1753,7 +1751,7 @@ export class HelpScreen {
                     if (col === 0) {
                         textValue = SCATTER_COUNTS[row];
                     } else if (col === 1) {
-                        textValue = this.formatPayout(this.applyBetToPayout(SCATTER_PAYOUTS[row]));
+                        textValue = this.formatPayout(SCATTER_PAYOUTS[row] ?? 0);
                     } else {
                         // Scatter descriptions are rendered below the table in the Scatter section
                         textValue = undefined;
@@ -1763,7 +1761,7 @@ export class HelpScreen {
                         textValue = PAYOUT_RANGES[row] ?? '';
                     } else {
                         const payoutValue = SYMBOL_PAYOUTS[symbolIndex]?.[row] ?? 0;
-                        textValue = this.formatPayout(this.applyBetToPayout(payoutValue));
+                        textValue = this.formatPayout(payoutValue);
                     }
                 }
 
