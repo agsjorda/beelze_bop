@@ -2456,6 +2456,17 @@ export class SlotController {
 			} catch { }
 		});
 
+		// During autoplay, play spin button animation on each spin (SPIN is only emitted for the first; subsequent spins use SPIN_DATA_RESPONSE only)
+		gameEventManager.on(GameEventType.SPIN_DATA_RESPONSE, () => {
+			if (!gameStateManager.isAutoPlaying) return;
+			const symbolsComponent = (this.scene as any)?.symbols;
+			if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function' && symbolsComponent.isFreeSpinAutoplayActive()) {
+				return;
+			}
+			this.playSpinButtonAnimation();
+			this.rotateSpinButton();
+		});
+
 		// Listen for any spin to start (manual or autoplay)
 		gameEventManager.on(GameEventType.SPIN, () => {
 			console.log('[SlotController] Spin event received');
