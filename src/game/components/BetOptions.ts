@@ -41,6 +41,18 @@ export class BetOptions {
 	private enhanceBetIdleAnimation: any = null;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (betAmount: number) => void;
+	// Grid configuration (BETOPTIONS_DYNAMIC_GRID_GUIDE)
+	private readonly COLUMN_COUNT: number = 4;
+	private readonly SPACING: number = 8;
+	private readonly CONTAINER_PADDING: number = 25;
+	private readonly MIN_FONT_SIZE: number = 14;
+	private readonly MAX_FONT_SIZE: number = 22;
+	private readonly BUTTON_WIDTH: number = 60;
+	private readonly BUTTON_HEIGHT: number = 40;
+	private readonly BUTTON_PADDING: number = 6;
+	private calculatedButtonWidth: number = 60;
+	private calculatedButtonHeight: number = 40;
+	private calculatedFontSize: number = 24;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -93,18 +105,16 @@ export class BetOptions {
 	private createHeader(scene: Scene): void {
 		const x = scene.scale.width * 0.5;
 		const y = scene.scale.height * 0.5 - 200;
-		
-		// BET title
-		const betTitle = scene.add.text(x - 180, y - 150, 'BET', {
+		const betDisplayBorderWidth = scene.scale.width - (this.CONTAINER_PADDING * 2);
+		const betDisplayBorderHalfWidth = betDisplayBorderWidth * 0.5;
+		const betTitle = scene.add.text(x - betDisplayBorderHalfWidth, y - 150, 'BET', {
 			fontSize: '24px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
 		});
 		betTitle.setOrigin(0, 0.5);
 		this.container.add(betTitle);
-		
-		// Close button (X)
-		this.closeButton = scene.add.text(x + 180, y - 150, '×', {
+		this.closeButton = scene.add.text(x + betDisplayBorderHalfWidth, y - 150, '×', {
 			fontSize: '30px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -133,28 +143,29 @@ export class BetOptions {
 	}
 
 	private createBetOptionsGrid(scene: Scene): void {
-		const startX = scene.scale.width * 0.5 - 180;
+		const columnCount = this.COLUMN_COUNT;
+		const spacing = this.SPACING;
+		const betDisplayBorderWidth = scene.scale.width - (this.CONTAINER_PADDING * 2);
+		const gridWidth = betDisplayBorderWidth;
+		this.calculatedButtonWidth = (gridWidth - ((columnCount - 1) * spacing)) / columnCount;
+		this.calculatedButtonHeight = this.BUTTON_HEIGHT;
+		const startX = scene.scale.width * 0.5 - (gridWidth * 0.5);
 		const startY = scene.scale.height * 0.5 - 250;
-		const buttonWidth = 60;
-		const buttonHeight = 50;
-		const spacing = 15;
-		
-		// "Select size" label
-		const selectSizeLabel = scene.add.text(startX, startY - 30, 'Select size', {
+		const selectSizeLabel = scene.add.text(startX, startY - 15, 'Select size', {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		});
-		selectSizeLabel.setOrigin(0, 0.5);
+		selectSizeLabel.setOrigin(0, 1);
 		this.container.add(selectSizeLabel);
-		
-		// Create grid of bet option buttons
+		this.calculateOptimalFontSize(scene, this.calculatedButtonWidth, this.calculatedButtonHeight, 1);
+		const buttonWidth = this.calculatedButtonWidth;
+		const buttonHeight = this.calculatedButtonHeight;
 		for (let i = 0; i < this.betOptions.length; i++) {
-			const row = Math.floor(i / 5);
-			const col = i % 5;
+			const row = Math.floor(i / columnCount);
+			const col = i % columnCount;
 			const x = startX + col * (buttonWidth + spacing);
 			const y = startY + row * (buttonHeight + spacing);
-			
 			const buttonContainer = this.createBetOptionButton(scene, x, y, buttonWidth, buttonHeight, this.betOptions[i], i);
 			this.betButtons.push(buttonContainer);
 			this.container.add(buttonContainer);
@@ -163,26 +174,23 @@ export class BetOptions {
 
 	private createBetOptionButton(scene: Scene, x: number, y: number, width: number, height: number, value: number, index: number): Phaser.GameObjects.Container {
 		const container = scene.add.container(x, y);
-		
-		// Button background
+		const strokeWidth = 2;
+		const inset = strokeWidth / 2;
+		const cornerRadius = 8;
 		const buttonBg = scene.add.graphics();
 		buttonBg.fillStyle(0x000000, 1);
-		buttonBg.fillRoundedRect(0, 0, width, height, 5);
-		buttonBg.lineStyle(0.5, 0xffffff, 1);
-		buttonBg.strokeRoundedRect(0, 0, width, height, 5);
+		buttonBg.fillRoundedRect(0, 0, width, height, cornerRadius);
+		buttonBg.lineStyle(strokeWidth, 0xffffff, 0.25);
+		buttonBg.strokeRoundedRect(inset, inset, width - strokeWidth, height - strokeWidth, cornerRadius - inset);
 		container.add(buttonBg);
-		
-		// Store reference to background for selection state
 		(container as any).buttonBg = buttonBg;
 		(container as any).buttonValue = value;
 		(container as any).buttonIndex = index;
 		(container as any).buttonWidth = width;
-		
-		// Button text
-		const buttonText = scene.add.text(width/2, height/2, value.toString(), {
-			fontSize: '22px',
+		const buttonText = scene.add.text(width / 2, height / 2, this.formatBetValue(value), {
+			fontSize: `${this.calculatedFontSize}px`,
 			color: '#ffffff',
-			fontFamily: 'Poppins-Bold'
+			fontFamily: 'Poppins-Regular'
 		});
 		buttonText.setOrigin(0.5, 0.5);
 		container.add(buttonText);
@@ -200,22 +208,23 @@ export class BetOptions {
 	private createBetInput(scene: Scene): void {
 		const x = scene.scale.width * 0.5;
 		const y = scene.scale.height * 0.5 + 240;
-		
-		// "Bet" label
-		const betLabel = scene.add.text(x - 180, y - 70, 'Bet', {
+		const betDisplayBorderWidth = scene.scale.width - (this.CONTAINER_PADDING * 2);
+		const betDisplayBorderHalfWidth = betDisplayBorderWidth * 0.5;
+		const betLabel = scene.add.text(x - betDisplayBorderHalfWidth, y - 55, 'Bet', {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		});
-		betLabel.setOrigin(0, 0.5);
+		betLabel.setOrigin(0, 1);
 		this.container.add(betLabel);
-		
-		// Bet input background
+		const strokeWidth = 2;
+		const inset = strokeWidth / 2;
+		const cornerRadius = 8;
 		const inputBg = scene.add.graphics();
 		inputBg.fillStyle(0x000000, 1);
-		inputBg.fillRoundedRect(-182, -37, 364, 74, 10);
-		inputBg.lineStyle(0.5, 0xffffff, 1);
-		inputBg.strokeRoundedRect(-182, -37, 364, 74, 10);
+		inputBg.fillRoundedRect(-betDisplayBorderHalfWidth, -37, betDisplayBorderWidth, 74, cornerRadius);
+		inputBg.lineStyle(strokeWidth, 0xffffff, 0.25);
+		inputBg.strokeRoundedRect(-betDisplayBorderHalfWidth + inset, -37 + inset, betDisplayBorderWidth - strokeWidth, 74 - strokeWidth, cornerRadius - inset);
 		inputBg.setPosition(x, y);
 		this.container.add(inputBg);
 		
@@ -318,11 +327,10 @@ export class BetOptions {
 	private createConfirmButton(scene: Scene): void {
 		const x = scene.scale.width * 0.5;
 		const y = scene.scale.height * 0.5 + 330;
-		
-		// Use long_button image instead of gradient/mask
+		const betDisplayBorderWidth = scene.scale.width - (this.CONTAINER_PADDING * 2);
 		const buttonImage = scene.add.image(x, y, 'long_button');
 		buttonImage.setOrigin(0.5, 0.5);
-		buttonImage.setDisplaySize(364, 62);
+		buttonImage.setDisplaySize(betDisplayBorderWidth, 62);
 		this.container.add(buttonImage);
 		
 		// Button text
@@ -356,30 +364,39 @@ export class BetOptions {
 	}
 
 	private selectButton(index: number, value: number): void {
-		// Deselect previous button
+		const strokeWidth = 2;
+		const inset = strokeWidth / 2;
+		const cornerRadius = 8;
+		const w = this.calculatedButtonWidth;
+		const h = this.calculatedButtonHeight;
 		if (this.selectedButtonIndex >= 0 && this.selectedButtonIndex < this.betButtons.length) {
 			const prevButton = this.betButtons[this.selectedButtonIndex];
 			const prevBg = (prevButton as any).buttonBg;
+			const prevText = (prevButton as any).buttonText;
 			prevBg.clear();
 			prevBg.fillStyle(0x000000, 1);
-			prevBg.fillRoundedRect(0, 0, 60, 50, 5);
-			prevBg.lineStyle(0.5, 0xffffff, 1);
-			prevBg.strokeRoundedRect(0, 0, 60, 50, 5);
+			prevBg.fillRoundedRect(0, 0, w, h, cornerRadius);
+			prevBg.lineStyle(strokeWidth, 0xffffff, 0.25);
+			prevBg.strokeRoundedRect(inset, inset, w - strokeWidth, h - strokeWidth, cornerRadius - inset);
+			if (prevText) {
+				prevText.setColor('#ffffff');
+				prevText.setFontFamily('Poppins-Regular');
+			}
 		}
-		
-		// Select new button
 		this.selectedButtonIndex = index;
 		this.currentBet = value;
-		
-		// Update selected button background to solid neon green
 		const selectedButton = this.betButtons[index];
 		const selectedBg = (selectedButton as any).buttonBg;
+		const selectedText = (selectedButton as any).buttonText;
 		selectedBg.clear();
 		selectedBg.fillStyle(0x66D449, 1);
-		selectedBg.fillRoundedRect(0, 0, 60, 50, 5);
-		selectedBg.lineStyle(0.5, 0xffffff, 1);
-		selectedBg.strokeRoundedRect(0, 0, 60, 50, 5);
-		
+		selectedBg.fillRoundedRect(0, 0, w, h, cornerRadius);
+		selectedBg.lineStyle(strokeWidth, 0xffffff, 0.25);
+		selectedBg.strokeRoundedRect(inset, inset, w - strokeWidth, h - strokeWidth, cornerRadius - inset);
+		if (selectedText) {
+			selectedText.setColor('#000000');
+			selectedText.setFontFamily('Poppins-Bold');
+		}
 		this.updateBetDisplay();
 		this.updateBetLimitButtons();
 	}
@@ -394,46 +411,44 @@ export class BetOptions {
 		}
 	}
 
-	private updateBetOptionButtonLabels(): void {
-		const multiplier = Number.isFinite(this.betDisplayMultiplier) && this.betDisplayMultiplier > 0
-			? this.betDisplayMultiplier
-			: 1;
-		const isEnhanced = multiplier > 1.0001;
-		const baseFontSize = 22;
-		const minFontSizeAllowed = 14;
-		const horizontalPadding = 8;
-		let smallestFontSize = baseFontSize;
-
-		for (const container of this.betButtons) {
-			const baseValue = (container as any).buttonValue as number | undefined;
-			const textObj = (container as any).buttonText as Phaser.GameObjects.Text | undefined;
-			if (!textObj || typeof baseValue !== 'number') continue;
-			const displayValue = baseValue * multiplier;
-			textObj.setText(this.formatBetValue(displayValue));
-
-			if (!isEnhanced) {
-				continue;
-			}
-
-			const buttonWidth = (container as any).buttonWidth as number | undefined;
-			const maxTextWidth = Math.max(0, (buttonWidth ?? 60) - horizontalPadding);
-			let size = baseFontSize;
-			textObj.setFontSize(size);
-			while (textObj.width > maxTextWidth && size > minFontSizeAllowed) {
-				size -= 1;
-				textObj.setFontSize(size);
-			}
-			if (size < smallestFontSize) {
-				smallestFontSize = size;
+	private calculateOptimalFontSize(scene: Scene, buttonWidth?: number, buttonHeight?: number, displayMultiplier: number = 1): void {
+		const displayValues = this.betOptions.map(v => this.formatBetValue(v * displayMultiplier));
+		const width = buttonWidth ?? this.BUTTON_WIDTH;
+		const height = buttonHeight ?? this.BUTTON_HEIGHT;
+		const availableWidth = width - (this.BUTTON_PADDING * 2);
+		const availableHeight = height - (this.BUTTON_PADDING * 2);
+		for (let testSize = this.MAX_FONT_SIZE; testSize >= this.MIN_FONT_SIZE; testSize--) {
+			const testText = scene.add.text(0, 0, '', { fontSize: `${testSize}px`, fontFamily: 'Poppins-Bold' });
+			testText.setVisible(false);
+			const allFit = displayValues.every(value => {
+				testText.setText(value);
+				return testText.width <= availableWidth && testText.height <= availableHeight;
+			});
+			testText.destroy();
+			if (allFit) {
+				this.calculatedFontSize = testSize;
+				return;
 			}
 		}
+		this.calculatedFontSize = this.MIN_FONT_SIZE;
+	}
 
-		if (isEnhanced) {
-			for (const container of this.betButtons) {
-				const textObj = (container as any).buttonText as Phaser.GameObjects.Text | undefined;
-				if (!textObj) continue;
-				textObj.setFontSize(smallestFontSize);
-			}
+	private updateBetOptionButtonLabels(): void {
+		const multiplier = Number.isFinite(this.betDisplayMultiplier) && this.betDisplayMultiplier > 0 ? this.betDisplayMultiplier : 1;
+		if (this.container?.scene) {
+			this.calculateOptimalFontSize(this.container.scene, this.calculatedButtonWidth, this.calculatedButtonHeight, multiplier);
+		}
+		for (let i = 0; i < this.betButtons.length; i++) {
+			const button = this.betButtons[i];
+			const baseValue = (button as any).buttonValue as number | undefined;
+			const textObj = (button as any).buttonText as Phaser.GameObjects.Text | undefined;
+			if (!textObj || typeof baseValue !== 'number') continue;
+			const displayValue = baseValue * multiplier;
+			const isSelected = i === this.selectedButtonIndex;
+			textObj.setText(this.formatBetValue(displayValue))
+				.setFontSize(`${this.calculatedFontSize}px`)
+				.setColor(isSelected ? '#000000' : '#ffffff')
+				.setFontFamily(isSelected ? 'Poppins-Bold' : 'Poppins-Regular');
 		}
 	}
 
