@@ -29,9 +29,8 @@ function isDemoMode(): boolean {
 /**
  * Centralized currency display helper.
  *
- * Priority:
- * - Prefer `currencySymbol` when it is non-empty
- * - Otherwise fall back to currency code (`currency`)
+ * For Beelze Bop we always prefer the currency *code* as a text prefix
+ * (e.g. "USD 1.00"), even when a currency symbol is provided.
  */
 export class CurrencyManager {
 	private static currencyCode = "";
@@ -69,20 +68,19 @@ export class CurrencyManager {
 
 	/**
 	 * Returns the glyph to display where "$" used to be.
-	 * This is either the currency symbol, or (if blank) the currency code.
+	 * For Beelze Bop this is always the currency code (if present),
+	 * never the currency symbol.
 	 */
 	public static getCurrencyGlyph(): string {
-		if (CurrencyManager.currencySymbol.length > 0) return CurrencyManager.currencySymbol;
 		if (CurrencyManager.currencyCode.length > 0) return CurrencyManager.currencyCode;
 		return "";
 	}
 
 	/**
 	 * Returns a prefix suitable for inline amounts.
-	 * If we fall back to currency code, we include a trailing space for readability.
+	 * We always use the currency code and include a trailing space for readability.
 	 */
 	public static getInlinePrefix(): string {
-		if (CurrencyManager.currencySymbol.length > 0) return CurrencyManager.currencySymbol;
 		if (CurrencyManager.currencyCode.length > 0) return `${CurrencyManager.currencyCode} `;
 		return "";
 	}
