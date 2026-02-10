@@ -103,8 +103,24 @@ export class AutoplayOptions {
 		this.screenModeManager = screenModeManager;
 	}
 
+	/**
+	 * Sync bet ladder from GameData (single source of truth). Call at start of create().
+	 */
+	private applyBetLevelsFromGameData(scene: Scene): void {
+		const levels = (scene as any).gameData?.betLevels;
+		if (Array.isArray(levels) && levels.length > 0) {
+			this.betOptions = levels;
+			if (!Number.isFinite(this.currentBet) || Math.abs(this.currentBet - 0.20) < 0.0001) {
+				this.currentBet = levels[0];
+			}
+		}
+	}
+
 	create(scene: Scene): void {
 		console.log("[AutoplayOptions] Creating autoplay options component");
+		
+		// Use GameData.betLevels as single source of truth.
+		this.applyBetLevelsFromGameData(scene);
 		
 		// Create main container
 		this.container = scene.add.container(0, 0);

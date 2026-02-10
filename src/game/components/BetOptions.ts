@@ -61,6 +61,12 @@ export class BetOptions {
 
 	create(scene: Scene): void {
 		console.log("[BetOptions] Creating bet options component");
+
+		// Use GameData.betLevels as single source of truth (set in Game.create() from initialization data).
+		const levels = (scene as any).gameData?.betLevels;
+		if (Array.isArray(levels) && levels.length > 0) {
+			this.betOptions = levels;
+		}
 		
 		// Create main container
 		this.container = scene.add.container(0, 0);

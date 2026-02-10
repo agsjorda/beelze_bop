@@ -45,6 +45,24 @@ export class BuyFeature {
 	private scatterShouldLoopWin: boolean = false;
 	private readonly SCATTER_MAX_RETRIES: number = 5;
 
+	/**
+	 * Sync bet ladder from GameData (single source of truth). Call at start of create().
+	 */
+	private applyBetLevelsFromGameData(scene: Scene): void {
+		const levels = (scene as any).gameData?.betLevels;
+		if (Array.isArray(levels) && levels.length > 0) {
+			this.betOptions = levels;
+			const defaultBet = Math.abs(this.currentBet - 0.2) < 0.0001;
+			const idxInNew = this.betOptions.findIndex(v => Math.abs(v - this.currentBet) < 0.0001);
+			if (!Number.isFinite(this.currentBet) || defaultBet || idxInNew === -1) {
+				this.currentBetIndex = 0;
+				this.currentBet = Number(this.betOptions[0]);
+			} else {
+				this.currentBetIndex = idxInNew;
+			}
+		}
+	}
+
 	// ============================================
 	// ADJUST HERE: Buy Feature Logo size and position
 	// ============================================
@@ -113,6 +131,9 @@ export class BuyFeature {
 
 	create(scene: Scene): void {
 		console.log("[BuyFeature] Creating buy feature component");
+		
+		// Use GameData.betLevels as single source of truth.
+		this.applyBetLevelsFromGameData(scene);
 		
 		// Create main container
 		this.container = scene.add.container(0, 0);

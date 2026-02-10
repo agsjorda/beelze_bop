@@ -1000,12 +1000,17 @@ export class SlotController {
 	}
 
 	/**
-	 * Get the bet ladder levels - delegated to BetController
+	 * Bet ladder from GameData (single source of truth).
 	 */
 	private getBetLevels(): number[] {
-		// Now handled by BetController
-		const levels = this.betController?.getBetLevels();
-		return levels ? [...levels] : [];
+		return this.gameData?.betLevels?.length ? this.gameData.betLevels : [
+			0.2, 0.4, 0.6, 0.8, 1,
+			1.2, 1.6, 2, 2.4, 2.8,
+			3.2, 3.6, 4, 5, 6,
+			8, 10, 14, 18, 24,
+			32, 40, 60, 80, 100,
+			110, 120, 130, 140, 150
+		];
 	}
 
 	/**

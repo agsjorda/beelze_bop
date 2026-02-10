@@ -62,6 +62,8 @@ export interface SlotInitializeData {
     lang: string;
     currency: string;
     currencySymbol?: string;
+    currencyDecimalPlaces?: number;
+    betLevels?: number[];
     hasFreeSpinRound: boolean;
     // New backend format: array of free spin round entries.
     // Kept as `any` union-friendly type for backwards compatibility,
