@@ -827,9 +827,8 @@ export class Dialogs {
 			alignment: 'center',
 			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
-			// For Congrats dialog totals, show a currency prefix.
-			// Other dialogs remain unchanged.
-			prefix: isTotalWinDialog ? (isDemo ? '' : CurrencyManager.getInlinePrefix()) : '',
+			// For total win dialog use currency code (not symbol) so e.g. Tunisian "." doesn't render as extra dot in NumberDisplay.
+			prefix: isTotalWinDialog ? (isDemo ? '' : (CurrencyManager.getCurrencyCode() ? `${CurrencyManager.getCurrencyCode()} ` : '')) : '',
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 12,
 			dotYOffset: 10
@@ -1475,10 +1474,6 @@ export class Dialogs {
 		blackScreen.fillStyle(0x000000, 1);
 		blackScreen.fillRect(0, 0, scene.scale.width, scene.scale.height);
 		blackScreen.setAlpha(0); // Start transparent
-
-		// Disable spinner immediately when black screen starts fading in
-		scene.events.emit('disableSpinner');
-		console.log('[Dialogs] Spinner disabled during transition');
 
 		// Fade in black screen
 		scene.tweens.add({

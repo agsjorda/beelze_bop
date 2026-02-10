@@ -15,9 +15,11 @@ import { Scene } from 'phaser';
 import { Background } from '../components/Background';
 import { Header } from '../components/Header';
 import { SlotController } from '../components/controller/SlotController';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
+import { GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX, MAX_IDLE_TIME_MINUTES } from '../../config/GameConfig';
 import { PaylineData } from '../../backend/SpinData';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { Symbols } from '../components/symbols/index';
@@ -43,6 +45,7 @@ import { FreeRoundManager } from '../components/FreeRoundManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { Character } from '../components/Character';
 import { CurrencyManager } from '../components/CurrencyManager';
+import { IdleManager } from '../components/IdleManager';
 
 export class Game extends Scene {
 	private networkManager!: NetworkManager;
@@ -69,6 +72,9 @@ export class Game extends Scene {
 	private freeRoundManager: FreeRoundManager | null = null;
 	private character1!: Character;
 	private character2!: Character;
+
+	private idleManager: IdleManager | null = null;
+	private onPointerDownResetIdle?: () => void;
 
 	// Queue for wins that occur while a dialog is already showing
 	private winQueue: Array<{ payout: number; bet: number }> = [];
@@ -352,10 +358,16 @@ export class Game extends Scene {
 		this.autoplayOptions = new AutoplayOptions(this.networkManager, this.screenModeManager);
 		this.autoplayOptions.create(this);
 
+		// Create loading spinner at center of reel (same as SymbolGrid: width*0.5-5, GRID_CENTER_Y_*)
+		const centerX = this.scale.width * 0.5 - 5;
+		const centerY = this.scale.height * GRID_CENTER_Y_RATIO + GRID_CENTER_Y_OFFSET_PX;
+		const loadingSpinner = new LoadingSpinner(this, centerX, centerY);
+
 		// Create slot controller using the managers
 		this.slotController = new SlotController(this.networkManager, this.screenModeManager);
 		this.slotController.setSymbols(this.symbols); // Set symbols reference for free spin data access
 		this.slotController.setBuyFeatureReference(); // Set BuyFeature reference for bet access
+		this.slotController.setLoadingSpinner(loadingSpinner);
 		this.slotController.create(this);
 
 		// Create free round manager AFTER SlotController so it can mirror the spin button.
@@ -425,6 +437,9 @@ export class Game extends Scene {
 
 		// Initialize balance on game start
 		this.initializeGameBalance();
+
+		// Start idle/session timeout tracking
+		this.initializeAndStartIdleManager();
 
 		// Emit START event AFTER SlotController is created
 		console.log(`[Game] Emitting START event to initialize game...`);
@@ -858,6 +873,49 @@ export class Game extends Scene {
 		if (this.autoplayOptions && this.autoplayOptions.isVisible()) {
 			this.autoplayOptions.setCurrentBalance(balance);
 		}
+	}
+
+	private initializeAndStartIdleManager(): void {
+		const idleTimeoutMs = MAX_IDLE_TIME_MINUTES * 60 * 1000;
+		this.idleManager = new IdleManager(this, idleTimeoutMs);
+
+		// On timeout, delegate to GameAPI handler (shows popup and clears tokens)
+		this.idleManager.events.on(IdleManager.TIMEOUT_EVENT, () => {
+			try {
+				this.gameAPI?.handleSessionTimeout?.();
+			} catch (e) {
+				console.error('[Game] Error handling session timeout:', e);
+			}
+		});
+
+		// Reset idle when game is actively running (bonus/spin) so we don't timeout mid-spin.
+		this.idleManager.events.on(IdleManager.CHECK_INTERVAL_EVENT, () => {
+			try {
+				const gsm: any = this.gameStateManager;
+				if (gsm?.isBonus || gsm?.isReelSpinning || gsm?.isProcessingSpin) {
+					this.idleManager?.reset();
+				}
+			} catch {}
+		});
+
+		this.onPointerDownResetIdle = () => {
+			this.idleManager?.reset();
+		};
+		this.input.on('pointerdown', this.onPointerDownResetIdle);
+
+		this.events.once('shutdown', () => {
+			try {
+				if (this.onPointerDownResetIdle) {
+					this.input.off('pointerdown', this.onPointerDownResetIdle);
+				}
+			} catch {}
+			try {
+				this.idleManager?.destroy();
+				this.idleManager = null;
+			} catch {}
+		});
+
+		this.idleManager.start();
 	}
 
 	/**

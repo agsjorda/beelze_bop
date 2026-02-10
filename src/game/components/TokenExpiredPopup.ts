@@ -59,12 +59,12 @@ export class TokenExpiredPopup extends GameObjects.Container {
         this.background = new Phaser.GameObjects.Graphics(scene);
         this.drawBackground();
         
-        // Create message text
+        // Create message text (centered vertically after removing button)
         this.messageText = new GameObjects.Text(
             scene,
             0,
-            -40,
-            'Your session has expired.\nPlease log in again to keep playing. \n\nIf you were actively playing a game, your progress has been saved, and you can pick up right where you left off after logging back in.',
+            0,
+            'Your play session has expired. Please log in again to keep playing. \n\nIf you were actively playing a game, your progress has been saved, and you can pick up right where you left off after relaunching the game.',
             {
                 fontFamily: 'Poppins-Regular',
                 fontSize: '21px',
@@ -75,59 +75,8 @@ export class TokenExpiredPopup extends GameObjects.Container {
         );
         this.messageText.setOrigin(0.5);
         
-        // Calculate button position and size
-        const buttonX = 0;
-        const buttonY = this.buttonOffsetY;
-        const scaledWidth = this.buttonWidth * this.buttonScale;
-        const scaledHeight = this.buttonHeight * this.buttonScale;
-        
-        // Create button background using the same image as BuyFeature
-        this.buttonImage = new GameObjects.Image(
-            scene,
-            buttonX,
-            buttonY,
-            'long_button'
-        );
-        this.buttonImage.setOrigin(0.5, 0.5);
-        this.buttonImage.setDisplaySize(scaledWidth, scaledHeight);
-        this.buttonImage.setScale(this.buttonScale);
-        
-        // Button text - matching BuyFeature style
-        this.buttonText = new GameObjects.Text(
-            scene,
-            buttonX,
-            buttonY,
-            'REFRESH',
-            {
-                fontFamily: 'Poppins-Bold',
-                fontSize: '24px',
-                color: '#000000',
-                align: 'center'
-            }
-        );
-        this.buttonText.setOrigin(0.5);
-        
-        // Make the button interactive
-        this.buttonImage.setInteractive({ useHandCursor: true });
-        this.buttonImage.on('pointerdown', () => {
-            // Play sound effect if available
-            if ((window as any).audioManager) {
-                (window as any).audioManager.playSoundEffect('button_fx');
-            }
-            window.location.reload();
-        });
-        
-        // Add hover effect
-        this.buttonImage.on('pointerover', () => {
-            this.buttonImage.setTint(0xcccccc); // Slight tint on hover
-        });
-        
-        this.buttonImage.on('pointerout', () => {
-            this.buttonImage.clearTint(); // Clear tint when not hovering
-        });
-        
-        // Add all elements to container
-        this.add([this.background, this.messageText, this.buttonImage, this.buttonText]);
+        // Add background and text only (refresh button removed)
+        this.add([this.background, this.messageText]);
         
         // Center the container
         this.setPosition(scene.scale.width / 2, scene.scale.height / 2);

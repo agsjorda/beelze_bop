@@ -4,6 +4,26 @@
  */
 
 // =============================================================================
+// LOADING SPINNER (in-game spin wait indicator)
+// =============================================================================
+/** When true, show the loading spinner while fetching spin API. When false, spinner never shows. */
+export const LOADING_SPINNER_ENABLED = false;
+/** Minimum time (ms) to show the loading spinner when spin is pressed (simulate slow network). Set to 0 to hide as soon as data arrives. */
+export const LOADING_SPINNER_SIMULATE_MIN_DISPLAY_MS = 2000;
+/** Target height of DI JOKER spine as ratio of scene height (e.g. 0.28 = 28%). Used to scale the spine for different screen sizes. */
+export const LOADING_SPINNER_SPINE_HEIGHT_RATIO = 0.1;
+/** Playback speed of DI JOKER spine animation (1 = normal, 0.5 = half speed, 2 = double speed). */
+export const LOADING_SPINNER_SPINE_TIME_SCALE = 0.5;
+/** Alpha of the loading spinner (1 = opaque, 0.75 = slightly transparent). */
+export const LOADING_SPINNER_ALPHA = 0.75;
+
+// =============================================================================
+// IDLE / SESSION TIMEOUT
+// =============================================================================
+/** Idle / session timeout (minutes); converted to ms where needed. */
+export const MAX_IDLE_TIME_MINUTES: number = 5; // 5 minutes (set to 0.25 for 15s during testing)
+
+// =============================================================================
 // GRID CONFIGURATION
 // =============================================================================
 export const SLOT_COLUMNS: number = 6; // number of columns (vertical reels)

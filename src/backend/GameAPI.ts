@@ -838,6 +838,30 @@ export class GameAPI {
     }
 
     /**
+     * Handle session timeout triggered by an idle manager or similar.
+     * Shows the token-expired popup and clears auth tokens from storage.
+     */
+    public handleSessionTimeout(): void {
+        try {
+            this.showTokenExpiredPopup();
+        } catch (e) {
+            console.error('[GameAPI] Failed to show session timeout popup:', e);
+        }
+        try {
+            localStorage.removeItem('token');
+        } catch {}
+        try {
+            localStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+        } catch {}
+        try {
+            sessionStorage.removeItem('token');
+        } catch {}
+        try {
+            sessionStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+        } catch {}
+    }
+
+    /**
      * Initialize refresh token from URL query parameter.
      * Call at startup alongside access token initialization.
      */
