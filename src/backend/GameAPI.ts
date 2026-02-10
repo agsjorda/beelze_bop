@@ -62,6 +62,8 @@ export interface SlotInitializeData {
     lang: string;
     currency: string;
     currencySymbol?: string;
+    currencyDecimalPlaces?: number;
+    betLevels?: number[];
     hasFreeSpinRound: boolean;
     // New backend format: array of free spin round entries.
     // Kept as `any` union-friendly type for backwards compatibility,
@@ -835,6 +837,30 @@ export class GameAPI {
             errorMessage.includes('401') ||
             errorMessage.includes('400')
         );
+    }
+
+    /**
+     * Handle session timeout triggered by an idle manager or similar.
+     * Shows the token-expired popup and clears auth tokens from storage.
+     */
+    public handleSessionTimeout(): void {
+        try {
+            this.showTokenExpiredPopup();
+        } catch (e) {
+            console.error('[GameAPI] Failed to show session timeout popup:', e);
+        }
+        try {
+            localStorage.removeItem('token');
+        } catch {}
+        try {
+            localStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+        } catch {}
+        try {
+            sessionStorage.removeItem('token');
+        } catch {}
+        try {
+            sessionStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+        } catch {}
     }
 
     /**

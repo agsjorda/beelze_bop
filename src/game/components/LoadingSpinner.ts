@@ -1,20 +1,23 @@
 import { Scene } from 'phaser';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { LOADING_SPINNER_ALPHA, LOADING_SPINNER_SPINE_HEIGHT_RATIO, LOADING_SPINNER_SPINE_TIME_SCALE } from '../../config/GameConfig';
 
 /**
  * LoadingSpinner Component
- * 
- * A cute candy overlay that spins in the center of the symbols grid
- * when fetching spin data takes more than 2 seconds (after symbols clear).
+ *
+ * Uses the DI JOKER Spine animation (same as boot/StudioLoadingScreen) in the center of the symbols grid
+ * when fetching spin data. Plays the Spine "animation" in a loop – no rotation.
  */
 export class LoadingSpinner {
 	private scene: Scene;
 	private container: Phaser.GameObjects.Container | null = null;
-	private loadingSpinner: Phaser.GameObjects.Image | null = null;
-	private spinnerTween: Phaser.Tweens.Tween | null = null;
-	private showTimeout: any | null = null;
+	/** Either the di_joker Spine object or the fallback image/graphic */
+	private spinnerContent: any = null;
+	private showTimeout: ReturnType<typeof setTimeout> | null = null;
 	private isVisible: boolean = false;
-	
-	// Position where the spinner should appear (center of symbols grid)
+	/** When using Spine, we drive animation by calling update(delta) each frame so it runs inside a container. */
+	private spineUpdateListener: ((time: number, delta: number) => void) | null = null;
+
 	private centerX: number = 0;
 	private centerY: number = 0;
 
@@ -25,134 +28,133 @@ export class LoadingSpinner {
 		this.createSpinner();
 	}
 
-	/**
-	 * Create the candy spinner
-	 */
+	public getContainer(): Phaser.GameObjects.Container | null {
+		return this.container;
+	}
+
 	private createSpinner(): void {
-		// Create container for the spinner
 		this.container = this.scene.add.container(this.centerX, this.centerY);
-		this.container.setDepth(10000); // High depth to appear above symbols
+		this.container.setDepth(100001);
 		this.container.setVisible(false);
 		this.container.setAlpha(0);
 
-		// Create the candy overlay image
-		this.loadingSpinner = this.scene.add.image(0, 0, 'loading-spinner');
-		this.loadingSpinner.setOrigin(0.5, 0.5);
-		this.loadingSpinner.setScale(0.20); // Scale down the candy to fit nicely
-		this.container.add(this.loadingSpinner);
+		// Same as boot scene: ensure spine plugin/factory for this scene then create spine
+		const hasSpine = ensureSpineFactory(this.scene, '[LoadingSpinner] createSpinner');
+		if (hasSpine) {
+			try {
+				const spine = (this.scene.add as any).spine(0, 0, 'di_joker', 'di_joker-atlas');
+				spine.setOrigin(0.5, 0.5);
+				const desiredHeight = this.scene.scale.height * LOADING_SPINNER_SPINE_HEIGHT_RATIO;
+				const spineH = (spine as any).height ?? 800;
+				const scale = Math.max(0.05, desiredHeight / spineH);
+				spine.setScale(scale);
+				if (typeof spine.setAlpha === 'function') spine.setAlpha(LOADING_SPINNER_ALPHA);
+				this.container.add(spine);
+				this.spinnerContent = spine;
+				try {
+					(spine as any).animationState?.setAnimation(0, 'animation', true);
+					if (typeof (spine as any).animationState?.timeScale === 'number') (spine as any).animationState.timeScale = LOADING_SPINNER_SPINE_TIME_SCALE;
+				} catch {}
+				console.log('[LoadingSpinner] DI JOKER spine created at', this.centerX, this.centerY);
+				return;
+			} catch (e) {
+				console.warn('[LoadingSpinner] di_joker spine create failed:', e);
+			}
+		}
 
-		console.log('[LoadingSpinner] Candy spinner created at position:', this.centerX, this.centerY);
+		// Fallback: image or graphic
+		if (this.scene.textures.exists('dijoker_loading')) {
+			const img = this.scene.add.image(0, 0, 'dijoker_loading');
+			img.setOrigin(0.5, 0.5);
+			img.setScale(0.4);
+			img.setAlpha(LOADING_SPINNER_ALPHA);
+			this.container.add(img);
+			this.spinnerContent = img;
+			console.log('[LoadingSpinner] dijoker_loading image fallback at', this.centerX, this.centerY);
+			return;
+		}
+
+		console.warn('[LoadingSpinner] Using fallback graphic');
+		const g = this.scene.add.graphics();
+		g.fillStyle(0x000000, 0.7);
+		g.fillRoundedRect(-80, -80, 160, 160, 12);
+		g.lineStyle(3, 0xffffff, 0.9);
+		g.strokeRoundedRect(-80, -80, 160, 160, 12);
+		const text = this.scene.add.text(0, 0, 'Loading...', { fontFamily: 'Poppins', fontSize: 18, color: '#ffffff' });
+		text.setOrigin(0.5, 0.5);
+		this.container.add(g);
+		this.container.add(text);
+		this.spinnerContent = null;
 	}
 
-	/**
-	 * Start showing the spinner after a 2-second delay
-	 * This should be called when the API request starts
-	 * Delayed to allow previous symbols to clear first
-	 */
-	public startDelayedShow(): void {
-		console.log('[LoadingSpinner] Starting delayed show (2 seconds)');
-		
-		// Clear any existing timeout
+	public showNow(): void {
 		this.cancelDelayedShow();
-		
-		// Set timeout to show spinner after 2 seconds (allows symbols to clear)
-		this.showTimeout = setTimeout(() => {
-			this.show();
-		}, 2000);
+		this.show();
 	}
 
-	/**
-	 * Cancel the delayed show (call this if data arrives within 1 second)
-	 */
+	public startDelayedShow(): void {
+		this.cancelDelayedShow();
+		this.showTimeout = setTimeout(() => this.show(), 2000);
+	}
+
 	public cancelDelayedShow(): void {
 		if (this.showTimeout) {
 			clearTimeout(this.showTimeout);
 			this.showTimeout = null;
-			console.log('[LoadingSpinner] Cancelled delayed show');
 		}
 	}
 
-	/**
-	 * Show the spinner immediately with fade-in animation
-	 */
 	private show(): void {
-		if (!this.container || this.isVisible) {
-			return;
-		}
+		if (!this.container || this.isVisible) return;
 
-		console.log('[LoadingSpinner] Showing candy spinner');
+		console.log('[LoadingSpinner] Showing DI JOKER animation at depth 100001');
 		this.isVisible = true;
 		this.container.setVisible(true);
-
-		// Reset candy angle to 0 before starting
-		if (this.loadingSpinner) {
-			this.loadingSpinner.setAngle(0);
+		this.container.setDepth(100001);
+		this.container.setAlpha(LOADING_SPINNER_ALPHA);
+		if (this.spinnerContent) {
+			if (typeof this.spinnerContent.setAlpha === 'function') this.spinnerContent.setAlpha(1);
+			const skel = (this.spinnerContent as any).skeleton;
+			if (skel?.color != null) skel.color.a = LOADING_SPINNER_ALPHA;
+		}
+		if (this.scene.children) {
+			this.scene.children.bringToTop(this.container);
 		}
 
-		// Fade in animation
-		this.scene.tweens.add({
-			targets: this.container,
-			alpha: 1,
-			duration: 200,
-			ease: 'Power2'
-		});
-
-		// Rotate the candy continuously with smooth linear motion (counter-clockwise)
-		this.spinnerTween = this.scene.tweens.add({
-			targets: this.loadingSpinner,
-			angle: -360,
-			duration: 1200, // Slightly slower for smoother rotation
-			ease: 'Linear',
-			repeat: -1,
-			yoyo: false
-		});
+		// Ensure DI JOKER Spine animation is playing (restart so it runs when visible)
+		const state = this.spinnerContent?.animationState;
+		if (state) {
+			state.setAnimation(0, 'animation', true);
+			if (typeof state.timeScale === 'number') state.timeScale = LOADING_SPINNER_SPINE_TIME_SCALE;
+			// Drive spine animation manually so it advances when inside a container (spine-phaser may not update it otherwise)
+			this.removeSpineUpdateListener();
+			this.spineUpdateListener = (time: number, delta: number) => {
+				if (this.spinnerContent?.updatePose && this.isVisible) {
+					try {
+						this.spinnerContent.updatePose(delta);
+						const skel = (this.spinnerContent as any).skeleton;
+						if (skel?.color != null) skel.color.a = LOADING_SPINNER_ALPHA;
+					} catch {}
+				}
+			};
+			this.scene.events.on('update', this.spineUpdateListener);
+		}
 	}
 
-	/**
-	 * Hide the spinner with fade-out animation
-	 * This should be called when spin data is received, before symbols drop
-	 * Includes a small delay to keep spinner visible until symbols are about to drop
-	 */
-	public hide(): void {
-		if (!this.container) {
-			return;
+	private removeSpineUpdateListener(): void {
+		if (this.spineUpdateListener) {
+			this.scene.events.off('update', this.spineUpdateListener);
+			this.spineUpdateListener = null;
 		}
+	}
 
-		console.log('[LoadingSpinner] Hiding spinner with delay');
-		
-		// Cancel any pending show
+	public hide(): void {
+		if (!this.container) return;
+
+		console.log('[LoadingSpinner] Hiding spinner');
 		this.cancelDelayedShow();
 
-		// Add a delay before hiding to keep spinner visible longer
-		// This prevents an awkward empty moment before new symbols drop
 		setTimeout(() => {
-			// Stop rotation smoothly at the nearest complete rotation (0 or -360 degrees)
-			if (this.spinnerTween && this.loadingSpinner) {
-				const currentAngle = this.loadingSpinner.angle % 360;
-				// For counter-clockwise, rotate to 0 or -360
-				const targetAngle = currentAngle > -180 ? 0 : -360;
-				const angleToRotate = targetAngle - currentAngle;
-				
-				// Stop the infinite loop
-				this.spinnerTween.stop();
-				this.spinnerTween = null;
-				
-				// Smoothly rotate to 0 or 360 degrees
-				this.scene.tweens.add({
-					targets: this.loadingSpinner,
-					angle: `+=${angleToRotate}`,
-					duration: Math.abs(angleToRotate) * 2, // Proportional duration
-					ease: 'Linear',
-					onComplete: () => {
-						// Reset to 0 degrees after completing rotation
-						if (this.loadingSpinner) {
-							this.loadingSpinner.setAngle(0);
-						}
-					}
-				});
-			}
-
-			// Only fade out if visible
 			if (this.isVisible && this.container) {
 				this.scene.tweens.add({
 					targets: this.container,
@@ -160,6 +162,7 @@ export class LoadingSpinner {
 					duration: 150,
 					ease: 'Power2',
 					onComplete: () => {
+						this.removeSpineUpdateListener();
 						if (this.container) {
 							this.container.setVisible(false);
 							this.isVisible = false;
@@ -167,51 +170,33 @@ export class LoadingSpinner {
 					}
 				});
 			} else if (this.container) {
+				this.removeSpineUpdateListener();
 				this.container.setVisible(false);
 				this.isVisible = false;
 			}
-		}, 1100); // 1100ms delay before hiding
+		}, 300);
 	}
 
-	/**
-	 * Update the spinner position (useful if screen is resized)
-	 */
 	public updatePosition(centerX: number, centerY: number): void {
 		this.centerX = centerX;
 		this.centerY = centerY;
-		
 		if (this.container) {
 			this.container.setPosition(centerX, centerY);
-			console.log('[LoadingSpinner] Position updated to:', centerX, centerY);
 		}
 	}
 
-	/**
-	 * Check if spinner is currently visible
-	 */
 	public isShowing(): boolean {
 		return this.isVisible;
 	}
 
-	/**
-	 * Clean up and destroy the spinner
-	 */
 	public destroy(): void {
-		console.log('[LoadingSpinner] Destroying spinner');
-		
 		this.cancelDelayedShow();
-		
-		if (this.spinnerTween) {
-			this.spinnerTween.stop();
-			this.spinnerTween = null;
-		}
-
+		this.removeSpineUpdateListener();
 		if (this.container) {
 			this.container.destroy();
 			this.container = null;
 		}
-
-		this.loadingSpinner = null;
+		this.spinnerContent = null;
 		this.isVisible = false;
 	}
 }

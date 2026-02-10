@@ -15,9 +15,11 @@ import { Scene } from 'phaser';
 import { Background } from '../components/Background';
 import { Header } from '../components/Header';
 import { SlotController } from '../components/controller/SlotController';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
+import { GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX, MAX_IDLE_TIME_MINUTES } from '../../config/GameConfig';
 import { PaylineData } from '../../backend/SpinData';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { Symbols } from '../components/symbols/index';
@@ -43,6 +45,7 @@ import { FreeRoundManager } from '../components/FreeRoundManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { Character } from '../components/Character';
 import { CurrencyManager } from '../components/CurrencyManager';
+import { IdleManager } from '../components/IdleManager';
 
 export class Game extends Scene {
 	private networkManager!: NetworkManager;
@@ -69,6 +72,9 @@ export class Game extends Scene {
 	private freeRoundManager: FreeRoundManager | null = null;
 	private character1!: Character;
 	private character2!: Character;
+
+	private idleManager: IdleManager | null = null;
+	private onPointerDownResetIdle?: () => void;
 
 	// Queue for wins that occur while a dialog is already showing
 	private winQueue: Array<{ payout: number; bet: number }> = [];
@@ -115,6 +121,23 @@ export class Game extends Scene {
 		try { (this.scatterAnticipation as any)?.resize?.(this); } catch { }
 		try { (this.clockDisplay as any)?.resize?.(); } catch { }
 		try { (this.freeRoundManager as any)?.resize?.(this); } catch { }
+	}
+
+	private initializeGameDataBetLevels(): void {
+		try {
+			const initData = this.gameAPI?.getInitializationData?.();
+			const levels = (initData as any)?.betLevels;
+			if (Array.isArray(levels) && levels.length > 0) {
+				const sanitized = levels
+					.map((v: any) => Number(v))
+					.filter((n: number) => Number.isFinite(n) && n > 0);
+				if (sanitized.length > 0) {
+					this.gameData.betLevels = sanitized;
+				}
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to set gameData.betLevels from initialization data:', e);
+		}
 	}
 
 	init(data: any) {
@@ -179,6 +202,10 @@ export class Game extends Scene {
 		// Ensure Spine plugin instance is attached and sys keys are synced for this scene
 		// before any components try to call `scene.add.spine(...)`.
 		try { ensureSpineFactory(this, '[Game] create'); } catch { }
+
+		// Set bet levels from initialization data so GameData.betLevels
+		// is the single source of truth for all bet UIs.
+		this.initializeGameDataBetLevels();
 
 		// Set physics world bounds (physics is already enabled globally)
 		if (this.physics && this.physics.world) {
@@ -352,14 +379,21 @@ export class Game extends Scene {
 		this.autoplayOptions = new AutoplayOptions(this.networkManager, this.screenModeManager);
 		this.autoplayOptions.create(this);
 
+		// Create loading spinner at center of reel (same as SymbolGrid: width*0.5-5, GRID_CENTER_Y_*)
+		const centerX = this.scale.width * 0.5 - 5;
+		const centerY = this.scale.height * GRID_CENTER_Y_RATIO + GRID_CENTER_Y_OFFSET_PX;
+		const loadingSpinner = new LoadingSpinner(this, centerX, centerY);
+
 		// Create slot controller using the managers
 		this.slotController = new SlotController(this.networkManager, this.screenModeManager);
 		this.slotController.setSymbols(this.symbols); // Set symbols reference for free spin data access
 		this.slotController.setBuyFeatureReference(); // Set BuyFeature reference for bet access
+		this.slotController.setLoadingSpinner(loadingSpinner);
 		this.slotController.create(this);
 
 		// Create free round manager AFTER SlotController so it can mirror the spin button.
 		// It will read the backend initialization data and decide whether to show itself.
+		let appliedInitializationFreeSpinBet = false;
 		try {
 			const initData = this.gameAPI.getInitializationData();
 			const initFsRemaining = this.gameAPI.getRemainingInitFreeSpins();
@@ -382,6 +416,7 @@ export class Game extends Scene {
 						`[Game] Applying initialization free spin bet to SlotController: ${initFsBet.toFixed(2)}`
 					);
 					this.slotController.updateBetAmount(initFsBet);
+					appliedInitializationFreeSpinBet = true;
 				}
 
 				this.freeRoundManager.setFreeSpins(initFsRemaining);
@@ -389,6 +424,12 @@ export class Game extends Scene {
 			}
 		} catch (e) {
 			console.warn('[Game] Failed to create FreeRoundManager from initialization data:', e);
+		}
+
+		// After BetOptions + SlotController are initialized, set the base bet to the first bet level.
+		// Respect initialization free-spin bet if one was applied above.
+		if (!appliedInitializationFreeSpinBet) {
+			this.initializeBetAmoung();
 		}
 
 		// Create symbol explosion transition component and play at scene start (DISABLED for dimmer transition)
@@ -425,6 +466,9 @@ export class Game extends Scene {
 
 		// Initialize balance on game start
 		this.initializeGameBalance();
+
+		// Start idle/session timeout tracking
+		this.initializeAndStartIdleManager();
 
 		// Emit START event AFTER SlotController is created
 		console.log(`[Game] Emitting START event to initialize game...`);
@@ -791,6 +835,30 @@ export class Game extends Scene {
 		});
 	}
 
+	private initializeBetAmoung() {
+		try {
+			const firstBet = this.gameData.betLevels.length > 0
+				? Number(this.gameData.betLevels[0])
+				: 0.20;
+
+			const previousBet = this.slotController?.getBaseBetAmount?.() ?? 0.20;
+
+			if (this.slotController) {
+				this.slotController.updateBetAmount(firstBet);
+			}
+			if (this.betOptions) {
+				this.betOptions.setCurrentBet(firstBet);
+			}
+
+			// Keep backend (and listeners like Menu) in sync.
+			if (Math.abs(firstBet - previousBet) > 0.0001) {
+				gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: firstBet, previousBet: previousBet });
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to apply initialization first bet level:', e);
+		}
+	}
+
 	/**
 	 * Initialize the game balance on start
 	 */
@@ -858,6 +926,49 @@ export class Game extends Scene {
 		if (this.autoplayOptions && this.autoplayOptions.isVisible()) {
 			this.autoplayOptions.setCurrentBalance(balance);
 		}
+	}
+
+	private initializeAndStartIdleManager(): void {
+		const idleTimeoutMs = MAX_IDLE_TIME_MINUTES * 60 * 1000;
+		this.idleManager = new IdleManager(this, idleTimeoutMs);
+
+		// On timeout, delegate to GameAPI handler (shows popup and clears tokens)
+		this.idleManager.events.on(IdleManager.TIMEOUT_EVENT, () => {
+			try {
+				this.gameAPI?.handleSessionTimeout?.();
+			} catch (e) {
+				console.error('[Game] Error handling session timeout:', e);
+			}
+		});
+
+		// Reset idle when game is actively running (bonus/spin) so we don't timeout mid-spin.
+		this.idleManager.events.on(IdleManager.CHECK_INTERVAL_EVENT, () => {
+			try {
+				const gsm: any = this.gameStateManager;
+				if (gsm?.isBonus || gsm?.isReelSpinning || gsm?.isProcessingSpin) {
+					this.idleManager?.reset();
+				}
+			} catch {}
+		});
+
+		this.onPointerDownResetIdle = () => {
+			this.idleManager?.reset();
+		};
+		this.input.on('pointerdown', this.onPointerDownResetIdle);
+
+		this.events.once('shutdown', () => {
+			try {
+				if (this.onPointerDownResetIdle) {
+					this.input.off('pointerdown', this.onPointerDownResetIdle);
+				}
+			} catch {}
+			try {
+				this.idleManager?.destroy();
+				this.idleManager = null;
+			} catch {}
+		});
+
+		this.idleManager.start();
 	}
 
 	/**

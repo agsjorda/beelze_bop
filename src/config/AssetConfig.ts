@@ -34,13 +34,17 @@ export class AssetConfig {
 			images: {
 				'BG-Default': `${prefix}/background/NormalGame_BZ.webp`,
 				'normal-bg-cover': `assets/portrait/high/background/ControllerNormal_BZ.png`,
-				'loading-spinner': `assets/portrait/high/loading/loading-spinner.png`,
-				'shine': `assets/portrait/high/background/shine.png`
+				'shine': `assets/portrait/high/background/shine.png`,
+				'dijoker_loading': `${prefix}/dijoker_loading/DI JOKER.png`
 			},
 			spine: {
 				'NormalGame_BZ': {
 					atlas: `assets/portrait/high/background/NormalGame_BZ.atlas`,
 					json: `assets/portrait/high/background/NormalGame_BZ.json`
+				},
+				'di_joker': {
+					atlas: `${prefix}/dijoker_loading/DI JOKER.atlas`,
+					json: `${prefix}/dijoker_loading/DI JOKER.json`
 				}
 			}
 		};

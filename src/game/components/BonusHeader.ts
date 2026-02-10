@@ -581,11 +581,22 @@ export class BonusHeader {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
-		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
-		const prefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
-		const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-		return `${prefix}${formatted}`;
+
+		// Format with commas for thousands and 2 decimal places
+		const formatted = new Intl.NumberFormat('en-US', {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2
+		}).format(amount);
+
+		if (isDemo) {
+			return formatted;
+		}
+
+		// Get currency code with proper spacing (match sugar_wonderland)
+		const currencyCode = CurrencyManager.getCurrencyCode();
+		const space = currencyCode ? ' ' : '';
+		return currencyCode ? `${currencyCode}${space}${formatted}` : formatted;
 	}
 
 	/**
@@ -839,9 +850,9 @@ export class BonusHeader {
 					}
 
 					if (this.youWonText) this.youWonText.setText('YOU WON');
-					const formatted = this.formatMultiplierAmount(spinTotal);
+					const formatted = this.formatCurrency(spinTotal);
 					const total = spinTotal * this.multiplierCumulative;
-					const formattedTotal = this.formatMultiplierTotal(total);
+					const formattedTotal = this.formatCurrency(total);
 					if (this.amountText && this.youWonText) {
 						// Stop any existing tweens
 						if (this.scene) {
@@ -851,7 +862,7 @@ export class BonusHeader {
 
 						this.youWonText.setVisible(true);
 						this.amountText.setVisible(true);
-						this.amountText.setText(`${formatted} x${this.multiplierCumulative} = ${formattedTotal}`);
+						this.amountText.setText(`${formatted} x ${this.multiplierCumulative} = ${formattedTotal}`);
 
 						// Pulse animation when updating multiplier display
 						if (this.scene) {
