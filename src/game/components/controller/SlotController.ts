@@ -3218,17 +3218,11 @@ export class SlotController {
 		const currentBet = parseFloat(currentBetText);
 		const increasedBet = currentBet * 1.25; // Add 25%
 		
-		// Only update the display, keep baseBetAmount unchanged for API calls
+		// Only update the display, keep baseBetAmount unchanged for API calls.
+		// Do not show or layout currency here - bet display uses "BET (USD)" label above and amount only between -/+.
 		if (this.betAmountText) {
 			this.betAmountText.setText(increasedBet.toFixed(2));
-			
-			// Update dollar sign position based on new bet amount width
-			if (this.betDollarText) {
-				const betY = this.betAmountText.y;
-				const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
-				const isDemo = this.gameAPI?.getDemoState();
-				this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
-			}
+			if (this.betDollarText) this.betDollarText.setVisible(false);
 		}
 		
 		// Even though base bet doesn't change, price uses base bet x100
@@ -3241,17 +3235,10 @@ export class SlotController {
 	 * Restore original bet amount when amplify bet is deactivated
 	 */
 	private restoreOriginalBetAmount(): void {
-		// Restore display to base bet amount
+		// Restore display to base bet amount. Keep currency hidden (label above shows "BET (USD)").
 		if (this.betAmountText) {
 			this.betAmountText.setText(this.baseBetAmount.toFixed(2));
-			
-			// Update dollar sign position based on new bet amount width
-			if (this.betDollarText) {
-				const betY = this.betAmountText.y;
-				const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
-				const isDemo = this.gameAPI?.getDemoState();
-				this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 5);
-			}
+			if (this.betDollarText) this.betDollarText.setVisible(false);
 		}
 		
 		// Keep Buy Feature price in sync
