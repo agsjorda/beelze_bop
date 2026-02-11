@@ -412,7 +412,7 @@ export class BuyFeature {
 
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+		const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
 		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, `${currencyPrefix}${this.formatNumberWithCommas(calculatedPrice)}`, {
 			fontSize: '42px',
 			fontFamily: 'Poppins-Regular',
@@ -486,7 +486,7 @@ export class BuyFeature {
 		if (this.priceDisplay) {
 			const calculatedPrice = this.getCurrentBetValue();
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
-			const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+			const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
 			this.priceDisplay.setText(`${currencyPrefix}${this.formatNumberWithCommas(calculatedPrice)}`);
 			this.priceDisplay.setColor('#ffffff');
 			this.priceDisplay.setStyle({ color: '#ffffff' });
@@ -578,7 +578,7 @@ export class BuyFeature {
 		// Bet display - show current bet value
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoBet = (scene as any).gameAPI?.getDemoState();
-		const currencyPrefixBet = isDemoBet ? '' : CurrencyManager.getInlinePrefix();
+		const currencyPrefixBet = isDemoBet ? '' : CurrencyManager.getCurrencyCode();
 		this.betDisplay = scene.add.text(x, y, `${currencyPrefixBet}${this.getCurrentBet().toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#00ff00', // GREEN for diagnostic
@@ -666,7 +666,7 @@ export class BuyFeature {
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
-			const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+			const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
 			this.betDisplay.setText(`${currencyPrefix}${this.getCurrentBet().toFixed(2)}`);
 			this.betDisplay.setColor('#00ff00');
 			this.betDisplay.setStyle({ color: '#00ff00', fontFamily: 'Arial' });

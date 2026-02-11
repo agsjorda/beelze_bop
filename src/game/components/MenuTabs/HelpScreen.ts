@@ -767,7 +767,7 @@ export class HelpScreen {
 
         // Static price text centered on the button (hide currency in demo)
         const isDemoBuyPrice = (scene as any)?.gameAPI?.getDemoState();
-        const currencyPrefixBuyPrice = isDemoBuyPrice ? '' : CurrencyManager.getInlinePrefix();
+        const currencyPrefixBuyPrice = isDemoBuyPrice ? '' : CurrencyManager.getCurrencyCode();
         const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencyPrefixBuyPrice}10,000`, {
             fontSize: '18px',
             color: '#FFFFFF',
@@ -1008,7 +1008,7 @@ export class HelpScreen {
             cardHeight / 2 + this.padding * 0.8,
             (() => {
                 const isDemoBalance = (scene as any)?.gameAPI?.getDemoState();
-                const currencyPrefixBalance = isDemoBalance ? '' : CurrencyManager.getInlinePrefix();
+                const currencyPrefixBalance = isDemoBalance ? '' : CurrencyManager.getCurrencyCode();
                 return `${currencyPrefixBalance}200,000.00`;
             })(),
             {

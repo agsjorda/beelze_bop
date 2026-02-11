@@ -859,7 +859,7 @@ export class FreeRoundManager {
 
 		// "With $X.XX" line
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+		const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
 		const betValue =
 			this.initBet != null
 				? this.initBet
@@ -884,7 +884,7 @@ export class FreeRoundManager {
 		this.panelBetText = scene.add.text(
 			0,
 			0,
-			`${currencyPrefix}${betDisplay}`,
+			`${currencyPrefix} ${betDisplay}`,
 			{
 				fontSize: '20px',
 				color: '#379557',
@@ -1045,9 +1045,9 @@ export class FreeRoundManager {
 		this.panelContainer.add(titleText);
 
 		// Line 1: "You won $XX.XX with"
-		const totalWinDisplay = totalWin.toFixed(2);
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+		const totalWinDisplay = totalWin.toFixed(2);
+		const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
 		const line1Y = -40;
 		const line1Parts = [
@@ -1056,7 +1056,7 @@ export class FreeRoundManager {
 				style: { fontSize: '24px', color: '#ffffff', fontFamily: 'poppins-bold' }
 			},
 			{
-				text: `${currencyPrefix}${totalWinDisplay}`,
+				text: `${currencyPrefix} ${totalWinDisplay}`,
 				style: { fontSize: '32px', color: '#00ff00', fontFamily: 'poppins-bold' }
 			},
 			{
@@ -1132,7 +1132,7 @@ export class FreeRoundManager {
 		const betValueText = scene.add.text(
 			0,
 			0,
-			`${currencyPrefix}${betDisplay}`,
+			`${currencyPrefix} ${betDisplay}`,
 			{
 				fontSize: '22px',
 				color: '#379557',
@@ -1287,13 +1287,13 @@ export class FreeRoundManager {
 		// Line 1: "$XX.XX" (winnings only, on its own line)
 		const totalWinDisplay = totalWin.toFixed(2);
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+		const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
 		const winningsY = -50;
 
 		const winningsText = scene.add.text(
 			0,
 			winningsY,
-			`${currencyPrefix}${totalWinDisplay}`,
+			`${currencyPrefix} ${totalWinDisplay}`,
 			{
 				fontSize: '32px',
 				color: '#00ff00',

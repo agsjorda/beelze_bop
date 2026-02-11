@@ -134,7 +134,7 @@ export class BonusHeader {
 		// Line 2: amount value
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoInitial = (this.scene as any)?.gameAPI?.getDemoState();
-		const prefixInitial = isDemoInitial ? '' : CurrencyManager.getInlinePrefix();
+		const prefixInitial = isDemoInitial ? '' : CurrencyManager.getCurrencyCode();
 		this.amountText = scene.add.text(x, y + 18, `${prefixInitial}0.00`, {
 			fontSize: '24px',
 			color: '#00ff00',
