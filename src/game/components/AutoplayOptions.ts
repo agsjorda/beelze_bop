@@ -247,7 +247,7 @@ export class AutoplayOptions {
 		
 		// "Balance" label
 		const balanceLabel = scene.add.text(-150, 1, 'Balance', {
-			fontSize: '24px',
+			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		});
@@ -258,8 +258,8 @@ export class AutoplayOptions {
 		// Check if demo mode is active - if so, use blank currency prefix
 		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const prefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-		const balanceAmount = scene.add.text(150, 1, `${prefix}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
-			fontSize: '24px',
+		const balanceAmount = scene.add.text(150, 1, `${prefix}${prefix ? ' ' : ''}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
+			fontSize: '20px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
 		});
@@ -381,7 +381,7 @@ export class AutoplayOptions {
 		
 		// Bet display
 		const displayPrefix = ((scene as any).gameAPI?.getDemoState?.() ? '' : CurrencyManager.getCurrencyCode());
-		this.autoplayDisplay = scene.add.text(x, y, `${displayPrefix}${this.currentBet.toFixed(2)}` , {
+		this.autoplayDisplay = scene.add.text(x, y, `${displayPrefix}${displayPrefix ? ' ' : ''}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -567,7 +567,7 @@ export class AutoplayOptions {
 			const displayBet = this.isEnhancedBet ? this.currentBet * 1.25 : this.currentBet;
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const prefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			this.autoplayDisplay.setText(`${prefix}${displayBet.toFixed(2)}`);
+			this.autoplayDisplay.setText(`${prefix}${prefix ? ' ' : ''}${displayBet.toFixed(2)}`);
 		}
 	}
 
@@ -575,7 +575,7 @@ export class AutoplayOptions {
 		if (this.balanceAmountText) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const prefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			this.balanceAmountText.setText(`${prefix}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+			this.balanceAmountText.setText(`${prefix}${prefix ? ' ' : ''}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 		}
 	}
 

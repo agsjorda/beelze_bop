@@ -4028,16 +4028,17 @@ export class SlotController {
 			} else {
 				console.log('[SlotController] Bonus mode deactivated - showing primary controller');
 				this.showPrimaryController();
-				// Clear buy feature free spins flag when bonus ends
+				// Clear buy feature free spins flag when bonus ends and release buy-feature locks.
+				// Do NOT gate on gameStateManager.isBonusFinished: Game clears this flag early in setBonusMode(false),
+				// which can leave controller buttons permanently disabled after the final free spin.
+				const hadBuyFeatureLock =
+					(this.buyFeatureController?.isSpinLocked?.() ?? false) || this.isBuyFeatureFreeSpinsActive;
 				this.isBuyFeatureFreeSpinsActive = false;
-				// Only release buy feature spin lock if bonus has actually finished
-				if (gameStateManager.isBonusFinished) {
-					console.log('[SlotController] Bonus finished - releasing buy feature spin lock');
+				if (hadBuyFeatureLock) {
+					console.log('[SlotController] Bonus ended - releasing buy feature spin lock');
 					this.buyFeatureController.setSpinLock(false);
 					// Re-enable all auxiliary buttons now that buy feature sequence is complete
 					this.updateAllAuxiliaryButtonStates();
-				} else {
-					console.log('[SlotController] Bonus ended but may retrigger - keeping spin locked');
 				}
 				// Clear any pending free spins data when bonus mode ends
 				if (this.pendingFreeSpinsData) {
@@ -4069,14 +4070,14 @@ export class SlotController {
 			this.hideFreeSpinDisplay();
 			this.freeSpinDisplayOverride = null;
 			this.pendingFreeSpinsData = null;
-			// Only release buy feature spin lock if bonus has actually finished
-			if (gameStateManager.isBonusFinished) {
-				console.log('[SlotController] Bonus finished - releasing buy feature spin lock');
+			// Release buy feature locks defensively when bonus UI is being reset.
+			const hadBuyFeatureLock =
+				(this.buyFeatureController?.isSpinLocked?.() ?? false) || this.isBuyFeatureFreeSpinsActive;
+			this.isBuyFeatureFreeSpinsActive = false;
+			if (hadBuyFeatureLock) {
+				console.log('[SlotController] resetFreeSpinState - releasing buy feature spin lock');
 				this.buyFeatureController.setSpinLock(false);
-				// Re-enable all auxiliary buttons now that buy feature sequence is complete
 				this.updateAllAuxiliaryButtonStates();
-			} else {
-				console.log('[SlotController] Bonus ended but may retrigger - keeping spin locked');
 			}
 			this.updateSpinButtonState();
 		});
@@ -4085,14 +4086,14 @@ export class SlotController {
 		this.scene.events.on('hideBonusHeader', () => {
 			console.log('[SlotController] hideBonusHeader received - hiding free spin display');
 			this.hideFreeSpinDisplay();
-			// Only release buy feature spin lock if bonus has actually finished
-			if (gameStateManager.isBonusFinished) {
-				console.log('[SlotController] Bonus finished - releasing buy feature spin lock');
+			// Release buy feature locks defensively when bonus header is hidden.
+			const hadBuyFeatureLock =
+				(this.buyFeatureController?.isSpinLocked?.() ?? false) || this.isBuyFeatureFreeSpinsActive;
+			this.isBuyFeatureFreeSpinsActive = false;
+			if (hadBuyFeatureLock) {
+				console.log('[SlotController] hideBonusHeader - releasing buy feature spin lock');
 				this.buyFeatureController.setSpinLock(false);
-				// Re-enable all auxiliary buttons now that buy feature sequence is complete
 				this.updateAllAuxiliaryButtonStates();
-			} else {
-				console.log('[SlotController] Bonus ended but may retrigger - keeping spin locked');
 			}
 			this.updateSpinButtonState();
 		});
@@ -4449,9 +4450,7 @@ export class SlotController {
 			// If the TotalW_BZ dialog is shown at the end of bonus, release buy-feature locks
 			// and re-evaluate control states so buttons are not left disabled.
 			if (dialogType === 'TotalW_BZ' && (this.isBuyFeatureFreeSpinsActive || this.buyFeatureController?.isSpinLocked?.())) {
-				if (gameStateManager.isBonusFinished) {
-					this.buyFeatureController?.setSpinLock(false);
-				}
+				this.buyFeatureController?.setSpinLock(false);
 				this.isBuyFeatureFreeSpinsActive = false;
 				this.updateBetButtonsStateWithLock();
 				this.updateAutoplayButtonStateWithLock();

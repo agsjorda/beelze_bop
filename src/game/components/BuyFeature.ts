@@ -392,7 +392,7 @@ export class BuyFeature {
 		const screenHeight = scene.cameras.main.height;
 		const backgroundTop = screenHeight - 736;
 		
-		const featureName = scene.add.text(screenWidth / 2, backgroundTop + 100, "Beelze-Bop Bonus", {
+		const featureName = scene.add.text(screenWidth / 2, backgroundTop + 100, "A Devilish Deal!", {
 			fontSize: '24px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
@@ -413,7 +413,7 @@ export class BuyFeature {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, `${currencyPrefix}${this.formatNumberWithCommas(calculatedPrice)}`, {
+		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, `${currencyPrefix}${currencyPrefix ? ' ' : ''}${this.formatNumberWithCommas(calculatedPrice)}`, {
 			fontSize: '42px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
@@ -487,7 +487,7 @@ export class BuyFeature {
 			const calculatedPrice = this.getCurrentBetValue();
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			this.priceDisplay.setText(`${currencyPrefix}${this.formatNumberWithCommas(calculatedPrice)}`);
+			this.priceDisplay.setText(`${currencyPrefix}${currencyPrefix ? ' ' : ''}${this.formatNumberWithCommas(calculatedPrice)}`);
 			this.priceDisplay.setColor('#ffffff');
 			this.priceDisplay.setStyle({ color: '#ffffff' });
 			console.log('[BuyFeature] priceDisplay update forced to white:', this.priceDisplay.style.color);
@@ -579,7 +579,7 @@ export class BuyFeature {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoBet = (scene as any).gameAPI?.getDemoState();
 		const currencyPrefixBet = isDemoBet ? '' : CurrencyManager.getCurrencyCode();
-		this.betDisplay = scene.add.text(x, y, `${currencyPrefixBet}${this.getCurrentBet().toFixed(2)}`, {
+		this.betDisplay = scene.add.text(x, y, `${currencyPrefixBet}${currencyPrefixBet ? ' ' : ''}${this.getCurrentBet().toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#00ff00', // GREEN for diagnostic
 			fontFamily: 'Arial'
@@ -667,7 +667,7 @@ export class BuyFeature {
 		if (this.betDisplay) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			this.betDisplay.setText(`${currencyPrefix}${this.getCurrentBet().toFixed(2)}`);
+			this.betDisplay.setText(`${currencyPrefix}${currencyPrefix ? ' ' : ''}${this.getCurrentBet().toFixed(2)}`);
 			this.betDisplay.setColor('#00ff00');
 			this.betDisplay.setStyle({ color: '#00ff00', fontFamily: 'Arial' });
 			this.betDisplay.setBlendMode(Phaser.BlendModes.NORMAL);
