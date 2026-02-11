@@ -58,8 +58,6 @@ export class SlotController {
 	
 	// UI elements not managed by controllers
 	private featureAmountText!: Phaser.GameObjects.Text;
-	private featureDollarText!: Phaser.GameObjects.Text;
-	private featureLabelText: Phaser.GameObjects.Text | null = null;
 	private featureLabelContainer!: Phaser.GameObjects.Container;
 	private featureButtonHitZone: Phaser.GameObjects.Zone | null = null;
 	private primaryControllers!: Phaser.GameObjects.Container;
@@ -288,14 +286,11 @@ export class SlotController {
 		if (this.featureButtonHitZone) {
 			this.featureButtonHitZone.setVisible(false);
 		}
+		if (this.featureLabelContainer) {
+			this.featureLabelContainer.setVisible(false);
+		}
 		if (this.featureAmountText) {
 			this.featureAmountText.setVisible(false);
-		}
-		if (this.featureDollarText) {
-			this.featureDollarText.setVisible(false);
-		}
-		if (this.featureLabelText) {
-			this.featureLabelText.setVisible(false);
 		}
 
 		// Autoplay button
@@ -338,14 +333,11 @@ export class SlotController {
 		if (this.featureButtonHitZone) {
 			this.featureButtonHitZone.setVisible(true);
 		}
+		if (this.featureLabelContainer) {
+			this.featureLabelContainer.setVisible(true);
+		}
 		if (this.featureAmountText) {
 			this.featureAmountText.setVisible(true);
-		}
-		if (this.featureDollarText) {
-			this.featureDollarText.setVisible(true);
-		}
-		if (this.featureLabelText) {
-			this.featureLabelText.setVisible(true);
 		}
 
 		const autoplayButton = this.buttons.get('autoplay');
@@ -1879,6 +1871,8 @@ export class SlotController {
 		// Create container for feature label parts
 		this.featureLabelContainer = scene.add.container(featureX, featureY - 8);
 		this.featureLabelContainer.setDepth(9);
+		// If the game boots directly into initialization free rounds, keep this label hidden.
+		this.featureLabelContainer.setVisible((gameStateManager as any)?.isInFreeSpinRound !== true);
 
 		const featureText = 'BUY';
 		const currencyCode = isDemoFeature ? '' : CurrencyManager.getCurrencyCode();
@@ -1939,7 +1933,6 @@ export class SlotController {
 		const totalWidth = currentX;
 		this.featureLabelContainer.setX(featureX - totalWidth / 2);
 		this.controllerContainer.add(this.featureLabelContainer);
-		this.featureLabelText = featureWordText as any; // Keep reference for compatibility
 		this.featureLabelContainer.setInteractive();
 		this.featureLabelContainer.on('pointerdown', () => this.handleBuyFeaturePress());
 
@@ -1957,20 +1950,6 @@ export class SlotController {
 		this.controllerContainer.add(this.featureAmountText);
 		this.featureAmountText.setInteractive();
 		this.featureAmountText.on('pointerdown', () => this.handleBuyFeaturePress());
-
-		// Hide old currency text (kept for compatibility but not visible)
-		this.featureDollarText = scene.add.text(
-			featureX,
-			featureY + 8,
-			CurrencyManager.getCurrencyGlyph(),
-			{
-				fontSize: '14px',
-				color: '#ffffff',
-				fontFamily: 'poppins-regular'
-			}
-		).setOrigin(0.5, 0.5).setDepth(9);
-		this.featureDollarText.setVisible(false);
-		this.controllerContainer.add(this.featureDollarText);
 
 		// Initialize amount from current bet
 		this.updateFeatureAmountFromCurrentBet();
@@ -2209,7 +2188,7 @@ export class SlotController {
 	 * Update the Buy Feature button amount to current base bet x100
 	 */
 	private updateFeatureAmountFromCurrentBet(): void {
-		if (!this.featureAmountText || !this.featureDollarText) {
+		if (!this.featureAmountText) {
 			return;
 		}
 		// Always use base bet for Buy Feature price; enhanced bet's +25% is display-only
@@ -2294,6 +2273,8 @@ export class SlotController {
 		if (this.scene && this.featureLabelContainer) {
 			const isDemo = this.gameAPI?.getDemoState();
 			const featureX = this.scene.scale.width * 0.5;
+			// FreeRoundManager uses the center row during init free rounds; keep label hidden then.
+			this.featureLabelContainer.setVisible((gameStateManager as any)?.isInFreeSpinRound !== true);
 			
 			this.featureLabelContainer.removeAll(true);
 			
