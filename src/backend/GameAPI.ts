@@ -595,15 +595,15 @@ export class GameAPI {
 
             // // TEST OVERRIDE: force free spin round for local testing with new format.
             // // Remove or comment this block out for production.
-            payload.hasFreeSpinRound = true;
-            payload.freeSpinRound = [
-                {
-                    bet: '10.00',
-                    totalFreeSpin: 2,
-                    usedFreeSpin: 0,
-                    remainingFreeSpin: 2
-                }
-            ];
+            // payload.hasFreeSpinRound = true;
+            // payload.freeSpinRound = [
+            //     {
+            //         bet: '10.00',
+            //         totalFreeSpin: 2,
+            //         usedFreeSpin: 0,
+            //         remainingFreeSpin: 2
+            //     }
+            // ];
 
             // Cache the initialization data for later retrieval
             this.initializationData = payload;

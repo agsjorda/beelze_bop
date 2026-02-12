@@ -313,10 +313,15 @@ export class SlotController {
 
 		// Bet background (that opens bet options)
 		this.disableBetBackgroundInteraction('free rounds');
+		// Disable bet amount text so the bet options panel cannot be opened during free rounds
+		if (this.betAmountText) {
+			this.betAmountText.disableInteractive();
+		}
 	}
 
 	/**
-	 * Re-enable UI controls after free rounds end.
+	 * Re-enable UI controls after free rounds end (e.g. when credited panel is closed).
+	 * Ensures autoplay and amplify buttons are fully restored (no grey tint).
 	 */
 	public enableControlsAfterFreeRounds(): void {
 		console.log('[SlotController] Enabling controls after free rounds');
@@ -324,6 +329,7 @@ export class SlotController {
 		this.updateSpinButtonState();
 		this.enableBetButtons();
 		this.enableFeatureButton();
+		this.enableTurboButton();
 
 		// Restore Buy Feature visuals after free rounds end
 		const featureButton = this.buttons.get('feature');
@@ -340,22 +346,29 @@ export class SlotController {
 			this.featureAmountText.setVisible(true);
 		}
 
+		// Autoplay: full enable and clear grey tint so it does not stay greyed out
+		this.enableAutoplayButton();
 		const autoplayButton = this.buttons.get('autoplay');
 		if (autoplayButton) {
 			autoplayButton.setAlpha(1.0);
+			autoplayButton.clearTint();
 			autoplayButton.setInteractive();
-			console.log('[SlotController] Autoplay button re-enabled after free rounds');
 		}
+		this.setAutoplayButtonState(false);
 
-		const amplifyButton = this.buttons.get('amplify');
-		if (amplifyButton) {
-			amplifyButton.setAlpha(1.0);
-			amplifyButton.setInteractive();
-			console.log('[SlotController] Amplify bet button re-enabled after free rounds');
-		}
+		// Amplify: use controller so tint is cleared and button is fully enabled
+		this.amplifyBetController.enableButton();
 
 		// Bet background (that opens bet options)
 		this.enableBetBackgroundInteraction('after free rounds');
+		// Re-enable bet amount text so the bet options panel can be opened again
+		if (this.betAmountText) {
+			this.betAmountText.setInteractive();
+		}
+
+		this.updateAutoplayButtonState();
+		this.updateTurboButtonState();
+		console.log('[SlotController] All controls (including autoplay and amplify) re-enabled after free rounds');
 	}
 
 	/**
@@ -366,15 +379,17 @@ export class SlotController {
 		this.disableBetButtons();
 		this.disableFeatureButton();
 		this.disableAutoplayButton();
-		this.disableTurboButton();
+		this.disableBetBackgroundInteraction('spin started');
+		// Turbo stays enabled so the user can toggle speed at any time
 	}
 
 	/**
 	 * Re-enable controls when a spin attempt fails (e.g., insufficient balance, API error, etc.)
 	 */
 	private reenableControlsOnSpinFailure(): void {
-		// Clear spin lock before re-enabling buttons to prevent them from being disabled again
+		// Clear spin lock and processing flag before re-enabling buttons
 		this.isSpinLocked = false;
+		gameStateManager.isProcessingSpin = false;
 		
 		// Only re-enable if reels aren't actually spinning (spin failed before reels started)
 		if (gameStateManager.isReelSpinning) {
@@ -404,6 +419,58 @@ export class SlotController {
 	}
 
 	/**
+	 * Re-enable all slot controller buttons and clear grey state after free round mode ends.
+	 * Call when setBonusMode(false) or resetFreeSpinState indicates we're back in base game.
+	 */
+	private reenableControlsAfterFreeRoundEnd(): void {
+		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+			return;
+		}
+		this.enableSpinButton();
+		this.enableAutoplayButton();
+		// Force autoplay button to full opacity and no tint (can stay greyed if only enableAutoplayButton ran before other logic)
+		const autoplayButton = this.buttons.get('autoplay');
+		if (autoplayButton) {
+			autoplayButton.setAlpha(1.0);
+			autoplayButton.clearTint();
+			autoplayButton.setInteractive();
+		}
+		this.setAutoplayButtonState(false);
+		this.enableTurboButton();
+		this.enableBetButtons();
+		this.enableAmplifyButton();
+		this.enableBetBackgroundInteraction('free round ended');
+		// Re-enable bet amount text so the bet options panel can be opened again
+		if (this.betAmountText) {
+			this.betAmountText.setInteractive();
+		}
+		if (this.canEnableFeatureButton) {
+			this.enableFeatureButton();
+		}
+		this.updateAutoplayButtonState();
+		this.updateTurboButtonState();
+		console.log('[SlotController] All controls re-enabled after free round end');
+	}
+
+	/**
+	 * During free-round spins mode, only turbo, menu and spin (between spins) should be enabled.
+	 * Disable autoplay, bet, feature, amplify and bet background; ensure turbo stays enabled.
+	 * Does not touch the spin button (caller should call updateSpinButtonState() to re-enable spin between spins).
+	 */
+	private lockControlsForFreeRoundMode(): void {
+		this.disableAutoplayButton();
+		this.disableBetButtons();
+		this.disableFeatureButton();
+		this.disableAmplifyButton();
+		this.disableBetBackgroundInteraction('free-round mode');
+		// Disable bet amount text so the bet options panel cannot be opened during free round spins
+		if (this.betAmountText) {
+			this.betAmountText.disableInteractive();
+		}
+		this.enableTurboButton();
+	}
+
+	/**
 	 * Disable interaction on the bet background that opens the bet options panel.
 	 * This is used in multiple states (free rounds, buy feature, etc.).
 	 */
@@ -426,6 +493,11 @@ export class SlotController {
 	 * Re-enable interaction on the bet background that opens the bet options panel.
 	 */
 	private enableBetBackgroundInteraction(reason: string = ''): void {
+		// Keep bet panel closed during free round spins until the round is finished
+		const gsmAny: any = gameStateManager as any;
+		if (gsmAny.isInFreeSpinRound === true) {
+			return;
+		}
 		if (!this.controllerContainer) {
 			return;
 		}
@@ -973,6 +1045,12 @@ export class SlotController {
 	 * @param force - If true, bypass spin lock and reel spinning checks (for failure recovery)
 	 */
 	private enableBetButtons(force: boolean = false): void {
+		// Keep bet buttons disabled during free round spins until the round is finished
+		const gsmAny: any = gameStateManager as any;
+		if (gsmAny.isInFreeSpinRound === true) {
+			this.disableBetButtons();
+			return;
+		}
 		if (this.isBuyFeatureControlsLocked()) {
 			this.disableBetButtons();
 			return;
@@ -1015,6 +1093,12 @@ export class SlotController {
 			return;
 		}
 		if (this.isSpinLocked || gameStateManager.isReelSpinning) {
+			this.disableBetButtons();
+			return;
+		}
+		// Keep bet +/- disabled during free round spins until the round is finished
+		const gsmAny: any = gameStateManager as any;
+		if (gsmAny.isInFreeSpinRound === true) {
 			this.disableBetButtons();
 			return;
 		}
@@ -2436,7 +2520,8 @@ export class SlotController {
 			try {
 				const spinData: any = data?.spinData;
 				this.pendingWinLock = this.spinDataHasWins(spinData);
-				if (this.pendingWinLock) {
+				// During normal-mode autoplay, do not grey/disable the spin button (user can stop via spin)
+				if (this.pendingWinLock && !gameStateManager.isAutoPlaying) {
 					this.disableSpinButton();
 				}
 			} catch { }
@@ -2495,8 +2580,11 @@ export class SlotController {
 
 		// Listen for reels start to disable amplify button
 		gameEventManager.on(GameEventType.REELS_START, () => {
-			console.log('[SlotController] Reels started - disabling spin button and amplify button');
-			this.disableSpinButton();
+			console.log('[SlotController] Reels started - disabling amplify button');
+			// During normal-mode autoplay, do NOT disable/grey the spin button (match felice_in_space: allow stopping autoplay)
+			if (!gameStateManager.isAutoPlaying || gameStateManager.isBonus) {
+				this.disableSpinButton();
+			}
 			this.disableAmplifyButton();
 			const isFake = !!this.gameAPI?.isFakeDataEnabled?.();
 			// Autoplay counter is managed by AutoplayController
@@ -2644,13 +2732,17 @@ export class SlotController {
 				return;
 			}
 
-			// If we are in initialization free-round mode, keep autoplay/bet controls
-			// disabled/greyed-out for the duration of the free rounds. Only the spin
-			// button should be re-enabled between spins.
+			// If we are in free-round mode: only turbo and menu on REELS_STOP when wins are pending.
+			// When there are no wins (no pending win lock), enable spin now; when there are wins, do not enable spin here so it never briefly re-enables — spin is enabled in TUMBLE_SEQUENCE_DONE after wins/tumbles finish.
 			const gsmAny: any = gameStateManager as any;
 			if (gsmAny.isInFreeSpinRound === true) {
-				this.updateSpinButtonState();
-				console.log('[SlotController] Initialization free-round mode active - re-enabled spin only on REELS_STOP');
+				this.lockControlsForFreeRoundMode();
+				if (!this.pendingWinLock && !gameStateManager.isShowingWinDialog) {
+					this.updateSpinButtonState();
+					console.log('[SlotController] Free-round mode - no wins pending, spin enabled on REELS_STOP');
+				} else {
+					console.log('[SlotController] Free-round mode - wins pending, spin enabled only after TUMBLE_SEQUENCE_DONE');
+				}
 				return;
 			}
 			
@@ -2687,10 +2779,7 @@ export class SlotController {
 				if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
 					this.enableFeatureButton();
 				}
-				// Don't enable bet background if buy feature spin lock is active
-				if (!this.isBuyFeatureControlsLocked()) {
-					this.enableBetBackgroundInteraction('after manual spin REELS_STOP');
-				}
+				// Bet background enabled only in TUMBLE_SEQUENCE_DONE so it stays disabled until tumbles/wins are done
 				this.hideAutoplaySpinsRemainingText();
 				this.updateAutoplayButtonState();
 				this.updateTurboButtonState();
@@ -2713,10 +2802,7 @@ export class SlotController {
 				if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
 					this.enableFeatureButton();
 				}
-				// Don't enable bet background if buy feature spin lock is active
-				if (!this.isBuyFeatureControlsLocked()) {
-					this.enableBetBackgroundInteraction('after manual spin complete');
-				}
+				// Bet background enabled only in TUMBLE_SEQUENCE_DONE so it stays disabled until tumbles/wins are done
 				this.updateTurboButtonState();
 				console.log('[SlotController] All buttons enabled - manual spin completed and reels stopped');
 				return;
@@ -2732,48 +2818,63 @@ export class SlotController {
 
 		// Disable spin during tumble sequence; re-enable when tumbles finish
 		gameEventManager.on(GameEventType.TUMBLE_WIN_PROGRESS, () => {
-			if (!gameStateManager.isAutoPlaying) {
+			const isNormalAutoplayActive =
+				gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested;
+
+			// For manual spins, grey/disable spin + autoplay while tumbles run.
+			// For normal-mode autoplay, keep spin + autoplay usable so the player can stop autoplay,
+			// matching felice_in_space behaviour.
+			if (!isNormalAutoplayActive) {
 				this.disableSpinButton();
+				this.disableAutoplayButton();
 			}
-			this.disableAutoplayButton();
-			// Keep turbo clickable during autoplay so user can toggle speed
-			if (!gameStateManager.isAutoPlaying) {
-				this.disableTurboButton();
-			}
+
+			// Turbo stays enabled so the user can toggle speed at any time,
+			// and we still lock bet/amplify/bet-background during wins for both manual and autoplay.
 			this.disableBetButtons();
 			this.disableAmplifyButton();
+			this.disableBetBackgroundInteraction('tumble/win in progress');
 		});
 		gameEventManager.on(GameEventType.TUMBLE_SEQUENCE_DONE, () => {
+			const gsmAny: any = gameStateManager as any;
+			const inFreeRoundMode = gsmAny.isInFreeSpinRound === true;
 			if (!gameStateManager.isAutoPlaying) {
 				// Scatter/bonus: disable spin and return (don't re-enable any controls)
 				if (gameStateManager.isScatter || gameStateManager.isBonus) {
 					this.disableSpinButton();
 					return;
 				}
-				// Pending balance: keep spin disabled but fall through to re-enable autoplay/others
-				if (this.balanceController?.hasPendingBalanceUpdate()) {
+				// Free-round: do not disable spin here; fall through so the block below re-enables it after wins/tumbles
+				if (inFreeRoundMode) {
+					// fall through to block below
+				} else if (this.balanceController?.hasPendingBalanceUpdate()) {
 					this.disableSpinButton();
 				} else {
 					this.updateSpinButtonState();
 				}
 			}
-			// Only keep autoplay/others disabled for scatter/bonus (not for pending balance)
-			if (gameStateManager.isScatter || gameStateManager.isBonus) {
-				this.disableAutoplayButton();
-				this.disableTurboButton();
-				this.disableBetButtons();
-				this.disableAmplifyButton();
+			// Only keep autoplay/others disabled for scatter/bonus/free-round (not for pending balance)
+			if (gameStateManager.isScatter || gameStateManager.isBonus || inFreeRoundMode) {
+				this.lockControlsForFreeRoundMode();
+				if (inFreeRoundMode) {
+					this.updateSpinButtonState();
+				}
 				return;
 			}
 			if (!this.isBuyFeatureControlsLocked()) {
 				this.enableAutoplayButton();
 				this.enableTurboButton();
-				this.enableBetButtons();
-				this.enableAmplifyButton();
+				// During normal-mode autoplay, keep bet and amplify disabled until autoplay ends
+				if (!gameStateManager.isAutoPlaying) {
+					this.enableBetButtons();
+					this.enableAmplifyButton();
+				}
+				// Bet background only enabled in WIN_STOP -> AUTO_STOP when spin is fully done (not here: TUMBLE_SEQUENCE_DONE can fire after first cascade while more tumbles may follow)
 			}
 			// Delayed re-apply so autoplay button is enabled after balance/lock state settles
 			this.scene?.time.delayedCall(250, () => {
-				if (gameStateManager.isScatter || gameStateManager.isBonus) return;
+				const gsmDelayed: any = gameStateManager as any;
+				if (gameStateManager.isScatter || gameStateManager.isBonus || gsmDelayed.isInFreeSpinRound === true) return;
 				if (!this.isBuyFeatureControlsLocked() && !gameStateManager.isReelSpinning) {
 					this.enableAutoplayButton();
 				} else {
@@ -2843,14 +2944,12 @@ export class SlotController {
 			}
 			console.log('[SlotController] Autoplay spin count hidden');
 
-			// If we are in initialization free-round mode, do not re-enable autoplay
-			// or bet controls here; they stay disabled/greyed-out until free rounds
-			// are fully completed.
+			// If we are in free-round mode, only turbo, menu and spin stay enabled.
 			const gsmAny: any = gameStateManager as any;
-			if (gsmAny.isInFreeSpinRound === true && !gameStateManager.isBonus) {
-				// Ensure spin button itself is usable for manual free-round spins.
+			if (gsmAny.isInFreeSpinRound === true) {
+				this.lockControlsForFreeRoundMode();
 				this.updateSpinButtonState();
-				console.log('[SlotController] AUTO_STOP during initialization free-round mode - kept autoplay/bet controls disabled');
+				console.log('[SlotController] AUTO_STOP during free-round mode - turbo, menu and spin enabled');
 				return;
 			}
 			
@@ -2895,6 +2994,13 @@ export class SlotController {
 			// If scatter bonus is in progress or bonus mode is active, keep buttons disabled
 			if (gameStateManager.isScatter || gameStateManager.isBonus) {
 				console.log('[SlotController] Scatter/Bonus in progress - skipping UI re-enable in WIN_STOP');
+				return;
+			}
+			
+			// If free-round mode is active, don't re-enable buttons (only turbo and menu stay enabled)
+			const gsmWinStop: any = gameStateManager as any;
+			if (gsmWinStop.isInFreeSpinRound === true) {
+				console.log('[SlotController] Free-round mode active - skipping UI re-enable in WIN_STOP');
 				return;
 			}
 			
@@ -2981,9 +3087,12 @@ export class SlotController {
 			if (this.spinIconTween) {
 				this.spinIconTween.pause();
 			}
-			// Disable spin button interaction for normal mode autoplay until first spin is triggered
+			// Disable spin button interaction for normal mode autoplay until first spin is triggered.
+			// Keep spin button visually enabled (no tint) so it is not greyed when autoplay starts.
 			const spinButton = this.buttons.get('spin');
 			if (spinButton) {
+				spinButton.setAlpha(1.0);
+				spinButton.clearTint();
 				spinButton.disableInteractive();
 				this.shouldReenableSpinButtonAfterFirstAutoplay = true;
 				console.log('[SlotController] Disabled spin button interaction - will re-enable after first autoplay spin');
@@ -2994,9 +3103,10 @@ export class SlotController {
 			}
 		}
 
-		// Keep spin button enabled during autoplay (allow stopping autoplay)
+		// Disable bet, feature, and amplify immediately when autoplay is confirmed
 		this.disableBetButtons();
 		this.disableFeatureButton();
+		this.disableAmplifyButton();
 	}
 
 	/**
@@ -3041,8 +3151,21 @@ export class SlotController {
 			return;
 		}
 		
-		// Re-enable controls if not spinning and we're back in normal mode (autoplay re-enables only in TUMBLE_SEQUENCE_DONE)
-		if (!gameStateManager.isReelSpinning) {
+		// If free-round mode active, only turbo, menu and spin stay enabled
+		const gsmStop: any = gameStateManager as any;
+		if (gsmStop.isInFreeSpinRound === true) {
+			this.lockControlsForFreeRoundMode();
+			this.updateSpinButtonState();
+			return;
+		}
+		
+		// Re-enable controls only when spin/tumbles are fully complete
+		const spinStillInProgress =
+			gameStateManager.isReelSpinning ||
+			gameStateManager.isProcessingSpin ||
+			gameStateManager.isShowingWinDialog ||
+			this.pendingWinLock;
+		if (!spinStillInProgress) {
 			this.updateSpinButtonState();
 			// Don't re-enable auxiliary buttons if buy feature flow is active
 			if (!this.isBuyFeatureControlsLocked()) {
@@ -3055,7 +3178,11 @@ export class SlotController {
 				this.enableFeatureButton();
 			}
 			this.updateAutoplayButtonState();
-			console.log('[SlotController] Autoplay stopped - controls re-enabled (autoplay button stays disabled until TUMBLE_SEQUENCE_DONE)');
+			console.log('[SlotController] Autoplay stopped - controls re-enabled');
+		} else {
+			// Autoplay stopped but reels/wins/animations still in progress - keep spin button greyed
+			this.disableSpinButton();
+			console.log('[SlotController] Autoplay stopped - spin button remains greyed until spin/tumbles complete');
 		}
 	}
 
@@ -3769,6 +3896,8 @@ export class SlotController {
 			return;
 		}
 		this.isSpinLocked = true;
+		// Mark spin as in progress (covers both manual and autoplay paths). Cleared on REELS_STOP or reenableControlsOnSpinFailure.
+		gameStateManager.isProcessingSpin = true;
 		try {
 			if (!this.gameAPI) {
 				console.warn('[SlotController] GameAPI not available, falling back to EventBus');
@@ -4031,16 +4160,22 @@ export class SlotController {
 				// Re-enable buy feature only after bonus is fully deactivated
 				this.enableFeatureButton();
 				this.updateSpinButtonState();
-				// Defer UI refresh so Game's setBonusMode handler can clear bonus flags first
+				// Defer UI refresh so Game's setBonusMode handler can clear bonus flags first,
+				// then explicitly re-enable all controls so buttons are not left greyed after free round end
 				if (this.scene?.time) {
 					this.scene.time.delayedCall(0, () => {
 						this.updateSpinButtonState();
 						this.updateAllAuxiliaryButtonStates();
 						this.updateFeatureButtonState();
 					});
+					// Short delay so isInFreeSpinRound etc. are cleared by other components, then force re-enable all buttons
+					this.scene.time.delayedCall(100, () => {
+						this.reenableControlsAfterFreeRoundEnd();
+					});
 				} else {
 					this.updateAllAuxiliaryButtonStates();
 					this.updateFeatureButtonState();
+					this.reenableControlsAfterFreeRoundEnd();
 				}
 			}
 		});
@@ -4061,6 +4196,12 @@ export class SlotController {
 				this.updateAllAuxiliaryButtonStates();
 			}
 			this.updateSpinButtonState();
+			// Re-enable all controls so buttons are not left greyed after free round end
+			if (this.scene?.time) {
+				this.scene.time.delayedCall(100, () => this.reenableControlsAfterFreeRoundEnd());
+			} else {
+				this.reenableControlsAfterFreeRoundEnd();
+			}
 		});
 
 		// Also hide free spin UI when bonus header is hidden (defensive in case setBonusMode is not emitted)
@@ -4077,6 +4218,12 @@ export class SlotController {
 				this.updateAllAuxiliaryButtonStates();
 			}
 			this.updateSpinButtonState();
+			// Re-enable all controls so buttons are not left greyed after free round end
+			if (this.scene?.time) {
+				this.scene.time.delayedCall(100, () => this.reenableControlsAfterFreeRoundEnd());
+			} else {
+				this.reenableControlsAfterFreeRoundEnd();
+			}
 		});
 
 		// Listen for scatter bonus events with scatter index and actual free spins
@@ -4490,6 +4637,26 @@ export class SlotController {
 	 * Enable the spin button
 	 */
 	public enableSpinButton(): void {
+		// During autoplay (or about-to-start), keep spin button enabled and not greyed so user can stop autoplay (match felice_in_space)
+		if (gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested) {
+			if (this.spinButtonController) {
+				this.spinButtonController.enable();
+			}
+			const spinButton = this.buttons.get('spin');
+			if (spinButton) {
+				spinButton.setAlpha(1.0);
+				spinButton.clearTint();
+				spinButton.setInteractive();
+			}
+			if (this.spinIcon) {
+				this.spinIcon.setAlpha(1.0);
+				this.spinIcon.clearTint();
+			}
+			if (this.spinIconTween) {
+				this.spinIconTween.resume();
+			}
+			return;
+		}
 		if (this.isSpinLocked || gameStateManager.isReelSpinning || this.isBuyFeatureControlsLocked()) {
 			console.log('[SlotController] enableSpinButton skipped - spin locked or reels still spinning');
 			this.disableSpinButton();
@@ -4557,17 +4724,17 @@ export class SlotController {
 
 		// Autoplay ended when GSM says so and counter is 0; don't let stale gameData block
 		const autoplayEnded = !gameStateManager.isAutoPlaying && this.getAutoplaySpinsRemaining() <= 0;
+		// During normal-mode autoplay, keep spin button enabled (not greyed) so user can click to stop (match felice_in_space)
 		if (gameData.isAutoPlaying && !autoplayEnded) {
-			this.disableSpinButton();
+			this.enableSpinButton();
+			this.updateFeatureButtonState();
 			return;
 		}
 
-		// Simple logic: disable if spinning or autoplay active, enable otherwise
-		if ((gameData.isAutoPlaying && !autoplayEnded) || gameStateManager.isReelSpinning) {
-			console.log(`[SlotController] Disabling spin button - isReelSpinning: ${gameStateManager.isReelSpinning}, isAutoPlaying: ${gameData.isAutoPlaying}`);
+		// Simple logic: disable if spinning or spin in progress (e.g. API call in flight), enable otherwise
+		if (gameStateManager.isReelSpinning || gameStateManager.isProcessingSpin) {
 			this.disableSpinButton();
 		} else {
-			console.log(`[SlotController] Enabling spin button - no active game state`);
 			this.enableSpinButton();
 		}
 		// Also update feature button state whenever spin button state changes

@@ -272,6 +272,12 @@ export class SpinButtonController {
       return;
     }
     
+    // Check if a spin is already in progress (e.g. handleSpin in flight, before reels start)
+    if (gameStateManager.isProcessingSpin) {
+      this.callbacks.onSpinBlocked('Already processing spin');
+      return;
+    }
+    
     // Check if already spinning
     if (gameStateManager.isReelSpinning) {
       this.callbacks.onSpinBlocked('Already spinning');

@@ -310,8 +310,8 @@ export class FreeRoundManager {
 
 		if (shouldUseFreeSpin) {
 			// Normal behavior: show the free spin start reward panel when we have free rounds,
-			// but wait 1 second so the player can see the main game state first.
-			scene.time.delayedCall(1500, () => {
+			// after a short delay so the player can see the main game state first.
+			scene.time.delayedCall(0, () => {
 				// Guard against the manager being destroyed in the meantime
 				if (!this.sceneRef) {
 					return;
@@ -361,50 +361,78 @@ export class FreeRoundManager {
 			// so the transition feels smooth and the player clearly sees the summary.
 
 			// Show completion panel once all free spin rounds are consumed,
-			// but only after reels have stopped and all win dialogs/animations are done.
+			// but only after reels have stopped AND all tumbles/win animations are done.
 			if (!this.completionPanelShown && this.sceneRef) {
 				this.completionPanelShown = true;
 
+				let tumbleSequenceDoneForCompletion = false;
+				let reelsStopTime: number | null = null;
+				const FALLBACK_MS = 600; // If no TUMBLE_SEQUENCE_DONE (no-tumble spin), show after this delay from REELS_STOP
+				let fallbackTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
 				const showWhenSafe = () => {
-					// Guard on game state: wait until reels are stopped and all win flows/dialogs are done
-					if (
+					const reelsAndDialogOk =
 						!gameStateManager.isReelSpinning &&
-						!gameStateManager.isShowingWinDialog
-					) {
-						this.showCompletionCreditedPanel(this.getFinalFreeRoundTotalWin());
-						return;
-					}
+						!gameStateManager.isShowingWinDialog;
+					// Only show after tumbles are done (TUMBLE_SEQUENCE_DONE) or after fallback delay for no-tumble spins
+					const tumblesOrFallback =
+						tumbleSequenceDoneForCompletion ||
+						(reelsStopTime !== null && Date.now() - reelsStopTime >= FALLBACK_MS);
 
-					// Listen once for REELS_STOP, WIN_STOP, and WIN_DIALOG_CLOSED, then try again.
-					// This handles both:
-					//  - spins with a win dialog (WIN_DIALOG_CLOSED will fire)
-					//  - spins with wins but no dialog (WIN_STOP will fire after animations)
-					let reelsStopUnsub: (() => void) | null = null;
-					let winStopUnsub: (() => void) | null = null;
-					let winDialogClosedUnsub: (() => void) | null = null;
-
-					const attempt = () => {
+					if (reelsAndDialogOk && tumblesOrFallback) {
+						if (fallbackTimeoutId !== null) {
+							clearTimeout(fallbackTimeoutId);
+							fallbackTimeoutId = null;
+						}
 						if (reelsStopUnsub) reelsStopUnsub();
 						if (winStopUnsub) winStopUnsub();
 						if (winDialogClosedUnsub) winDialogClosedUnsub();
-
-						// Re-check state; if still busy, recurse
-						if (
-							!gameStateManager.isReelSpinning &&
-							!gameStateManager.isShowingWinDialog
-						) {
-							this.showCompletionCreditedPanel(this.getFinalFreeRoundTotalWin());
-						} else {
-							showWhenSafe();
-						}
-					};
-
-					reelsStopUnsub = gameEventManager.on(GameEventType.REELS_STOP, () => attempt());
-					winStopUnsub = gameEventManager.on(GameEventType.WIN_STOP, () => attempt());
-					winDialogClosedUnsub = gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => attempt());
+						if (tumbleSequenceDoneUnsub) tumbleSequenceDoneUnsub();
+						this.showCompletionCreditedPanel(this.getFinalFreeRoundTotalWin());
+						return;
+					}
 				};
 
-				showWhenSafe();
+				let reelsStopUnsub: (() => void) | null = null;
+				let winStopUnsub: (() => void) | null = null;
+				let winDialogClosedUnsub: (() => void) | null = null;
+				let tumbleSequenceDoneUnsub: (() => void) | null = null;
+
+				const attempt = () => {
+					showWhenSafe();
+				};
+
+				const scheduleFallback = () => {
+					if (fallbackTimeoutId !== null) return;
+					reelsStopTime = reelsStopTime ?? Date.now();
+					fallbackTimeoutId = setTimeout(() => {
+						fallbackTimeoutId = null;
+						attempt();
+					}, FALLBACK_MS);
+				};
+
+				reelsStopUnsub = gameEventManager.on(GameEventType.REELS_STOP, () => {
+					reelsStopTime = reelsStopTime ?? Date.now();
+					scheduleFallback();
+					attempt();
+				});
+				winStopUnsub = gameEventManager.on(GameEventType.WIN_STOP, () => attempt());
+				winDialogClosedUnsub = gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => attempt());
+				tumbleSequenceDoneUnsub = gameEventManager.on(GameEventType.TUMBLE_SEQUENCE_DONE, () => {
+					tumbleSequenceDoneForCompletion = true;
+					if (fallbackTimeoutId !== null) {
+						clearTimeout(fallbackTimeoutId);
+						fallbackTimeoutId = null;
+					}
+					attempt();
+				});
+
+				// Initial check: if reels already stopped and no dialog, we still need tumbles or fallback
+				if (!gameStateManager.isReelSpinning && !gameStateManager.isShowingWinDialog) {
+					reelsStopTime = Date.now();
+					scheduleFallback();
+					attempt();
+				}
 			}
 		}
 	}
