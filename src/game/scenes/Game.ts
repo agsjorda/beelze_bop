@@ -689,19 +689,8 @@ export class Game extends Scene {
 					   console.log('[Game] WIN_STOP: No qualifying cluster wins (>=8) detected');
 				   }
 
-				const isDemo = this.gameAPI.getDemoState();
-				if (isDemo && !gameStateManager.isScatter && !gameStateManager.isBonus) {
-					this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + totalWin);
-				}
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');
-			}
-
-			// Update balance from server after WIN_STOP (skip during scatter/bonus)
-			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
-				this.updateBalanceAfterWinStop();
-			} else {
-				console.log('[Game] Skipping balance update on WIN_STOP (scatter/bonus active)');
 			}
 		});
 
@@ -722,21 +711,6 @@ export class Game extends Scene {
 		// Listen for reel completion to handle balance updates only
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[Game] REELS_STOP event received');
-
-			// Update balance from server after REELS_STOP (for no-wins scenarios)
-			// Skip during scatter/bonus; balance will be finalized after bonus ends
-			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
-				this.updateBalanceAfterWinStop();
-			} else {
-				console.log('[Game] Skipping balance update on REELS_STOP (scatter/bonus active)');
-			}
-
-			// Request balance update to finalize the spin (add winnings to balance)
-			// This is needed to complete the spin cycle and update the final state
-			console.log('[Game] Reels done - requesting balance update to finalize spin');
-			gameEventManager.emit(GameEventType.BALANCE_UPDATE);
-
-			console.log('[Game] REELS_STOP: Balance update requested');
 		});
 
 		// Ensure WinTracker is cleared (with a fade-out) as soon as reels actually start for a new spin
@@ -892,39 +866,6 @@ export class Game extends Scene {
 				this.slotController.updateBalanceAmount(defaultBalance);
 				console.log(`[Game] Using default balance: $${defaultBalance}`);
 			}
-		}
-	}
-
-	/**
-	 * Update balance from server after WIN_STOP or REELS_STOP
-	 */
-	private async updateBalanceAfterWinStop(): Promise<void> {
-		try {
-			console.log('[Game] Updating balance from server after WIN_STOP/REELS_STOP...');
-
-			// Call the GameAPI to get the current balance from server
-			const balance = await this.gameAPI.initializeBalance();
-
-			// Update the SlotController balance display
-			if (this.slotController) {
-				this.slotController.updateBalanceAmount(balance);
-				console.log(`[Game] Balance updated after WIN_STOP/REELS_STOP: $${balance}`);
-			}
-
-			// Update autoplay options balance if visible
-			this.updateAutoplayOptionsBalance(balance);
-
-		} catch (error) {
-			console.error('[Game] Error updating balance after WIN_STOP/REELS_STOP:', error);
-		}
-	}
-
-	/**
-	 * Update the AutoplayOptions balance display
-	 */
-	private updateAutoplayOptionsBalance(balance: number): void {
-		if (this.autoplayOptions && this.autoplayOptions.isVisible()) {
-			this.autoplayOptions.setCurrentBalance(balance);
 		}
 	}
 

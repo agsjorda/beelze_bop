@@ -365,7 +365,7 @@ export class GameAPI {
 
         const slotObj: any = {
             area: currentItem.area,
-            paylines: currentItem.payline,
+            paylines: (currentItem as any)?.payline ?? (currentItem as any)?.paylines ?? [],
             freespin: {
                 count: baseSlot?.freespin?.count ?? baseSlot?.freeSpin?.count,
                 totalWin: baseSlot?.freespin?.totalWin ?? baseSlot?.freeSpin?.totalWin,

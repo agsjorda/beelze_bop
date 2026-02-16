@@ -1496,15 +1496,19 @@ export class Symbols {
       const slot: any = this.currentSpinData?.slot;
       if (!slot) return 0;
 
-      if (typeof slot.totalWin === 'number') {
-        totalWin = slot.totalWin;
-        if (totalWin > 0) {
-          console.log(`[Symbols] Using spinData.slot.totalWin: ${totalWin}`);
-          return totalWin;
-        }
+      const freespinData = slot.freespin || slot.freeSpin;
+      const fsTotalWin = Number((freespinData as any)?.totalWin ?? 0);
+      if (Number.isFinite(fsTotalWin) && fsTotalWin > 0) {
+        console.log(`[Symbols] Using spinData.freespin.totalWin: ${fsTotalWin}`);
+        return fsTotalWin;
       }
 
-      const freespinData = slot.freespin || slot.freeSpin;
+      const slotTotalWin = Number(slot.totalWin ?? 0);
+      if (Number.isFinite(slotTotalWin) && slotTotalWin > 0) {
+        console.log(`[Symbols] Using spinData.slot.totalWin: ${slotTotalWin}`);
+        return slotTotalWin;
+      }
+
       let itemsSum = 0;
       let hasItems = false;
 
@@ -1520,19 +1524,6 @@ export class Symbols {
         }, 0);
         totalWin += itemsSum;
       }
-
-      // Add multiplierValue if present (may live on freeSpin or freespin)
-      try {
-        const mvRaw =
-          (slot as any)?.freeSpin?.multiplierValue ??
-          (slot as any)?.freespin?.multiplierValue ??
-          (freespinData as any)?.multiplierValue ??
-          0;
-        const multiplierValue = Number(mvRaw) || 0;
-        if (multiplierValue > 0) {
-          totalWin += multiplierValue;
-        }
-      } catch { }
 
       // Sum wins from slot.paylines/tumbles only when item totals are absent.
       if (!hasItems || itemsSum <= 0) {
