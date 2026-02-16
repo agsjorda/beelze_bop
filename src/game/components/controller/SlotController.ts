@@ -2249,16 +2249,23 @@ export class SlotController {
 	}
 
 	updateBetAmount(betAmount: number): void {
+		// Preserve amplify/enhanced state when base bet changes via +/- controls.
+		const gameData = this.getGameData();
+		const isEnhanced = !!gameData?.isEnhancedBet;
+		const displayBet = isEnhanced ? betAmount * 1.25 : betAmount;
 		if (this.betAmountText) {
-			this.betAmountText.setText(betAmount.toFixed(2));
+			this.betAmountText.setText(displayBet.toFixed(2));
 			// Amount text is already centered, no need to reposition
 		}
 
 		// Update base bet amount when changed externally (not by amplify bet)
 		if (!this.isInternalBetChange) {
 			this.baseBetAmount = betAmount;
-			// Reset amplify bet state when bet amount is changed externally
-			this.resetAmplifyBetOnBetChange();
+			// Keep amplify ON when user changes base bet from +/- controls.
+			// Legacy reset path remains for non-enhanced states only.
+			if (!isEnhanced) {
+				this.resetAmplifyBetOnBetChange();
+			}
 		}
 
 		// Keep the Buy Feature amount synced with current base bet (using the updated baseBetAmount)
@@ -3917,22 +3924,29 @@ export class SlotController {
 				this.lastSpinRequestAt = Date.now();
 			} catch { }
 
-			// Guard: ensure sufficient balance before proceeding
-			try {
-				const currentBalance = this.getBalanceAmount();
-				const currentBet = this.getBaseBetAmount() || 0;
-				const gd = this.getGameData();
-				const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * 1.25 : currentBet;
-				if (currentBalance < totalBetToCharge) {
-					console.error(`[SlotController] Insufficient balance for spin: ${currentBalance} < ${totalBetToCharge}`);
-					if (this.autoplayController?.isActive() || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
-						this.stopAutoplay();
+			// Determine if we're in initialization free-round context.
+			// In this mode, spins should not be blocked by base balance checks.
+			const inInitFreeRoundContext =
+				(gameStateManager as any)?.isInFreeSpinRound === true && !gameStateManager.isBonus;
+
+			// Guard: ensure sufficient balance before proceeding (base-game only).
+			if (!inInitFreeRoundContext) {
+				try {
+					const currentBalance = this.getBalanceAmount();
+					const currentBet = this.getBaseBetAmount() || 0;
+					const gd = this.getGameData();
+					const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * 1.25 : currentBet;
+					if (currentBalance < totalBetToCharge) {
+						console.error(`[SlotController] Insufficient balance for spin: ${currentBalance} < ${totalBetToCharge}`);
+						if (this.autoplayController?.isActive() || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
+							this.stopAutoplay();
+						}
+						this.showOutOfBalancePopup();
+						this.reenableControlsOnSpinFailure();
+						return;
 					}
-					this.showOutOfBalancePopup();
-					this.reenableControlsOnSpinFailure();
-					return;
+				} catch {}
 			}
-		} catch {}
 
 		// Avoid pre-spin symbol clearing; this should only happen on explicit skip.
 
@@ -3945,9 +3959,6 @@ export class SlotController {
 		// Clear any stale pending balance update before starting a new spin
 		this.balanceController?.clearPendingBalanceUpdate();
 
-		// Determine if we're in initialization free-round context
-		const inInitFreeRoundContext =
-			(gameStateManager as any)?.isInFreeSpinRound === true && !gameStateManager.isBonus;
 		if (!this.isFreeRoundAutoplay && !inInitFreeRoundContext) {
 			this.decrementBalanceByBet();
 		}
