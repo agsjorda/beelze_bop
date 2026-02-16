@@ -9,6 +9,10 @@ export enum MusicType {
 export enum SoundEffectType {
 	SPIN = 'spin',
 	REEL_DROP = 'reeldrop',
+	SCATTER_DROP_1 = 'scatter_drop_1',
+	SCATTER_DROP_2 = 'scatter_drop_2',
+	SCATTER_DROP_3 = 'scatter_drop_3',
+	SCATTER_DROP_4 = 'scatter_drop_4',
 	TURBO_DROP = 'turbodrop',
 	CANDY_TRANSITION = 'candy_transition',
 	// Scatter win SFX (Symbol0 win animation – paper_roll)
@@ -80,6 +84,10 @@ export class AudioManager {
 		this.scene.load.audio('click_bz', 'assets/sounds/click_sw.ogg');
 		this.scene.load.audio('reelroll_bz', 'assets/sounds/SFX/reelroll_BB.ogg');
 		this.scene.load.audio('reeldrop_bz', 'assets/sounds/SFX/reeldrop_BB.ogg');
+		this.scene.load.audio('scatterdrop1_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_1.ogg');
+		this.scene.load.audio('scatterdrop2_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_2.ogg');
+		this.scene.load.audio('scatterdrop3_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_3.ogg');
+		this.scene.load.audio('scatterdrop4_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_4.ogg');
 		this.scene.load.audio('turbodrop_bz', 'assets/sounds/SFX/turbodrop_ka.ogg');
 		this.scene.load.audio('tbomb_bz', 'assets/sounds/SFX/tbomb_BB.ogg');
 		this.scene.load.audio('paper_roll_bz', 'assets/sounds/SFX/paper_roll_BB.ogg');
@@ -152,6 +160,23 @@ export class AudioManager {
 			});
 			this.sfxInstances.set(SoundEffectType.REEL_DROP, reelDropSfx);
 			console.log('[AudioManager] Reel drop sound effect instance created');
+
+			try {
+				const scatterDrop1 = this.scene.sound.add('scatterdrop1_bz', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.SCATTER_DROP_1, scatterDrop1);
+			} catch (e) { console.warn('[AudioManager] Failed to create scatterdrop1_bz SFX instance:', e); }
+			try {
+				const scatterDrop2 = this.scene.sound.add('scatterdrop2_bz', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.SCATTER_DROP_2, scatterDrop2);
+			} catch (e) { console.warn('[AudioManager] Failed to create scatterdrop2_bz SFX instance:', e); }
+			try {
+				const scatterDrop3 = this.scene.sound.add('scatterdrop3_bz', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.SCATTER_DROP_3, scatterDrop3);
+			} catch (e) { console.warn('[AudioManager] Failed to create scatterdrop3_bz SFX instance:', e); }
+			try {
+				const scatterDrop4 = this.scene.sound.add('scatterdrop4_bz', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.SCATTER_DROP_4, scatterDrop4);
+			} catch (e) { console.warn('[AudioManager] Failed to create scatterdrop4_bz SFX instance:', e); }
 
 			const turboDropSfx = this.scene.sound.add('turbodrop_bz', {
 				volume: this.sfxVolume,

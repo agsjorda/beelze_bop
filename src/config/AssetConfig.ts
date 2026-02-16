@@ -454,6 +454,10 @@ export class AssetConfig {
 				'freespinbg_bz': 'assets/sounds/BG/freespinwonbg_BB.ogg',
 				'spinb_bz': 'assets/sounds/SFX/spin_BB.ogg',
 				'reeldrop_bz': 'assets/sounds/SFX/reeldrop_BB.ogg',
+				'scatterdrop1_bz': 'assets/sounds/SFX/symbol_win/scatter_drop_1.ogg',
+				'scatterdrop2_bz': 'assets/sounds/SFX/symbol_win/scatter_drop_2.ogg',
+				'scatterdrop3_bz': 'assets/sounds/SFX/symbol_win/scatter_drop_3.ogg',
+				'scatterdrop4_bz': 'assets/sounds/SFX/symbol_win/scatter_drop_4.ogg',
 				'turbodrop_bz': 'assets/sounds/SFX/turbodrop_BB.ogg',
 				// Candy explosion transition SFX (used by SymbolExplosionTransition)
 				'candy_transition_bz': 'assets/sounds/SFX/candy_transition.ogg',
