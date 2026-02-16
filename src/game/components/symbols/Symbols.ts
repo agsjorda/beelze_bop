@@ -183,6 +183,10 @@ export class Symbols {
   private tumbleDropInProgress: boolean = false;
   private readonly skipTweenTimeScale: number = 1;
   private explosionVfxInProgress: number = 0;
+  // Per-spin staged scatter reel-drop SFX counter (scatterdrop1 -> ... -> scatterdrop4 max).
+  private scatterDropStageForSpin: number = 0;
+  private spinDropSoundByColumn: Map<number, SoundEffectType> = new Map();
+  private spinDropSoundPlayedColumns: Set<number> = new Set();
 
   // Free spin autoplay state - delegate to controller
   public get freeSpinAutoplayActive(): boolean {
@@ -1065,6 +1069,9 @@ export class Symbols {
 
     this.currentSpinData = spinData;
     this.hadWinsInCurrentItem = false;
+    this.scatterDropStageForSpin = 0;
+    this.spinDropSoundByColumn.clear();
+    this.spinDropSoundPlayedColumns.clear();
 
     // Clear previous state
     this.scatterAnimationManager?.clearScatterSymbols();
@@ -1489,15 +1496,19 @@ export class Symbols {
       const slot: any = this.currentSpinData?.slot;
       if (!slot) return 0;
 
-      if (typeof slot.totalWin === 'number') {
-        totalWin = slot.totalWin;
-        if (totalWin > 0) {
-          console.log(`[Symbols] Using spinData.slot.totalWin: ${totalWin}`);
-          return totalWin;
-        }
+      const freespinData = slot.freespin || slot.freeSpin;
+      const fsTotalWin = Number((freespinData as any)?.totalWin ?? 0);
+      if (Number.isFinite(fsTotalWin) && fsTotalWin > 0) {
+        console.log(`[Symbols] Using spinData.freespin.totalWin: ${fsTotalWin}`);
+        return fsTotalWin;
       }
 
-      const freespinData = slot.freespin || slot.freeSpin;
+      const slotTotalWin = Number(slot.totalWin ?? 0);
+      if (Number.isFinite(slotTotalWin) && slotTotalWin > 0) {
+        console.log(`[Symbols] Using spinData.slot.totalWin: ${slotTotalWin}`);
+        return slotTotalWin;
+      }
+
       let itemsSum = 0;
       let hasItems = false;
 
@@ -1513,19 +1524,6 @@ export class Symbols {
         }, 0);
         totalWin += itemsSum;
       }
-
-      // Add multiplierValue if present (may live on freeSpin or freespin)
-      try {
-        const mvRaw =
-          (slot as any)?.freeSpin?.multiplierValue ??
-          (slot as any)?.freespin?.multiplierValue ??
-          (freespinData as any)?.multiplierValue ??
-          0;
-        const multiplierValue = Number(mvRaw) || 0;
-        if (multiplierValue > 0) {
-          totalWin += multiplierValue;
-        }
-      } catch { }
 
       // Sum wins from slot.paylines/tumbles only when item totals are absent.
       if (!hasItems || itemsSum <= 0) {
@@ -3068,6 +3066,7 @@ export class Symbols {
 
   private async dropReels(data: Data): Promise<void> {
     this.reelDropInProgress = true;
+    this.initializeSpinDropSoundsByColumn();
 
     const numRows = (this.symbols && this.symbols[0] && this.symbols[0].length)
       ? this.symbols[0].length
@@ -3388,7 +3387,7 @@ export class Symbols {
               ease: Phaser.Math.Easing.Linear,
               onComplete: () => {
                 if (!this.scene.gameData.isTurbo && (window as any).audioManager) {
-                  (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                  this.playSpinReelDropSoundForColumn(col);
                 }
 
                 completedAnimations++;
@@ -3422,6 +3421,50 @@ export class Symbols {
     const symbolTotalHeight = this.displayHeight + this.verticalSpacing;
     const startY = this.slotY - this.totalGridHeight * 0.5;
     return startY + index * symbolTotalHeight + symbolTotalHeight * 0.5;
+  }
+
+  private columnHasScatterInNewSymbols(colIndex: number): boolean {
+    const column = this.newSymbols?.[colIndex];
+    if (!Array.isArray(column) || column.length === 0) return false;
+    return column.some((symbol) => !!symbol && this.isScatterSymbol(symbol as SymbolObject));
+  }
+
+  private getScatterDropSoundByStage(stage: number): SoundEffectType {
+    if (stage <= 1) return SoundEffectType.SCATTER_DROP_1;
+    if (stage === 2) return SoundEffectType.SCATTER_DROP_2;
+    if (stage === 3) return SoundEffectType.SCATTER_DROP_3;
+    return SoundEffectType.SCATTER_DROP_4;
+  }
+
+  private playSpinReelDropSoundForColumn(colIndex: number): void {
+    const audioManager = (window as any).audioManager;
+    if (!audioManager || typeof audioManager.playSoundEffect !== 'function') return;
+    if (this.spinDropSoundPlayedColumns.has(colIndex)) return;
+
+    try {
+      const effect = this.spinDropSoundByColumn.get(colIndex) ?? SoundEffectType.REEL_DROP;
+      audioManager.playSoundEffect(effect);
+      this.spinDropSoundPlayedColumns.add(colIndex);
+    } catch (e) {
+      console.warn('[Symbols] Failed to play spin reel-drop sound:', e);
+    }
+  }
+
+  private initializeSpinDropSoundsByColumn(): void {
+    this.spinDropSoundByColumn.clear();
+    this.spinDropSoundPlayedColumns.clear();
+    this.scatterDropStageForSpin = 0;
+
+    if (!this.newSymbols || this.newSymbols.length === 0) return;
+
+    for (let col = 0; col < this.newSymbols.length; col++) {
+      if (!this.columnHasScatterInNewSymbols(col)) {
+        this.spinDropSoundByColumn.set(col, SoundEffectType.REEL_DROP);
+        continue;
+      }
+      this.scatterDropStageForSpin = Math.min(4, this.scatterDropStageForSpin + 1);
+      this.spinDropSoundByColumn.set(col, this.getScatterDropSoundByStage(this.scatterDropStageForSpin));
+    }
   }
 
   private playDropAnimationIfAvailable(obj: any): void {
@@ -4248,7 +4291,7 @@ export class Symbols {
                       const am = (window as any)?.audioManager;
                       if (am && typeof am.playSoundEffect === 'function') {
                         // Small delay to ensure twin SFX leads
-                        self.scene.time.delayedCall(60, () => {
+                        self.scene.time.delayedCall(300, () => {
                           try { am.playSoundEffect(SoundEffectType.TUMBLE_BOMB); } catch { }
                         });
                       }

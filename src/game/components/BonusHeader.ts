@@ -331,13 +331,18 @@ export class BonusHeader {
 			const slot: any = spinData?.slot;
 			if (!slot) return 0;
 
-			// Prefer backend totalWin if provided
-			if (typeof slot.totalWin === 'number' && slot.totalWin > 0) {
-				return Number(slot.totalWin);
+			const freespinData = slot.freespin || slot.freeSpin;
+			const fsTotalWin = Number((freespinData as any)?.totalWin ?? 0);
+			if (Number.isFinite(fsTotalWin) && fsTotalWin > 0) {
+				return fsTotalWin;
+			}
+
+			const slotTotalWin = Number(slot.totalWin ?? 0);
+			if (Number.isFinite(slotTotalWin) && slotTotalWin > 0) {
+				return slotTotalWin;
 			}
 
 			let totalWin = 0;
-			const freespinData = slot.freespin || slot.freeSpin;
 			let itemsSum = 0;
 			let hasItems = false;
 
@@ -353,19 +358,6 @@ export class BonusHeader {
 				}, 0);
 				totalWin += itemsSum;
 			}
-
-			// Add multiplierValue if present (may live on freeSpin or freespin)
-			try {
-				const mvRaw =
-					(slot as any)?.freeSpin?.multiplierValue ??
-					(slot as any)?.freespin?.multiplierValue ??
-					(freespinData as any)?.multiplierValue ??
-					0;
-				const multiplierValue = Number(mvRaw) || 0;
-				if (multiplierValue > 0) {
-					totalWin += multiplierValue;
-				}
-			} catch { }
 
 			// As a last resort, include paylines/tumbles if we have no item totals.
 			// Avoid double-counting per-spin tumbles that are already included in item totals.
