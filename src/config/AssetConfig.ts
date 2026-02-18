@@ -301,10 +301,34 @@ export class AssetConfig {
 		const prefix = this.getAssetPrefix();
 		return {
 			images: {
-				'helpscreen_0': `${prefix}/help_screen/helpscreen_0.webp`,
-				'helpscreen_1': `${prefix}/help_screen/helpscreen_1.webp`,
-				'helpscreen_2': `${prefix}/help_screen/helpscreen_2.webp`,
-				'helpscreen_3': `${prefix}/help_screen/helpscreen_3.webp`,
+				// Payline visuals
+				'paylineMobileWin': `${prefix}/help_screen/game_settings_content/paylineMobileWin.webp`,
+				'paylineMobileNoWin': `${prefix}/help_screen/game_settings_content/paylineMobileNoWin.webp`,
+
+				// Scatter / Tumble / Multiplier visuals
+				'scatterGame': `${prefix}/help_screen/bonus_game_content/scatter_game.webp`,
+				'tumbleWin': `${prefix}/help_screen/bonus_game_content/tumble_win.webp`,
+				'multiplierGame': `${prefix}/help_screen/bonus_game_content/multiplier_game.webp`,
+
+				// How To Play || Bet controls
+				'betControlsMinus': `${prefix}/help_screen/how_to_play_content/betControls_minus.png`,
+				'betControlsPlus': `${prefix}/help_screen/how_to_play_content/betControls_plus.png`,
+
+				// How To Play || Game actions
+				'spin_button': `${prefix}/help_screen/how_to_play_content/spin_button.png`,
+				'enhanced_bet_button': `${prefix}/help_screen/how_to_play_content/enhanced_bet.png`,
+				'amplify_bet_button': `${prefix}/help_screen/how_to_play_content/enhanced_bet.png`,
+				'autoplay_button': `${prefix}/help_screen/how_to_play_content/autoplay.png`,
+				'turbo_button': `${prefix}/help_screen/how_to_play_content/turbo.png`,
+
+				// How To Play || General controls
+				'sound_icon_on': `${prefix}/help_screen/how_to_play_content/sound_icon_on.png`,
+				'sound_icon_off': `${prefix}/help_screen/how_to_play_content/sound_icon_off.png`,
+				'settings_icon': `${prefix}/help_screen/how_to_play_content/settings.png`,
+				'info_icon': `${prefix}/help_screen/how_to_play_content/info.png`,
+
+				// Package 1 specific assets
+				'help_multiplier_symbol': `${prefix}/help_screen/bonus_game_content/help_multiplier_symbol.webp`,
 			}
 		};
 	}

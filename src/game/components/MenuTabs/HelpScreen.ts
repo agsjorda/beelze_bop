@@ -1,37 +1,17 @@
 import { Scene, GameObjects } from 'phaser';
+import type { ContentSection, ContentItem, HeaderOpts, ImageOpts, TextOpts, LineBreakOpts, GridOpts, GridCell, RowOpts, BorderOpts, RichTextPart, RichTextPlaceholderImage } from './ContentSection';
+import { gameRulesContent } from './help_screen_content/GameRulesContent';
+import { getPayoutContent } from './help_screen_content/PayoutContent';
+import { rtpContent } from './help_screen_content/RTPContent';
+import { maxWinContent } from './help_screen_content/MaxWinContent';
+import { freeSpinContent } from './help_screen_content/FreeSpinRulesContent';
+import { gameSettingsContent } from './help_screen_content/GameSettingsContent';
+import { howToPlayContent } from './help_screen_content/HowToPlayContent';
+import { tumbleWinContent } from './help_screen_content/TumbleWinContent';
+import { localizationManager } from '../../../managers/LocalizationManager';
 import { CurrencyManager } from '../CurrencyManager';
 
 type TextStyle = Phaser.Types.GameObjects.Text.TextStyle;
-
-const PAYOUT_RANGES = ['12+', '10-11', '8-9'] as const;
-
-const SYMBOL_PAYOUTS: Record<number, [number, number, number]> = {
-    1: [50.0, 25.0, 10.0],
-    2: [25.0, 10.0, 2.5],
-    3: [15.0, 5.0, 2.0],
-    4: [12.0, 2.0, 1.5],
-    5: [10.0, 1.5, 1.0],
-    6: [8.0, 1.2, 0.8],
-    7: [5.0, 1.0, 0.5],
-    8: [4.0, 0.9, 0.4],
-    9: [2.0, 0.75, 0.25],
-};
-
-const SCATTER_PAYOUTS: [number, number, number] = [100.0, 5.0, 3.0];
-const SCATTER_COUNTS = ['6', '5', '4'] as const;
-const SCATTER_DESCRIPTIONS = [
-    'This is the SCATTER symbol.',
-    'SCATTER symbol is present on all reels.',
-    'SCATTER pays on any position.',
-] as const;
-
-type ButtonBase = {
-    isButton?: boolean;
-};
-
-type ButtonContainer = GameObjects.Container & ButtonBase;
-type ButtonImage = GameObjects.Image & ButtonBase;
-type ButtonText = GameObjects.Text & ButtonBase;
 
 type GameScene = Scene & {
     getCurrentBetAmount?: () => number;
@@ -46,1063 +26,2283 @@ interface HelpScreenStyles {
     textStyle: TextStyle;
 }
 
+/** Context passed when rendering content items inside a border (e.g. for Row vertical centering and grid alignment). */
+interface ContentItemContext {
+    borderRightEdge?: number;
+    borderStartY?: number;
+    borderPaddingTop?: number;
+    borderPaddingBottom?: number;
+}
+
 export class HelpScreen {
+    // ============================================================================
+    // PROPERTIES (Non-ContentSection)
+    // ============================================================================
+
+    /** Default header style (used for section headers like "Game Rules"). */
+    private static readonly defaultHeaderStyle: TextStyle = {
+        fontSize: '24px',
+        color: '#379557',
+        fontFamily: 'Poppins-Bold',
+        fontStyle: 'bold',
+    };
+    /** Default body text style (used for content text like descriptions). */
+    private static readonly defaultBodyTextStyle: TextStyle = {
+        fontSize: '20px',
+        color: '#FFFFFF',
+        fontFamily: 'Poppins-Regular',
+        align: 'left',
+    };
+    /** Default outer border config: same style and padding as symbol payouts (16px padding, dark fill, white stroke). */
+    private static readonly defaultOuterBorderStyle: BorderOpts = {
+        padding: { top: 16, right: 16, bottom: 16, left: 16 },
+        style: { fillColor: 0x1f1f1f, strokeColor: 0xffffff },
+    };
+
+    private static readonly defaultInnerBorderStyle: BorderOpts = {
+        padding: { top: 20, bottom: 20, right: 20, left: 20 },
+        style: { fillColor: 0xffffff, strokeColor: 0xffffff, fillAlpha: 0.1, strokeAlpha: 0.2 },
+    };
+
+    /** Line/divider color (e.g. LineBreak). */
+    private static readonly LINE_DIVIDER_COLOR = 0x379557;
+    /** Border fill color. */
+    private static readonly BORDER_FILL_COLOR = 0x1f1f1f;
+    /** Border stroke color. */
+    private static readonly BORDER_STROKE_COLOR = 0xffffff;
+    /** Border fill alpha. */
+    private static readonly BORDER_FILL_ALPHA = 0.95;
+    /** Border stroke alpha. */
+    private static readonly BORDER_STROKE_ALPHA = 0.18;
+
+    /** Wireframe hierarchy: root section. */
+    private static readonly WIREFRAME_ROOT_COLOR = 0xff0000;
+    private static readonly WIREFRAME_ROOT_WIDTH = 2;
+    /** Wireframe hierarchy: child section. */
+    private static readonly WIREFRAME_CHILD_COLOR = 0xffff00;
+    private static readonly WIREFRAME_CHILD_WIDTH = 1;
+    /** Wireframe hierarchy: element (header or content item). */
+    private static readonly WIREFRAME_ELEMENT_COLOR = 0x00ff00;
+    private static readonly WIREFRAME_ELEMENT_WIDTH = 0.5;
+    /** Wireframe for grid cells (each text/cell in a grid). */
+    private static readonly WIREFRAME_GRID_CELL_COLOR = 0xffffff;
+
+    /** When true, draw root section wireframes (red). */
+    private showRootWireframe: boolean = false;
+    /** When true, draw child section wireframes (yellow). */
+    private showChildWireframe: boolean = false;
+    /** When true, draw element wireframes (green). */
+    private showElementWireframe: boolean = false;
+
+    /** Default (fallback) text for help content when localization is missing. Ordered by display order (top to bottom). */
+    private static readonly helpDefaultText: Record<string, string> = {
+        // --- Game Rules (first section) ---
+        'help_game-rules-title': 'Game Rules',
+        'help_game-rules-desc': 'Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.',
+        // --- RTP ---
+        'help_rtp-title': 'RTP',
+        // --- Max Win ---
+        'help_max-win-title': 'Max Win',
+        // --- Payout (symbol + scatter) ---
+        'help_payout-title': 'Payout',
+        'help_scatter-title': 'Scatter',
+        'help_scatter-desc': 'This is the SCATTER symbol.\nSCATTER symbol is present on all reels.\nSCATTER pays on any position.',
+        // --- Tumble Win ---
+        'help_tumble-title': 'Tumble Win',
+        'help_tumble-desc': 'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\nTumbles continue as long as new winning combinations appear — there is no limit to the number of tumbles per spin.\n\nAll wins are credited to the player\'s balance after all tumbles from a base spin are completed.',
+        // --- Free Spin Rules ---
+        'help_freespin-rules-title': 'Free Spin Rules',
+        'help_bonus-trigger-title': 'Bonus Trigger',
+        'help_bonus-trigger-desc': 'Land 4 or more {image} SCATTER symbols anywhere on the screen to trigger the FREE SPINS feature.\nYou\'ll start with 10 free spins.\nDuring the bonus round, hitting 3 or more SCATTER symbols awards 5 extra free spins.',
+        'help_retrigger-title': 'In-Bonus Freespin Retrigger',
+        'help_retrigger-desc': 'Land 3 {image} SCATTER and win 5 more spins',
+        'help_multiplier-title': 'Multiplier',
+        'help_multiplier-desc': 'The {image} Multiplier symbol appears only during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\nEach time a {image} lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\nOnce all tumbles are finished, the total of all {image} multipliers is added and applied to the total win of that sequence.\n\nSpecial reels are used during the FREE SPINS round.',
+        // --- Game Settings ---
+        'help_game-settings-title': 'Game Settings',
+        'help_paylines-title': 'Paylines',
+        'help_paylines-desc0': 'Symbols can land anywhere on the screen.',
+        'help_paylines-desc1': 'All wins are multiplied by the base bet.\nWhen multiple symbol wins occur, all values are combined into the total win.\nFree spins rewards are granted after the round ends.',
+        // --- How to Play (container) ---
+        'help_how-play-title': 'How to Play',
+        // --- Bet Controls (under How to Play) ---
+        'help_bet-controls-title': 'Bet Controls',
+        'help_buttons-label': 'Buttons',
+        'help_bet-controls-desc': 'Adjust your total bet',
+        // --- Game Actions (under How to Play) ---
+        'help_game-actions-title': 'Game Actions',
+        'help_spin-label': 'Spin',
+        'help_spin-desc': 'Starts the game round.',
+        'help_buy-label': 'Buy Feature',
+        'help_buy-desc': 'Lets you buy the free spins round for 100x your total bet.',
+        'help_amplify-label': 'Amplify Bet',
+        'help_amplify-desc': "You're wagering 25% more per spin, but you also have better chances at hitting big features.",
+        'help_autoplay-label': 'Auto Play',
+        'help_autoplay-desc': 'Opens the autoplay menu. Tap again to stop autoplay.',
+        'help_turbo-label': 'Turbo',
+        'help_turbo-desc': 'Speeds up the game.',
+        // --- Display & Stats (under How to Play) ---
+        'help_display-stats-title': 'Display & Stats',
+        'help_balance-desc': 'Shows your current available credits.',
+        'help_balance-label': 'BALANCE',
+        'help_totalwin-desc': 'Displays your total winnings from the current round.',
+        'help_totalwin-label': 'TOTAL WIN',
+        'help_bet-desc': 'Adjust your wager using the – and + buttons.',
+        'help_bet-label': 'BET',
+        // --- General Controls (under How to Play) ---
+        'help_general-controls-title': 'General Controls',
+        'help_sounds-label': 'Sounds',
+        'help_sounds-desc': 'Toggle game sounds on or off.',
+        'help_settings-label': 'Settings',
+        'help_settings-desc': 'Access gameplay preferences and systems options.',
+        'help_info-label': 'Info',
+        'help_info-desc': 'View game rules, features, and paytable.',
+    };
+
+    /** Resolves help content text via localization, with fallback to default. */
+    private getHelpText(key: string): string {
+        return localizationManager.getTextByKey(key) ?? HelpScreen.helpDefaultText[key] ?? key;
+    }
+
+    /** Returns display string for content that may have a localization key. */
+    private resolveHelpText(key: string | undefined, value: string | undefined): string {
+        if (key) return this.getHelpText(key);
+        if (!value) return '';
+        
+        // Handle currency formatting markers (format: "CURRENCY:amount" or "text\nCURRENCY:amount")
+        // Replace all occurrences of "CURRENCY:amount" with formatted currency
+        // Use non-breaking space (\u00A0) to prevent currency and value from wrapping to separate lines
+        const currencyMarkerRegex = /CURRENCY:([\d.]+)/g;
+        const processedValue = value.replace(currencyMarkerRegex, (match, amountStr) => {
+            const amount = parseFloat(amountStr);
+            if (!isNaN(amount)) {
+                const currencyPrefix = CurrencyManager.getCurrencyCode();
+                const formatted = amount.toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+                return currencyPrefix ? `${currencyPrefix}\u00A0${formatted}` : formatted;
+            }
+            return match; // Return original if parsing fails
+        });
+        
+        return processedValue;
+    }
+
     private readonly contentArea: GameObjects.Container;
     private readonly rulesContent: GameObjects.Container;
-
     private scrollView: GameObjects.Container;
     private contentContainer: GameObjects.Container;
-    /**
-     * Cached total scrollable content height. This allows us to clamp
-     * scrolling precisely to the visible help content (ending at the
-     * bottom of the How to Play section) instead of relying only on
-     * the running yPosition cursor.
-     */
+    /** Containers for z-ordered wireframes: section (root/child) drawn first, then content, then element. */
+    private sectionWireframesContainer!: GameObjects.Container;
+    private mainContentContainer!: GameObjects.Container;
+    private elementWireframesContainer!: GameObjects.Container;
+    /** Count of root section wireframes added (for insert order: roots first, then children). */
+    private rootSectionWireframeCount: number = 0;
+    /** Cached total scrollable content height for scroll bounds. */
     private contentHeight: number = 0;
-    private mask: Phaser.Display.Masks.GeometryMask;
-
-    private readonly xOffsetAdjustment: number = -20;
-    private readonly padding: number = 10; // Global padding, this should be deprecated
-    private readonly borderHorizontalPadding: number = 20; // Horizontal padding, this should be deprecated
-    private readonly menuTopPadding: number = 20;
-    private readonly sectionSpacing: number = 60;
-    private readonly tabHeight: number = 61;
-    private readonly contentWidth: number = 1200;
     private yPosition: number = 0;
-    private textHorizontalPadding?: number;
+    /** Y position where payout sections start (after maxWinContent) */
+    private payoutSectionsStartY: number = 0;
+    /** Y position where payout sections end (before lineBreakSection) */
+    private payoutSectionsEndY: number = 0;
 
-    private readonly borderFillColor: number = 0xFFFFFF;
-    private readonly borderStrokeColor: number = 0xffffff;
-    private readonly borderFillAlpha: number = 0.1;
-    private readonly borderStrokeAlpha: number = 0.2;
-
-    private symbolSize: number = 153;
-    private symbolScale: number = 0.7;
-    private scaledSymbolSize: number = this.symbolSize * this.symbolScale;
-    private dividerColor: number = 0x379557;
-
-    // Text styles (mirrors Menu)
-    private titleStyle: TextStyle;
-    private header1Style: TextStyle;
-    private header2Style: TextStyle;
-    private content1Style: TextStyle;
-    private contentHeader1Style: TextStyle;
-    private textStyle: TextStyle;
-
+    private static readonly spacingBetweenSections: number = 50;
+    /** Default line spacing used when opts.lineSpacing is not explicitly provided. */
+    private readonly defaultLineSpacing: number = 7;
+    private readonly menuTopPadding: number = 20;
+    private readonly tabHeight: number = 61;
     private readonly isMenuVisible: () => boolean;
     private readonly getBetAmount: () => number;
     private tabInteractionBlocker?: Phaser.GameObjects.Zone;
     private tabInteractionHitArea?: Phaser.Geom.Rectangle;
     private isTabInteractionBlocked: boolean = false;
-    
-    // Game Rules section
-    // RTP section
-    // Payout section
-    private readonly payoutSymbolCount: number = 9;
-    private readonly payoutSymbolKey: string = 'symbol';
-    private readonly payoutTextRowSpacing: number = 30;
-    private readonly payoutTextFontSize: number = 22;
-    private readonly payoutRangeTextFontSize: number = 22;
-    private readonly payoutInnerPadding: number = 20;
 
-    // Scatter section
-    private readonly scatterSymbolKey: string = 'symbol0';
-    /** Scale of Symbol0 (scatter) in the Payout section. Change this to resize it. */
-    private readonly scatterPayoutSymbolScale: number = 0.7;
-    private readonly scatterHeaderLeftPadding: number = 30;
-    private readonly scatterHeaderTopPadding: number = 20;
-    private readonly scatterBottomPadding: number = 20;
-    private readonly scatterElementSpacing: number = 50;
-    private readonly scatterPayoutTextFontSize: number = 22;
-    private readonly scatterPayoutTextColumnSpacing: number = 175;
-    private readonly scatterPayoutTextRowSpacing: number = 30;
+    /** Test property exercising the full ContentSection interface (Header, Border, Content with all item types). */
+    /** ContentSection for testing RichText with inline TextImage (e.g. "This is the {symbol0} scatter symbol."). */
+    private static readonly testRichTextContentSection: ContentSection = {
+        Content: [
+            {
+                RichText: {
+                    opts: { padding: 6, align: 0, anchor: { x: 0, y: 0.5 } },
+                    parts: [
+                        'This is the ',
+                        { TextImage: { key: 'symbol0', opts: { scale: 0.3 } } },
+                        ' scatter symbol. Sama mo na si bob the builder.',
+                    ],
+                },
+            },
+        ],
+    };
 
-    // Free Spins section
-    private readonly freeSpinHeaderSpacing: number = 20;
+    private static readonly lineBreakSection: ContentSection = {
+        Content: [
+            { LineBreak: { opts: { padding: { top: HelpScreen.spacingBetweenSections, bottom: HelpScreen.spacingBetweenSections, right: 0, left: 0 }, thickness: 1 } } },
+        ],
+    };
 
-    // Game Settings section
-    private readonly gameSettingsTextHorizontalPadding: number = 30;
-    private readonly gameSettingsTextTopPadding: number = 20;
-    private readonly gameSettingsTextBottomPadding: number = 30;
-    private readonly gameSettingsElementSpacing: number = 30;
-
-    // How to Play section
-    private readonly howToPlayHorizontalPadding: number = 30;
-    private readonly howToPlayElementSpacing: number = 20;
+    // ============================================================================
+    // CONSTRUCTOR AND MAIN METHODS
+    // ============================================================================
 
     constructor(
         private readonly scene: GameScene,
         contentArea: GameObjects.Container,
         rulesContent: GameObjects.Container,
-        styles: HelpScreenStyles,
+        _styles: HelpScreenStyles,
         isMenuVisible: () => boolean,
         getBetAmount?: () => number
     ) {
         this.contentArea = contentArea;
         this.rulesContent = rulesContent;
-
-        this.titleStyle = styles.titleStyle;
-        this.header1Style = styles.header1Style;
-        this.header2Style = styles.header2Style;
-        this.content1Style = styles.content1Style;
-        this.contentHeader1Style = styles.contentHeader1Style;
-        this.textStyle = styles.textStyle;
-
         this.isMenuVisible = isMenuVisible;
         this.getBetAmount = getBetAmount ?? (() => 1);
-
-        this.contentWidth = scene.scale.width - 70;
     }
 
     public build(): void {
         this.setupScrollableRulesContent(this.scene);
+        this.createNewHelpScreenContent(this.scene, this.rulesContent);
+        this.rulesContent.add(this.scrollView);
+    }
+
+    /**
+     * Rebuilds only the payout sections (symbol and scatter payouts).
+     * Much more efficient than full rebuild since only payout values change with bet amount.
+     */
+    public rebuildPayoutSections(): void {
+        const currentBet = this.getBetAmount();
+        console.log('[HelpScreen] rebuildPayoutSections() called, current bet amount:', currentBet);
+        
+        if (this.payoutSectionsStartY === 0 || this.payoutSectionsEndY === 0) {
+            console.warn('[HelpScreen] Payout section positions not tracked, falling back to full rebuild');
+            this.rebuild();
+            return;
+        }
+
+        // Remove all game objects that fall within the payout sections Y range
+        const objectsToRemove: Phaser.GameObjects.GameObject[] = [];
+        this.mainContentContainer.list.forEach((obj: Phaser.GameObjects.GameObject) => {
+            const objY = (obj as any).y ?? 0;
+            // Check if object is within payout sections range (with some tolerance for borders/padding)
+            if (objY >= this.payoutSectionsStartY - 20 && objY <= this.payoutSectionsEndY + 20) {
+                objectsToRemove.push(obj);
+            }
+        });
+
+        // Also check wireframes and borders
+        this.sectionWireframesContainer.list.forEach((obj: Phaser.GameObjects.GameObject) => {
+            const objY = (obj as any).y ?? 0;
+            if (objY >= this.payoutSectionsStartY - 20 && objY <= this.payoutSectionsEndY + 20) {
+                objectsToRemove.push(obj);
+            }
+        });
+
+        this.elementWireframesContainer.list.forEach((obj: Phaser.GameObjects.GameObject) => {
+            const objY = (obj as any).y ?? 0;
+            if (objY >= this.payoutSectionsStartY - 20 && objY <= this.payoutSectionsEndY + 20) {
+                objectsToRemove.push(obj);
+            }
+        });
+
+        // Remove the objects
+        objectsToRemove.forEach(obj => {
+            if (obj.parentContainer) {
+                obj.parentContainer.remove(obj, true);
+            } else {
+                obj.destroy(true);
+            }
+        });
+
+        // Recreate payout sections
+        const { symbolPayoutContent, scatterPayoutContent } = getPayoutContent({
+            defaultOuterBorderStyle: HelpScreen.defaultOuterBorderStyle,
+            getBetAmount: this.getBetAmount,
+            getIsDemo: () => (this.scene as any).gameAPI?.getDemoState(),
+        });
+
+        let currentY = this.payoutSectionsStartY;
+        currentY = this.createContentSection(symbolPayoutContent, currentY);
+        currentY = this.createContentSection(scatterPayoutContent, currentY);
+        const newPayoutSectionsEndY = currentY;
+        const yOffset = newPayoutSectionsEndY - this.payoutSectionsEndY;
+        this.payoutSectionsEndY = newPayoutSectionsEndY;
+
+        // Adjust Y positions of everything after payout sections
+        if (yOffset !== 0) {
+            this.mainContentContainer.list.forEach((obj: Phaser.GameObjects.GameObject) => {
+                const objY = (obj as any).y ?? 0;
+                if (objY > this.payoutSectionsEndY) {
+                    (obj as any).y += yOffset;
+                }
+            });
+            this.sectionWireframesContainer.list.forEach((obj: Phaser.GameObjects.GameObject) => {
+                const objY = (obj as any).y ?? 0;
+                if (objY > this.payoutSectionsEndY) {
+                    (obj as any).y += yOffset;
+                }
+            });
+            this.elementWireframesContainer.list.forEach((obj: Phaser.GameObjects.GameObject) => {
+                const objY = (obj as any).y ?? 0;
+                if (objY > this.payoutSectionsEndY) {
+                    (obj as any).y += yOffset;
+                }
+            });
+        }
+
+        // Update content height
+        this.contentHeight += yOffset;
+        this.yPosition += yOffset;
+
+        console.log('[HelpScreen] rebuildPayoutSections() completed, new bet amount used:', this.getBetAmount());
+    }
+
+    /**
+     * Rebuilds the entire help screen content, useful when bet amount changes.
+     * Clears existing content and rebuilds with current bet amount.
+     * Use rebuildPayoutSections() for better performance when only payouts change.
+     */
+    public rebuild(): void {
+        const currentBet = this.getBetAmount();
+        console.log('[HelpScreen] rebuild() called, current bet amount:', currentBet);
+        
+        // Remove scrollView from rulesContent if it exists (without destroying yet)
+        if (this.scrollView && this.scrollView.parentContainer) {
+            this.rulesContent.remove(this.scrollView, false);
+        }
+
+        // Destroy existing containers (destroying scrollView will destroy all children)
+        if (this.scrollView) {
+            this.scrollView.destroy(true);
+            this.scrollView = undefined as any;
+        }
+        // These are children of scrollView, so they're already destroyed
+        this.contentContainer = undefined as any;
+        this.sectionWireframesContainer = undefined as any;
+        this.mainContentContainer = undefined as any;
+        this.elementWireframesContainer = undefined as any;
+
+        // Reset state
+        this.rootSectionWireframeCount = 0;
+        this.yPosition = 0;
+        this.contentHeight = 0;
+        this.payoutSectionsStartY = 0;
+        this.payoutSectionsEndY = 0;
+
+        // Rebuild content
+        this.setupScrollableRulesContent(this.scene);
+        this.createNewHelpScreenContent(this.scene, this.rulesContent);
+        this.rulesContent.add(this.scrollView);
+        
+        console.log('[HelpScreen] rebuild() completed, new bet amount used:', this.getBetAmount());
+    }
+
+    private createNewHelpScreenContent(_scene: GameScene, _contentArea: GameObjects.Container): void {
+        let currentY = 0;
+        this.rootSectionWireframeCount = 0;
+
+        const { symbolPayoutContent, scatterPayoutContent } = getPayoutContent({
+            defaultOuterBorderStyle: HelpScreen.defaultOuterBorderStyle,
+            getBetAmount: this.getBetAmount,
+            getIsDemo: () => (this.scene as any).gameAPI?.getDemoState(),
+        });
+
+        currentY = this.createContentSection(gameRulesContent, currentY);
+        currentY += HelpScreen.spacingBetweenSections / 2;
+        currentY = this.createContentSection(rtpContent, currentY);
+        currentY += HelpScreen.spacingBetweenSections / 2;
+        currentY = this.createContentSection(maxWinContent, currentY);
+        currentY += HelpScreen.spacingBetweenSections / 2;
+        
+        // Track payout sections Y positions for efficient rebuilding
+        this.payoutSectionsStartY = currentY;
+        currentY = this.createContentSection(symbolPayoutContent, currentY);
+        currentY = this.createContentSection(scatterPayoutContent, currentY);
+        this.payoutSectionsEndY = currentY;
+        
+        // add linebreak here
+        currentY = this.createContentSection(HelpScreen.lineBreakSection, currentY);
+        currentY = this.createContentSection(tumbleWinContent, currentY);
+        currentY += HelpScreen.spacingBetweenSections;
+        currentY = this.createContentSection(freeSpinContent, currentY);
+        currentY += HelpScreen.spacingBetweenSections;
+        currentY = this.createContentSection(gameSettingsContent, currentY);
+        currentY += HelpScreen.spacingBetweenSections;
+        currentY = this.createContentSection(howToPlayContent, currentY);
+
+        this.yPosition = currentY;
+        this.contentHeight = this.yPosition;
+    }
+
+    // ============================================================================
+    // HELPER METHODS
+    // ============================================================================
+
+    /**
+     * Dispatches a single content item to the appropriate creator; returns the Y position below it.
+     * Always uses offset-aware creators so a single code path handles both bordered and non-bordered content.
+     */
+    private processContentItem(
+        item: ContentItem,
+        width: number,
+        y: number,
+        offsetX: number,
+        context?: ContentItemContext
+    ): number {
+        if ('Header' in item && item.Header != null) {
+            return this.createContentHeaderWithOffset(item.Header, width, y, offsetX);
+        }
+        if ('Image' in item && item.Image != null) {
+            return this.createContentImageWithOffset(item.Image, width, y, offsetX);
+        }
+        if ('Text' in item && item.Text != null) {
+            return this.createContentTextWithOffset(item.Text, width, y, offsetX);
+        }
+        if ('RichText' in item && item.RichText != null) {
+            return this.createContentRichTextWithOffset(item.RichText, width, y, offsetX);
+        }
+        if ('LineBreak' in item && item.LineBreak != null) {
+            return this.createContentLineBreakWithOffset(item.LineBreak, width, y, offsetX);
+        }
+        if ('Grid' in item && item.Grid != null) {
+            return this.createContentGridWithOffset(item.Grid, width, y, offsetX, context?.borderRightEdge);
+        }
+        if ('Row' in item && item.Row != null) {
+            return this.createContentRowWithOffset(
+                item.Row,
+                width,
+                y,
+                offsetX,
+                context?.borderStartY,
+                context?.borderPaddingTop,
+                context?.borderPaddingBottom,
+                context?.borderRightEdge
+            );
+        }
+        if ('ChildSection' in item && item.ChildSection != null) {
+            return this.createContentSection(item.ChildSection, y, offsetX, width, false);
+        }
+        return y;
+    }
+
+    /**
+     * Builds a content section (header, border, content items) and returns the Y position
+     * after the section (for stacking the next section).
+     * Any part of contentSection (Header, Border, Content, or item fields) that is null/undefined is skipped.
+     * Border encapsulates Content items but not Header. Header is always above the border.
+     * @param offsetX Optional X offset for positioning (used when inside a border)
+     * @param containerWidth Optional container width (defaults to full contentArea width)
+     * @param isRoot If true, section is a root content section (wireframe red 2px); if false, child section (wireframe yellow 1px)
+     */
+    private createContentSection(contentSection: ContentSection, startY: number = 0, offsetX: number = 0, containerWidth?: number, isRoot: boolean = true): number {
+        const sectionMarginTop = this.getMarginTop(contentSection.margin);
+        let localY = startY + sectionMarginTop;
+        const effectiveWidth = containerWidth ?? this.contentArea.width;
+
+        if (contentSection.Header != null) {
+            const headerStartY = localY;
+            localY = this.createSectionHeaderWithOffset(contentSection.Header, effectiveWidth, localY, offsetX);
+            this.drawElementWireframe(offsetX, headerStartY, effectiveWidth, localY - headerStartY);
+        }
+
+        // If Border exists, create it and render Content inside with padding
+        if (contentSection.Border != null) {
+            const borderMarginTop = this.getMarginTop(contentSection.Border.opts?.margin);
+            const borderStartY = localY + borderMarginTop;
+            const borderPadding = this.getBorderPadding(contentSection.Border.opts?.padding);
+
+            // Create content inside border (with padding applied)
+            // Content is offset by borderPadding.left and uses reduced width
+            const contentStartY = borderStartY + borderPadding.top;
+            const contentWidth = effectiveWidth - borderPadding.left - borderPadding.right;
+            const contentOffsetX = offsetX + borderPadding.left;
+            let contentEndY = contentStartY;
+
+            if (contentSection.Content != null) {
+                const borderRightEdge = contentOffsetX + contentWidth;
+                const itemContext: ContentItemContext = {
+                    borderRightEdge,
+                    borderStartY,
+                    borderPaddingTop: borderPadding.top,
+                    borderPaddingBottom: borderPadding.bottom,
+                };
+                for (const item of contentSection.Content) {
+                    const itemStartY = contentEndY;
+                    contentEndY = this.processContentItem(item, contentWidth, contentEndY, contentOffsetX, itemContext);
+                    this.drawElementWireframe(contentOffsetX, itemStartY, contentWidth, contentEndY - itemStartY);
+                }
+            }
+
+            // Calculate border height based on content
+            const borderHeight = contentEndY - borderStartY + borderPadding.bottom;
+
+            // Create the border graphics (offset by offsetX if nested)
+            const borderMarginBottom = this.getMarginBottom(contentSection.Border.opts?.margin);
+            localY = this.createBorder(
+                contentSection.Border,
+                effectiveWidth,
+                borderStartY,
+                borderHeight,
+                offsetX
+            ) + borderMarginBottom;
+        } else {
+            if (contentSection.Content != null) {
+                for (const item of contentSection.Content) {
+                    const itemStartY = localY;
+                    localY = this.processContentItem(item, effectiveWidth, localY, offsetX);
+                    this.drawElementWireframe(offsetX, itemStartY, effectiveWidth, localY - itemStartY);
+                }
+            }
+        }
+
+        // Wireframe: draw section bounds (root = red 2px, child = yellow 1px); z-order: roots first, then children
+        const sectionMarginBottom = this.getMarginBottom(contentSection.margin);
+        const sectionEndY = localY + sectionMarginBottom;
+        const drawSectionWireframe = isRoot ? this.showRootWireframe : this.showChildWireframe;
+        if (drawSectionWireframe) {
+            const sectionColor = isRoot ? HelpScreen.WIREFRAME_ROOT_COLOR : HelpScreen.WIREFRAME_CHILD_COLOR;
+            const sectionWidth = isRoot ? HelpScreen.WIREFRAME_ROOT_WIDTH : HelpScreen.WIREFRAME_CHILD_WIDTH;
+            const sectionWireframe = this.scene.add.graphics();
+            sectionWireframe.lineStyle(sectionWidth, sectionColor, 1);
+            sectionWireframe.strokeRect(offsetX, startY, effectiveWidth, sectionEndY - startY);
+            if (isRoot) {
+                this.sectionWireframesContainer.addAt(sectionWireframe, this.rootSectionWireframeCount++);
+            } else {
+                this.sectionWireframesContainer.add(sectionWireframe);
+            }
+        }
+
+        return sectionEndY;
+    }
+
+    /**
+     * Draws an element-level wireframe (green, 0.5px) around a region.
+     * Used for section header and each content item; skipped if height <= 0.
+     */
+    private drawElementWireframe(x: number, y: number, width: number, height: number): void {
+        if (!this.showElementWireframe || height <= 0) return;
+        const g = this.scene.add.graphics();
+        g.lineStyle(HelpScreen.WIREFRAME_ELEMENT_WIDTH, HelpScreen.WIREFRAME_ELEMENT_COLOR, 1);
+        g.strokeRect(x, y, width, height);
+        this.elementWireframesContainer.add(g);
+    }
+
+    /**
+     * Draws a white wireframe around a grid cell (each text/image in a grid).
+     */
+    private drawGridCellWireframe(x: number, y: number, width: number, height: number): void {
+        if (!this.showElementWireframe || height <= 0) return;
+        const g = this.scene.add.graphics();
+        g.lineStyle(HelpScreen.WIREFRAME_ELEMENT_WIDTH, HelpScreen.WIREFRAME_GRID_CELL_COLOR, 1);
+        g.strokeRect(x, y, width, height);
+        this.elementWireframesContainer.add(g);
+    }
+
+    /**
+     * Creates and positions the section header text; returns the Y position below the header.
+     */
+    private createSectionHeader(
+        header: NonNullable<ContentSection['Header']>,
+        containerWidth: number,
+        startY: number
+    ): number {
+        return this.createSectionHeaderWithOffset(header, containerWidth, startY, 0);
+    }
+
+    /**
+     * Creates and positions the section header text with X offset; returns the Y position below the header.
+     */
+    private createSectionHeaderWithOffset(
+        header: NonNullable<ContentSection['Header']>,
+        containerWidth: number,
+        startY: number,
+        offsetX: number
+    ): number {
+        const opts = header.opts ?? {};
+        const marginTop = this.getMarginTop(opts.margin);
+        const marginBottom = this.getMarginBottom(opts.margin);
+        const paddingTop = this.getPaddingTop(opts.padding);
+        const paddingBottom = this.getPaddingBottom(opts.padding);
+        const paddingLeft = this.getPaddingLeft(opts.padding);
+        const paddingRight = this.getPaddingRight(opts.padding);
+        const effectiveStartY = startY + marginTop;
+        const align = typeof opts.align === 'number' ? opts.align : 0;
+        const anchorObj = opts.anchor != null && typeof opts.anchor === 'object' ? opts.anchor : undefined;
+        const anchorX = anchorObj?.x ?? 0;
+        const anchorY = anchorObj?.y ?? 0;
+        const offsetXFromOpts = opts.offset?.x ?? 0;
+        const offsetY = opts.offset?.y ?? 0;
+        // Use default style if style is null/undefined or doesn't have a color property
+        const providedStyle = opts.style as TextStyle | undefined;
+        const baseStyle = providedStyle != null && 'color' in providedStyle
+            ? providedStyle
+            : HelpScreen.defaultHeaderStyle;
+        const styleWithSpacing = this.applyLineSpacing(baseStyle, opts.lineSpacing);
+        const availableWidth = containerWidth - paddingLeft - paddingRight;
+        const style = this.getTextStyleWithWordWrap(styleWithSpacing, availableWidth);
+
+        const displayText = this.resolveHelpText(header.key, header.value);
+        const text = this.scene.add.text(0, 0, displayText, style);
+        text.setOrigin(anchorX, anchorY);
+        const x = offsetX + paddingLeft + availableWidth * align + offsetXFromOpts;
+        const y = effectiveStartY + paddingTop + offsetY;
+        text.setPosition(x, y);
+        this.mainContentContainer.add(text);
+
+        return y + text.height + paddingBottom + marginBottom;
+    }
+
+    /**
+     * Creates a Header content item; returns the Y position below it.
+     */
+    private createContentHeader(
+        header: { opts?: HeaderOpts; value?: string; key?: string },
+        containerWidth: number,
+        startY: number
+    ): number {
+        return this.createContentHeaderWithOffset(header, containerWidth, startY, 0);
+    }
+
+    /**
+     * Applies sizing to an image based on the size option.
+     */
+    private applyImageSizing(
+        img: Phaser.GameObjects.Image,
+        size: 'native' | 'fitToWidth' | 'fitToHeight' | undefined,
+        containerWidth: number,
+        maxHeight?: number
+    ): void {
+        if (!size || size === 'native') {
+            return; // Use native size
+        }
+
+        const nativeWidth = img.width;
+        const nativeHeight = img.height;
+
+        if (size === 'fitToWidth') {
+            // Scale to fit container width while maintaining aspect ratio
+            const scale = containerWidth / nativeWidth;
+            img.setScale(scale);
+        } else if (size === 'fitToHeight') {
+            // Scale to fit maxHeight while maintaining aspect ratio
+            if (maxHeight == null) {
+                console.warn('[HelpScreen] fitToHeight requires maxHeight option. Using native size.');
+                return;
+            }
+            const scale = maxHeight / nativeHeight;
+            img.setScale(scale);
+        }
+    }
+
+    /**
+     * Applies ImageOpts.scale multiplier (default 1). Call after applyImageSizing.
+     */
+    private applyImageOptsScale(img: Phaser.GameObjects.Image, opts?: ImageOpts): void {
+        const scale = opts?.scale ?? 1;
+        if (scale !== 1) {
+            img.setScale(img.scaleX * scale, img.scaleY * scale);
+        }
+    }
+
+    /**
+     * Creates an Image content item; returns the Y position below it.
+     */
+    private createContentImage(
+        image: { opts?: ImageOpts; key?: string; src?: string },
+        containerWidth: number,
+        startY: number
+    ): number {
+        return this.createContentImageWithOffset(image, containerWidth, startY, 0);
+    }
+
+    /**
+     * Creates a Text content item; returns the Y position below it.
+     */
+    private createContentText(
+        text: { opts?: TextOpts; value?: string },
+        containerWidth: number,
+        startY: number
+    ): number {
+        return this.createContentTextWithOffset(text, containerWidth, startY, 0);
+    }
+
+    /**
+     * Creates a LineBreak content item; returns the Y position below it.
+     * Uses graphics with fillRect, matching HelpScreen_OLD.ts implementation.
+     */
+    private createContentLineBreak(
+        lineBreak: { opts?: LineBreakOpts },
+        containerWidth: number,
+        startY: number
+    ): number {
+        return this.createContentLineBreakWithOffset(lineBreak, containerWidth, startY, 0);
+    }
+
+    /**
+     * Merges a default text style with an optional override style.
+     * Override properties take precedence over defaults.
+     */
+    private mergeTextStyle(defaultStyle: TextStyle, overrideStyle?: Record<string, unknown>): TextStyle {
+        if (!overrideStyle) {
+            return { ...defaultStyle };
+        }
+        return {
+            ...defaultStyle,
+            ...overrideStyle,
+        } as TextStyle;
+    }
+
+    /** Resolves final line spacing: opts.lineSpacing > style.lineSpacing > defaultLineSpacing. */
+    private resolveLineSpacing(lineSpacing: number | undefined, style?: TextStyle): number {
+        const styleLineSpacing = style?.lineSpacing;
+        return lineSpacing ?? (typeof styleLineSpacing === 'number' ? styleLineSpacing : this.defaultLineSpacing);
+    }
+
+    /**
+     * Applies resolved lineSpacing into the style (for wrapped text line distance).
+     */
+    private applyLineSpacing(style: TextStyle, lineSpacing: number | undefined): TextStyle {
+        return { ...style, lineSpacing: this.resolveLineSpacing(lineSpacing, style) };
+    }
+
+    /**
+     * Returns a text style with word wrap enabled at the given width.
+     * Merges with the provided style so existing properties are preserved.
+     */
+    private getTextStyleWithWordWrap(style: TextStyle, wrapWidth: number): TextStyle {
+        return {
+            ...style,
+            wordWrap: {
+                width: wrapWidth,
+                ...(typeof style.wordWrap === 'object' && style.wordWrap != null ? style.wordWrap : {}),
+            },
+        };
+    }
+
+    /**
+     * Creates a Text that scales down to fit within the given bounds.
+     * Bounds are determined by container dimensions and padding; the text's own style/opts are applied.
+     * Returns the Phaser Text object (not yet added to container).
+     */
+    private createTextFittingBounds(
+        displayText: string,
+        boundsWidth: number,
+        boundsHeight: number,
+        baseStyle: TextStyle,
+        textOpts: TextOpts
+    ): Phaser.GameObjects.Text {
+        const styleWithSpacing = this.applyLineSpacing(baseStyle, textOpts.lineSpacing);
+        const style = { ...styleWithSpacing };
+        delete style.wordWrap;
+        const textObj = this.scene.add.text(0, 0, displayText, style);
+        if (textOpts.rtl === true) {
+            textObj.setRTL(true);
+        }
+        const w = textObj.width;
+        const h = textObj.height;
+        if (boundsWidth > 0 && boundsHeight > 0 && w > 0 && h > 0 && (w > boundsWidth || h > boundsHeight)) {
+            const scaleX = boundsWidth / w;
+            const scaleY = boundsHeight / h;
+            textObj.setScale(Math.min(1, scaleX, scaleY));
+        }
+        return textObj;
+    }
+
+    /**
+     * Creates a border graphics object and returns the Y position below it.
+     */
+    private createBorder(
+        border: NonNullable<ContentSection['Border']>,
+        containerWidth: number,
+        startY: number,
+        height: number,
+        offsetX: number = 0
+    ): number {
+        const opts = border.opts ?? {};
+        const style = opts.style ?? {};
+        const fillColor = (style.fillColor as number | undefined) ?? HelpScreen.BORDER_FILL_COLOR;
+        const strokeColor = (style.strokeColor as number | undefined) ?? HelpScreen.BORDER_STROKE_COLOR;
+        const fillAlpha = (style.fillAlpha as number | undefined) ?? HelpScreen.BORDER_FILL_ALPHA;
+        const strokeAlpha = (style.strokeAlpha as number | undefined) ?? HelpScreen.BORDER_STROKE_ALPHA;
+        const borderRadius = opts.borderRadius ?? 8;
+
+        const borderGraphics = this.scene.add.graphics();
+        borderGraphics.fillStyle(fillColor, fillAlpha);
+        borderGraphics.fillRoundedRect(offsetX, startY, containerWidth, height, borderRadius);
+        borderGraphics.lineStyle(1.5, strokeColor, strokeAlpha);
+        borderGraphics.strokeRoundedRect(offsetX, startY, containerWidth, height, borderRadius);
+
+        this.mainContentContainer.add(borderGraphics);
+        this.mainContentContainer.sendToBack(borderGraphics);
+
+        return startY + height;
+    }
+
+    /**
+     * Gets border padding as an object with top, right, bottom, left values.
+     */
+    private getBorderPadding(padding: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): {
+        top: number;
+        right: number;
+        bottom: number;
+        left: number;
+    } {
+        if (padding === undefined) {
+            return { top: 0, right: 0, bottom: 0, left: 0 };
+        }
+        if (typeof padding === 'number') {
+            return { top: padding, right: padding, bottom: padding, left: padding };
+        }
+        return {
+            top: padding.top ?? 0,
+            right: padding.right ?? 0,
+            bottom: padding.bottom ?? 0,
+            left: padding.left ?? 0,
+        };
+    }
+
+    /**
+     * Creates a Header content item with X offset (for border content); returns the Y position below it.
+     */
+    private createContentHeaderWithOffset(
+        header: { opts?: HeaderOpts; value?: string; key?: string },
+        containerWidth: number,
+        startY: number,
+        offsetX: number
+    ): number {
+        const opts = header.opts ?? {};
+        const marginTop = this.getMarginTop(opts.margin);
+        const marginBottom = this.getMarginBottom(opts.margin);
+        const paddingTop = this.getPaddingTop(opts.padding);
+        const paddingBottom = this.getPaddingBottom(opts.padding);
+        const paddingLeft = this.getPaddingLeft(opts.padding);
+        const paddingRight = this.getPaddingRight(opts.padding);
+        const effectiveStartY = startY + marginTop;
+        const align = typeof opts.align === 'number' ? opts.align : 0;
+        const anchorObj = opts.anchor != null && typeof opts.anchor === 'object' ? opts.anchor : undefined;
+        const anchorX = anchorObj?.x ?? 0;
+        const anchorY = anchorObj?.y ?? 0;
+        const offsetXFromOpts = opts.offset?.x ?? 0;
+        const offsetY = opts.offset?.y ?? 0;
+        const providedStyle = opts.style as TextStyle | undefined;
+        const baseStyle = providedStyle != null && 'color' in providedStyle
+            ? providedStyle
+            : HelpScreen.defaultHeaderStyle;
+        // For word wrap, use available width after accounting for left/right padding
+        const availableWidth = containerWidth - paddingLeft - paddingRight;
+        const styleWithSpacing = this.applyLineSpacing(baseStyle, opts.lineSpacing);
+        const style = this.getTextStyleWithWordWrap(styleWithSpacing, availableWidth);
+
+        const displayText = this.resolveHelpText(header.key, header.value);
+        const text = this.scene.add.text(0, 0, displayText, style);
+        text.setOrigin(anchorX, anchorY);
+        // Position header accounting for left padding and alignment
+        const x = offsetX + paddingLeft + availableWidth * align + offsetXFromOpts;
+        const y = effectiveStartY + paddingTop + offsetY;
+        text.setPosition(x, y);
+        this.mainContentContainer.add(text);
+
+        return y + text.height + paddingBottom + marginBottom;
+    }
+
+    /**
+     * Creates an Image content item with X offset (for border content); returns the Y position below it.
+     */
+    private createContentImageWithOffset(
+        image: { opts?: ImageOpts; key?: string; src?: string },
+        containerWidth: number,
+        startY: number,
+        offsetX: number
+    ): number {
+        const opts = image.opts ?? {};
+        const marginTop = this.getMarginTop(opts.margin);
+        const marginBottom = this.getMarginBottom(opts.margin);
+        const paddingTop = this.getPaddingTop(opts.padding);
+        const paddingBottom = this.getPaddingBottom(opts.padding);
+        const paddingLeft = this.getPaddingLeft(opts.padding);
+        const paddingRight = this.getPaddingRight(opts.padding);
+        const effectiveStartY = startY + marginTop;
+        const align = typeof opts.align === 'number' ? opts.align : 0;
+        const anchorObj = opts.anchor != null && typeof opts.anchor === 'object' ? opts.anchor : undefined;
+        const anchorX = anchorObj?.x ?? 0;
+        const anchorY = anchorObj?.y ?? 0;
+        const offsetXFromOpts = opts.offset?.x ?? 0;
+        const offsetY = opts.offset?.y ?? 0;
+
+        const imageKey = image.key ?? image.src;
+        if (imageKey == null) {
+            return startY + marginTop + marginBottom;
+        }
+
+        const img = this.scene.add.image(0, 0, imageKey);
+        const imageSize = opts.size ?? 'native';
+        // For fitToWidth, use available width after accounting for left/right padding
+        const availableWidth = containerWidth - paddingLeft - paddingRight;
+        const sizingWidth = imageSize === 'fitToWidth' ? availableWidth : containerWidth;
+        this.applyImageSizing(img, imageSize, sizingWidth, opts.maxHeight);
+        const scaleAffectsLayout = opts.scaleAffectsLayout ?? true;
+
+        // Calculate layout dimensions BEFORE applying scale if scale doesn't affect layout
+        const layoutHeight = scaleAffectsLayout ? img.displayHeight : img.displayHeight;
+        let finalLayoutHeight: number;
+        if (!scaleAffectsLayout) {
+            // Store layout dimensions before scale
+            finalLayoutHeight = img.displayHeight;
+            // Apply visual scale AFTER layout calculations (doesn't affect layout)
+            this.applyImageOptsScale(img, opts);
+        } else {
+            // Scale affects layout (default behavior)
+            this.applyImageOptsScale(img, opts);
+            finalLayoutHeight = img.displayHeight;
+        }
+
+        img.setOrigin(anchorX, anchorY);
+        // Position image accounting for left padding and alignment
+        const x = offsetX + paddingLeft + availableWidth * align + offsetXFromOpts;
+        const y = effectiveStartY + paddingTop + offsetY;
+        img.setPosition(x, y);
+        this.mainContentContainer.add(img);
+
+        return y + finalLayoutHeight + paddingBottom + marginBottom;
+    }
+
+    /**
+     * Creates a Text content item with X offset (for border content); returns the Y position below it.
+     */
+    private createContentTextWithOffset(
+        text: { opts?: TextOpts; value?: string; key?: string },
+        containerWidth: number,
+        startY: number,
+        offsetX: number
+    ): number {
+        const opts = text.opts ?? {};
+        const marginTop = this.getMarginTop(opts.margin);
+        const marginBottom = this.getMarginBottom(opts.margin);
+        const paddingTop = this.getPaddingTop(opts.padding);
+        const paddingBottom = this.getPaddingBottom(opts.padding);
+        const paddingLeft = this.getPaddingLeft(opts.padding);
+        const paddingRight = this.getPaddingRight(opts.padding);
+        const effectiveStartY = startY + marginTop;
+        const align = typeof opts.align === 'number' ? opts.align : 0;
+        const anchorObj = opts.anchor != null && typeof opts.anchor === 'object' ? opts.anchor : undefined;
+        const anchorX = anchorObj?.x ?? 0;
+        const anchorY = anchorObj?.y ?? 0;
+        const offsetXFromOpts = opts.offset?.x ?? 0;
+        const offsetY = opts.offset?.y ?? 0;
+
+        const baseStyle = this.mergeTextStyle(HelpScreen.defaultBodyTextStyle, opts.style as Record<string, unknown>);
+        // For word wrap, use available width after accounting for left/right padding
+        const availableWidth = containerWidth - paddingLeft - paddingRight;
+        const styleWithSpacing = this.applyLineSpacing(baseStyle, opts.lineSpacing);
+        const style = this.getTextStyleWithWordWrap(styleWithSpacing, availableWidth);
+        
+        const isRTL = opts.rtl === true;
+        if (isRTL) {
+            style.rtl = true;
+        }
+        
+        const displayText = this.resolveHelpText(text.key, text.value);
+        const textObj = this.scene.add.text(0, 0, displayText, style);
+        
+        if (isRTL) {
+            textObj.setRTL(true);
+        }
+        
+        textObj.setOrigin(anchorX, anchorY);
+        // Position text accounting for left padding and alignment
+        const x = offsetX + paddingLeft + availableWidth * align + offsetXFromOpts;
+        const y = effectiveStartY + paddingTop + offsetY;
+        textObj.setPosition(x, y);
+        this.mainContentContainer.add(textObj);
+
+        return y + textObj.height + paddingBottom + marginBottom;
+    }
+
+    /**
+     * Creates a RichText content item (text and inline TextImage parts) with X offset; returns the Y position below it.
+     */
+    private createContentRichTextWithOffset(
+        richText: { opts?: TextOpts; parts: RichTextPart[]; placeholderImageOpts?: Record<string, ImageOpts>; placeholderImages?: Record<string, RichTextPlaceholderImage> },
+        containerWidth: number,
+        startY: number,
+        offsetX: number
+    ): number {
+        const opts = richText.opts ?? {};
+        const marginTop = this.getMarginTop(opts.margin);
+        const marginBottom = this.getMarginBottom(opts.margin);
+        const paddingTop = this.getPaddingTop(opts.padding);
+        const paddingBottom = this.getPaddingBottom(opts.padding);
+        const paddingLeft = this.getPaddingLeft(opts.padding);
+        const paddingRight = this.getPaddingRight(opts.padding);
+        const effectiveStartY = startY + marginTop;
+        const align = typeof opts.align === 'number' ? opts.align : 0;
+        const anchorObj = opts.anchor != null && typeof opts.anchor === 'object' ? opts.anchor : undefined;
+        const anchorX = anchorObj?.x ?? 0;
+        const anchorY = anchorObj?.y ?? 0;
+        const offsetXFromOpts = opts.offset?.x ?? 0;
+        const offsetY = opts.offset?.y ?? 0;
+
+        // For line wrapping, use available width after accounting for left/right padding
+        const availableWidth = containerWidth - paddingLeft - paddingRight;
+        const baseStyle = HelpScreen.defaultBodyTextStyle;
+        const placeholderImageOpts = richText.placeholderImageOpts ?? {};
+        const placeholderImages = richText.placeholderImages ?? {};
+        const placeholderImageUsageCounter: Record<string, number> = {};
+        const placeholderTokenRegex = /^\{([A-Za-z0-9_.-]+)\}$/;
+
+        type Segment = {
+            obj: Phaser.GameObjects.Text | Phaser.GameObjects.Image;
+            width: number;
+            height: number;
+            anchorX?: number;
+            anchorY?: number;
+            // Padding and image dimensions for TextImage segments
+            imagePaddingLeft?: number;
+            imagePaddingRight?: number;
+            imagePaddingTop?: number;
+            imagePaddingBottom?: number;
+            imageWidth?: number;
+            imageHeight?: number;
+            // Optional text overlay for TextImage segments
+            textOverlay?: Phaser.GameObjects.Text;
+            textAlign?: 'left' | 'right' | 'center';
+        };
+        type Line = Segment[];
+
+        // Build lines by wrapping on word boundaries; wrapped lines start at the same X
+        const lines: Line[] = [];
+        let currentLine: Segment[] = [];
+        let currentLineWidth = 0;
+
+        const flushLine = (): void => {
+            if (currentLine.length > 0) {
+                lines.push(currentLine);
+                currentLine = [];
+                currentLineWidth = 0;
+            }
+        };
+
+        const addTextToken = (token: string, textStyle: TextStyle): void => {
+            const isWhitespace = /^\s+$/.test(token);
+            if (isWhitespace && currentLineWidth === 0) {
+                return;
+            }
+
+            const textObj = this.scene.add.text(0, 0, token, textStyle);
+            const tokenWidth = textObj.width;
+            const tokenHeight = textObj.height;
+
+            if (currentLineWidth + tokenWidth > availableWidth && currentLineWidth > 0) {
+                flushLine();
+                if (isWhitespace) {
+                    textObj.destroy();
+                    return;
+                }
+            }
+
+            currentLine.push({
+                obj: textObj,
+                width: tokenWidth,
+                height: tokenHeight,
+            });
+            currentLineWidth += tokenWidth;
+        };
+
+        const addImageSegment = (
+            imageKey: string,
+            imageOpts: ImageOpts,
+            imageText?: { value: string; style?: Record<string, unknown>; align?: 'left' | 'right' | 'center'; key?: string }
+        ): void => {
+            if (!this.scene.textures.exists(imageKey)) {
+                return;
+            }
+
+            const img = this.scene.add.image(0, 0, imageKey);
+
+            // Extract padding values
+            const imagePaddingTop = this.getPaddingTop(imageOpts.padding);
+            const imagePaddingBottom = this.getPaddingBottom(imageOpts.padding);
+            const imagePaddingLeft = this.getPaddingLeft(imageOpts.padding);
+            const imagePaddingRight = this.getPaddingRight(imageOpts.padding);
+
+            const imageSize = imageOpts.size ?? 'native';
+            // For fitToWidth, use available width after accounting for left/right padding
+            const imageSizingWidth = imageSize === 'fitToWidth' ? availableWidth : containerWidth;
+            this.applyImageSizing(img, imageSize, imageSizingWidth, imageOpts.maxHeight);
+            const scaleAffectsLayout = imageOpts.scaleAffectsLayout ?? true;
+
+            // Calculate layout dimensions BEFORE applying scale if scale doesn't affect layout
+            let imgWidth: number;
+            let imgHeight: number;
+            if (!scaleAffectsLayout) {
+                imgWidth = img.displayWidth;
+                imgHeight = img.displayHeight;
+                // Apply visual scale AFTER layout calculations (doesn't affect layout)
+                this.applyImageOptsScale(img, imageOpts);
+            } else {
+                // Scale affects layout (default behavior)
+                this.applyImageOptsScale(img, imageOpts);
+                imgWidth = img.displayWidth;
+                imgHeight = img.displayHeight;
+            }
+
+            const imgAnchorX = (imageOpts.anchor != null && typeof imageOpts.anchor === 'object' ? imageOpts.anchor.x : undefined) ?? 0.5;
+            const imgAnchorY = (imageOpts.anchor != null && typeof imageOpts.anchor === 'object' ? imageOpts.anchor.y : undefined) ?? 0.5;
+            img.setOrigin(imgAnchorX, imgAnchorY);
+
+            // Total width and height including padding
+            const totalImgWidth = imgWidth + imagePaddingLeft + imagePaddingRight;
+            const totalImgHeight = imgHeight + imagePaddingTop + imagePaddingBottom;
+
+            if (currentLineWidth + totalImgWidth > availableWidth && currentLineWidth > 0) {
+                flushLine();
+            }
+
+            // Create text overlay if text is provided
+            let textOverlay: Phaser.GameObjects.Text | undefined;
+            let textAlign: 'left' | 'right' | 'center' = 'center';
+            if (imageText != null) {
+                textAlign = imageText.align ?? 'center';
+
+                // Merge styles and add alignment for multi-line text
+                const mergedStyle = imageText.style != null
+                    ? this.mergeTextStyle(baseStyle, imageText.style)
+                    : baseStyle;
+
+                // Add align property to style for proper multi-line text alignment
+                const textStyle = { ...mergedStyle, align: textAlign };
+
+                const textOverlayValue = this.resolveHelpText(imageText.key, imageText.value);
+                textOverlay = this.scene.add.text(0, 0, textOverlayValue, textStyle);
+
+                // Set origin based on alignment
+                if (textAlign === 'left') {
+                    textOverlay.setOrigin(0, 0.5); // Left-aligned, vertically centered
+                } else if (textAlign === 'right') {
+                    textOverlay.setOrigin(1, 0.5); // Right-aligned, vertically centered
+                } else {
+                    textOverlay.setOrigin(0.5, 0.5); // Center-anchored (both X and Y)
+                }
+            }
+
+            currentLine.push({
+                obj: img,
+                width: totalImgWidth,
+                height: totalImgHeight,
+                anchorX: imgAnchorX,
+                anchorY: imgAnchorY,
+                imagePaddingLeft,
+                imagePaddingRight,
+                imagePaddingTop,
+                imagePaddingBottom,
+                imageWidth: imgWidth,
+                imageHeight: imgHeight,
+                textOverlay,
+                textAlign,
+            });
+            currentLineWidth += totalImgWidth;
+        };
+
+        const resolvePlaceholderImageSpec = (
+            placeholderKey: string
+        ): { key: string; opts: ImageOpts; text?: { value: string; style?: Record<string, unknown>; align?: 'left' | 'right' | 'center'; key?: string } } | null => {
+            const explicitSpec = placeholderImages[placeholderKey];
+            if (explicitSpec != null) {
+                if (Array.isArray(explicitSpec)) {
+                    if (explicitSpec.length === 0) {
+                        return null;
+                    }
+                    const usageIndex = placeholderImageUsageCounter[placeholderKey] ?? 0;
+                    const selectedSpec = explicitSpec[Math.min(usageIndex, explicitSpec.length - 1)];
+                    placeholderImageUsageCounter[placeholderKey] = usageIndex + 1;
+                    return {
+                        key: selectedSpec.key,
+                        opts: selectedSpec.opts ?? placeholderImageOpts[placeholderKey] ?? {},
+                        text: selectedSpec.text,
+                    };
+                }
+                return {
+                    key: explicitSpec.key,
+                    opts: explicitSpec.opts ?? placeholderImageOpts[placeholderKey] ?? {},
+                    text: explicitSpec.text,
+                };
+            }
+
+            if (this.scene.textures.exists(placeholderKey)) {
+                return {
+                    key: placeholderKey,
+                    opts: placeholderImageOpts[placeholderKey] ?? {},
+                };
+            }
+
+            return null;
+        };
+
+        const addTextWithInlineImagePlaceholders = (rawText: string, textStyle: TextStyle): void => {
+            const tokens = rawText.split(/(\{[A-Za-z0-9_.-]+\}|\s+)/).filter((token) => token.length > 0);
+            for (const token of tokens) {
+                if (/^\s+$/.test(token)) {
+                    const remainingWhitespace = token.replace(/\n/g, '');
+                    if (remainingWhitespace.length > 0) {
+                        addTextToken(remainingWhitespace, textStyle);
+                    }
+
+                    const lineBreakCount = (token.match(/\n/g) ?? []).length;
+                    for (let i = 0; i < lineBreakCount; i += 1) {
+                        flushLine();
+                    }
+                    continue;
+                }
+
+                const placeholderMatch = token.match(placeholderTokenRegex);
+                if (placeholderMatch) {
+                    const placeholderKey = placeholderMatch[1];
+                    const imageSpec = resolvePlaceholderImageSpec(placeholderKey);
+                    if (imageSpec != null && this.scene.textures.exists(imageSpec.key)) {
+                        addImageSegment(imageSpec.key, imageSpec.opts, imageSpec.text);
+                    } else {
+                        // Fallback to literal token when texture key is unavailable.
+                        addTextToken(token, textStyle);
+                    }
+                    continue;
+                }
+
+                addTextToken(token, textStyle);
+            }
+        };
+
+        for (const part of richText.parts) {
+            if (typeof part === 'string') {
+                addTextWithInlineImagePlaceholders(part, baseStyle);
+            } else if (part && 'Text' in part && part.Text != null) {
+                // Styled text run
+                const textRun = part.Text;
+                const textStyle = textRun.style != null 
+                    ? this.mergeTextStyle(baseStyle, textRun.style)
+                    : baseStyle;
+                const displayValue = this.resolveHelpText(textRun.key, textRun.value);
+                addTextWithInlineImagePlaceholders(displayValue, textStyle);
+            } else if (part && 'TextImage' in part && part.TextImage != null) {
+                addImageSegment(part.TextImage.key, part.TextImage.opts ?? {}, part.TextImage.text);
+            }
+        }
+
+        // Flush remaining line
+        if (currentLine.length > 0) {
+            lines.push(currentLine);
+        }
+
+        if (lines.length === 0) {
+            return effectiveStartY + paddingTop + paddingBottom + marginBottom;
+        }
+
+        // Calculate line heights and total content height (include lineSpacing between lines)
+        const lineHeights = lines.map((line) => Math.max(...line.map((s) => s.height)));
+        const lineSpacing = this.resolveLineSpacing(opts.lineSpacing);
+        const totalContentHeight =
+            lineHeights.reduce((sum, h) => sum + h, 0) + (lines.length > 1 ? (lines.length - 1) * lineSpacing : 0);
+
+        // Calculate total content width (widest line)
+        const lineWidths = lines.map((line) => line.reduce((sum, seg) => sum + seg.width, 0));
+        const totalContentWidth = Math.max(...lineWidths, 0);
+
+        // Position content vertically using anchor Y
+        const contentAreaHeight = paddingTop + totalContentHeight + paddingBottom;
+        const contentAreaTop = effectiveStartY + paddingTop + offsetY;
+        const baseY = contentAreaTop + (contentAreaHeight - totalContentHeight) * anchorY;
+        const totalHeight = marginTop + paddingTop + offsetY + totalContentHeight + paddingBottom + marginBottom;
+
+        // Position content horizontally using align and anchor X
+        // The anchor point should be positioned at: offsetX + paddingLeft + availableWidth * align
+        // So the left edge (baseX) should be: anchorXPosition - (totalContentWidth * anchorX)
+        const anchorXPosition = offsetX + paddingLeft + availableWidth * align + offsetXFromOpts;
+        const baseX = anchorXPosition - (totalContentWidth * anchorX);
+        let currentY = baseY;
+
+        // Render each line
+        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+            const line = lines[lineIndex];
+            const lineHeight = lineHeights[lineIndex];
+
+            const lineCenterY = currentY + lineHeight / 2;
+
+            // All lines start at baseX (same X position for consistent wrapping)
+            let currentX = baseX;
+            for (const seg of line) {
+                if (seg.obj instanceof Phaser.GameObjects.Image && seg.anchorX != null && seg.anchorY != null) {
+                    // Image: align vertically within the line box, horizontally based on anchorX
+                    // Account for left padding when positioning
+                    const imagePaddingLeft = seg.imagePaddingLeft ?? 0;
+                    const imageWidth = seg.imageWidth ?? seg.width;
+                    const imageHeight = seg.imageHeight ?? seg.height;
+                    const imgX = currentX + imagePaddingLeft + imageWidth * seg.anchorX;
+                    // Keep image anchored to the line center; padding affects line metrics, not center offset.
+                    const imgY = lineCenterY - imageHeight * (0.5 - seg.anchorY);
+                    seg.obj.setPosition(imgX, imgY);
+                    
+                    // Add image first so text overlay can be added on top
+                    this.mainContentContainer.add(seg.obj);
+                    
+                    // Position text overlay on the image if it exists
+                    // Add it after the image so it renders on top
+                    if (seg.textOverlay != null) {
+                        const textAlign = seg.textAlign ?? 'center';
+                        const imageWidth = seg.imageWidth ?? seg.width;
+                        
+                        // Calculate text X position based on alignment
+                        // imgX is the anchor point position (already accounts for padding)
+                        // Left edge of image = imgX - imageWidth * anchorX
+                        // Right edge of image = imgX + imageWidth * (1 - anchorX)
+                        let textX: number;
+                        if (textAlign === 'left') {
+                            // Left edge of image
+                            textX = imgX - imageWidth * seg.anchorX;
+                        } else if (textAlign === 'right') {
+                            // Right edge of image
+                            textX = imgX + imageWidth * (1 - seg.anchorX);
+                        } else {
+                            // Center of image (at anchor point)
+                            textX = imgX;
+                        }
+                        
+                        seg.textOverlay.setPosition(textX, imgY);
+                        this.mainContentContainer.add(seg.textOverlay);
+                    }
+                    
+                    // Advance by total width including padding
+                    currentX += seg.width;
+                } else {
+                    // Text: vertically centered so mixed text/image lines share one center line.
+                    seg.obj.setOrigin(0, 0.5);
+                    seg.obj.setPosition(currentX, lineCenterY);
+                    currentX += seg.width;
+                    this.mainContentContainer.add(seg.obj);
+                }
+            }
+
+            currentY += lineHeight + lineSpacing;
+        }
+
+        return startY + totalHeight;
+    }
+
+    /**
+     * Creates a LineBreak content item with X offset (for border content); returns the Y position below it.
+     * Uses graphics with fillRect, matching HelpScreen_OLD.ts implementation.
+     */
+    private createContentLineBreakWithOffset(
+        lineBreak: { opts?: LineBreakOpts },
+        containerWidth: number,
+        startY: number,
+        offsetX: number
+    ): number {
+        const opts = lineBreak.opts ?? {};
+        const marginTop = this.getMarginTop(opts.margin);
+        const marginBottom = this.getMarginBottom(opts.margin);
+        const paddingTop = this.getPaddingTop(opts.padding);
+        const paddingBottom = this.getPaddingBottom(opts.padding);
+        const effectiveStartY = startY + marginTop;
+        const thickness = opts.thickness ?? 1;
+
+        const lineY = effectiveStartY + paddingTop;
+        const dividerGraphics = this.scene.add.graphics();
+        dividerGraphics.fillStyle(HelpScreen.LINE_DIVIDER_COLOR, 1);
+        dividerGraphics.fillRect(offsetX, lineY, containerWidth, thickness);
+        this.mainContentContainer.add(dividerGraphics);
+
+        return lineY + thickness + paddingBottom + marginBottom;
+    }
+
+    /**
+     * Creates a Grid content item; returns the Y position below it.
+     */
+    private createContentGrid(
+        grid: { opts?: GridOpts; cells: GridCell[] },
+        containerWidth: number,
+        startY: number
+    ): number {
+        return this.createContentGridWithOffset(grid, containerWidth, startY, 0);
+    }
+
+    /**
+     * Creates a Grid content item with X offset (for border content); returns the Y position below it.
+     * @param borderRightEdge Optional X position of the border's right edge (for aligning rightmost column)
+     * @param borderCenterY Optional Y of the border center; when set, grid rows are positioned so the grid's vertical center is at this Y
+     */
+    private createContentGridWithOffset(
+        grid: { opts?: GridOpts; cells: GridCell[] },
+        containerWidth: number,
+        startY: number,
+        offsetX: number,
+        borderRightEdge?: number,
+        borderCenterY?: number
+    ): number {
+        const opts = grid.opts;
+        const marginTop = opts != null ? this.getMarginTop(opts.margin) : 0;
+        const marginBottom = opts != null ? this.getMarginBottom(opts.margin) : 0;
+        if (opts == null || opts.columns == null || opts.rows == null) {
+            console.warn('[HelpScreen] Grid requires columns and rows in opts. Skipping grid.');
+            return startY + marginTop + marginBottom;
+        }
+
+        const paddingTop = this.getPaddingTop(opts.padding);
+        const paddingBottom = this.getPaddingBottom(opts.padding);
+        const paddingLeft = this.getPaddingLeft(opts.padding);
+        const paddingRight = this.getPaddingRight(opts.padding);
+        const spacing = opts.spacing ?? 'fit';
+        const alignment = opts.alignment ?? 'left';
+        const gap = opts.gap ?? 0;
+        const baseGapX = typeof gap === 'number' ? gap : gap.x ?? 0;
+        const baseGapY = typeof gap === 'number' ? gap : gap.y ?? 0;
+        // Grid spacing: horizontalSpacing/verticalSpacing override gap when set (e.g. for fitToWidth/fitToHeight)
+        const gapX = opts.horizontalSpacing ?? baseGapX;
+        const gapY = opts.verticalSpacing ?? baseGapY;
+
+        const columns = opts.columns;
+        const rows = opts.rows;
+        const totalCells = columns * rows;
+
+        if (grid.cells.length !== totalCells) {
+            console.warn(`[HelpScreen] Grid expects ${totalCells} cells (${columns}x${rows}) but got ${grid.cells.length}. Skipping grid.`);
+            return startY + marginTop + marginBottom;
+        }
+
+        // Calculate cell dimensions for 'fit' spacing; reserve horizontal padding from container width
+        let contentWidth = containerWidth - paddingLeft - paddingRight;
+        // When borderRightEdge is set (e.g. grid inside Border/Row), cap content width so the rightmost
+        // column aligns to the border without overlapping the column to its left
+        const gridLeftX = offsetX + paddingLeft;
+        if (borderRightEdge != null && alignment !== 'center') {
+            const maxContentToRightEdge = borderRightEdge - paddingRight - gridLeftX;
+            if (maxContentToRightEdge < contentWidth && maxContentToRightEdge > 0) {
+                contentWidth = maxContentToRightEdge;
+            }
+        }
+        const availableWidth = contentWidth - gapX * (columns - 1);
+        const columnWidths = this.resolveGridColumnWidths(columns, availableWidth, opts.columnWidthPercents);
+        const totalColumnsWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+        const columnStartOffsets: number[] = [];
+        let runningColumnOffset = 0;
+        for (let i = 0; i < columns; i++) {
+            columnStartOffsets.push(runningColumnOffset);
+            runningColumnOffset += columnWidths[i];
+            if (i < columns - 1) runningColumnOffset += gapX;
+        }
+
+        // Position grid with left padding; center/right alignment is relative to the padded content area
+        const totalGridWidth = totalColumnsWidth + (columns - 1) * gapX;
+        let gridOffsetX: number;
+        if (alignment === 'center') {
+            gridOffsetX = offsetX + paddingLeft + (contentWidth - totalGridWidth) / 2;
+        } else if (alignment === 'right') {
+            gridOffsetX = offsetX + paddingLeft + (contentWidth - totalGridWidth);
+        } else {
+            gridOffsetX = offsetX + paddingLeft;
+        }
+
+        // Calculate grid height first (for vertical centering)
+        let totalGridHeight = paddingTop + paddingBottom;
+        let tempY = 0;
+        for (let row = 0; row < rows; row++) {
+            let maxRowHeight = 0;
+            for (let col = 0; col < columns; col++) {
+                const cellIndex = row * columns + col;
+                const cell = grid.cells[cellIndex];
+                if (cell == null) continue;
+                const columnWidth = columnWidths[col] ?? 0;
+
+                let cellHeight = 0;
+                if ('Text' in cell && cell.Text != null) {
+                    const textOpts = cell.Text.opts ?? {};
+                    const cellPaddingTop = this.getPaddingTop(textOpts.padding);
+                    const cellPaddingBottom = this.getPaddingBottom(textOpts.padding);
+                    const cellPaddingLeft = this.getPaddingLeft(textOpts.padding);
+                    const cellPaddingRight = this.getPaddingRight(textOpts.padding);
+                    const baseStyle = this.mergeTextStyle(HelpScreen.defaultBodyTextStyle, textOpts.style as Record<string, unknown>);
+                    const displayCellText = this.resolveHelpText(cell.Text.key, cell.Text.value);
+                    let tempText: Phaser.GameObjects.Text;
+                    if (textOpts.fitToBounds === true) {
+                        const boundsWidth = Math.max(1, columnWidth - cellPaddingLeft - cellPaddingRight);
+                        tempText = this.createTextFittingBounds(
+                            displayCellText, boundsWidth, 9999, baseStyle, textOpts
+                        );
+                        cellHeight = tempText.displayHeight + cellPaddingTop + cellPaddingBottom;
+                    } else {
+                        const styleWithSpacing = this.applyLineSpacing(baseStyle, textOpts.lineSpacing);
+                        const style = this.getTextStyleWithWordWrap(styleWithSpacing, columnWidth);
+                        tempText = this.scene.add.text(0, 0, displayCellText, style);
+                        cellHeight = tempText.height + cellPaddingTop + cellPaddingBottom;
+                    }
+                    tempText.destroy();
+                } else if ('Image' in cell && cell.Image != null) {
+                    const imageOpts = cell.Image.opts ?? {};
+                    const cellPaddingTop = this.getPaddingTop(imageOpts.padding);
+                    const cellPaddingBottom = this.getPaddingBottom(imageOpts.padding);
+                    const imageKey = cell.Image.key ?? cell.Image.src;
+                    if (imageKey != null && this.scene.textures.exists(imageKey)) {
+                        const tempImg = this.scene.add.image(0, 0, imageKey);
+                        const imageSize = imageOpts.size ?? 'native';
+                        this.applyImageSizing(tempImg, imageSize, columnWidth, imageOpts.maxHeight);
+                        const scaleAffectsLayout = imageOpts.scaleAffectsLayout ?? true;
+                        // For layout calculations, only apply scale if it affects layout
+                        if (scaleAffectsLayout) {
+                            this.applyImageOptsScale(tempImg, imageOpts);
+                        }
+                        cellHeight = tempImg.displayHeight + cellPaddingTop + cellPaddingBottom;
+                        tempImg.destroy();
+                    }
+                }
+                if (cellHeight > maxRowHeight) {
+                    maxRowHeight = cellHeight;
+                }
+            }
+            totalGridHeight += maxRowHeight;
+            if (row < rows - 1) {
+                totalGridHeight += gapY;
+            }
+        }
+
+        // When borderCenterY is provided, position the grid so its vertical center is at borderCenterY
+        let effectiveStartY = startY + marginTop;
+        if (borderCenterY != null) {
+            effectiveStartY = borderCenterY - totalGridHeight / 2;
+        }
+        const cellStartY = effectiveStartY + paddingTop;
+
+        let currentY = cellStartY;
+        let maxRowHeight = 0;
+
+        // Render grid row by row
+        for (let row = 0; row < rows; row++) {
+            maxRowHeight = 0;
+            const rowStartY = currentY;
+            const rowCellWireframes: { left: number; width: number }[] = [];
+            const rowRenderedCells: Array<{ obj: Phaser.GameObjects.Text | Phaser.GameObjects.Image; height: number }> = [];
+
+            for (let col = 0; col < columns; col++) {
+                const cellIndex = row * columns + col;
+                const cell = grid.cells[cellIndex];
+
+                if (cell == null) {
+                    continue; // Skip empty cells
+                }
+                const columnWidth = columnWidths[col] ?? 0;
+
+                // Determine alignment and anchor for this cell based on grid alignment mode
+                let cellAlign: number;
+                let cellAnchorX: number;
+
+                if (alignment === 'left') {
+                    cellAlign = 0; // Left aligned
+                    cellAnchorX = 0; // Left anchored
+                } else if (alignment === 'right') {
+                    cellAlign = 1; // Right aligned
+                    cellAnchorX = 1; // Right anchored
+                } else if (alignment === 'center') {
+                    cellAlign = 0.5; // Center aligned
+                    cellAnchorX = 0.5; // Center anchored
+                } else if (alignment === 'justified') {
+                    if (col === 0) {
+                        // Leftmost column: left aligned and anchored
+                        cellAlign = 0;
+                        cellAnchorX = 0;
+                    } else if (col === columns - 1) {
+                        // Rightmost column: right aligned and anchored
+                        cellAlign = 1;
+                        cellAnchorX = 1;
+                    } else {
+                        // Middle columns: center aligned and anchored
+                        cellAlign = 0.5;
+                        cellAnchorX = 0.5;
+                    }
+                } else {
+                    // Fallback to left
+                    cellAlign = 0;
+                    cellAnchorX = 0;
+                }
+                const columnLeftX = gridOffsetX + (columnStartOffsets[col] ?? 0);
+
+                // Calculate cell X position (use gridOffsetX so center-aligned grid is positioned correctly)
+                let cellX: number;
+
+                if (col === columns - 1 && borderRightEdge != null && alignment !== 'center') {
+                    // Rightmost column: align to border's right edge minus right padding (not used for center alignment)
+                    // borderRightEdge is in absolute coordinates (contentOffsetX + contentWidth)
+                    // Since cellAnchorX = 1 (right-anchored), position the anchor at the padded right edge
+                    cellX = borderRightEdge - paddingRight;
+                } else {
+                    // Normal positioning: relative to gridOffsetX (centered when alignment === 'center')
+                    cellX = columnLeftX + columnWidth * cellAlign;
+                }
+
+                // Render the cell (text or image)
+                let cellHeight = 0;
+                if ('Text' in cell && cell.Text != null) {
+                    // Create text cell
+                    const textOpts = cell.Text.opts ?? {};
+                    const cellPaddingTop = this.getPaddingTop(textOpts.padding);
+                    const cellPaddingBottom = this.getPaddingBottom(textOpts.padding);
+                    const cellPaddingLeft = this.getPaddingLeft(textOpts.padding);
+                    const cellPaddingRight = this.getPaddingRight(textOpts.padding);
+                    const baseStyle = this.mergeTextStyle(HelpScreen.defaultBodyTextStyle, textOpts.style as Record<string, unknown>);
+                    const displayCellText = this.resolveHelpText(cell.Text.key, cell.Text.value);
+                    let textObj: Phaser.GameObjects.Text;
+                    if (textOpts.fitToBounds === true) {
+                        const boundsWidth = Math.max(1, columnWidth - cellPaddingLeft - cellPaddingRight);
+                        textObj = this.createTextFittingBounds(
+                            displayCellText, boundsWidth, 9999, baseStyle, textOpts
+                        );
+                    } else {
+                        const styleWithSpacing = this.applyLineSpacing(baseStyle, textOpts.lineSpacing);
+                        const style = this.getTextStyleWithWordWrap(styleWithSpacing, columnWidth);
+                        const isRTL = textOpts.rtl === true;
+                        if (isRTL) (style as TextStyle).rtl = true;
+                        textObj = this.scene.add.text(0, 0, displayCellText, style);
+                        if (isRTL) textObj.setRTL(true);
+                    }
+
+                    textObj.setOrigin(cellAnchorX, 0);
+                    textObj.setPosition(cellX, rowStartY + cellPaddingTop);
+                    this.mainContentContainer.add(textObj);
+
+                    cellHeight = textObj.displayHeight + cellPaddingTop + cellPaddingBottom;
+                    rowRenderedCells.push({ obj: textObj, height: cellHeight });
+                } else if ('Image' in cell && cell.Image != null) {
+                    // Create image cell
+                    const imageOpts = cell.Image.opts ?? {};
+                    const cellPaddingTop = this.getPaddingTop(imageOpts.padding);
+                    const cellPaddingBottom = this.getPaddingBottom(imageOpts.padding);
+                    const cellPaddingLeft = this.getPaddingLeft(imageOpts.padding);
+                    const cellPaddingRight = this.getPaddingRight(imageOpts.padding);
+
+                    const imageKey = cell.Image.key ?? cell.Image.src;
+                    if (imageKey != null) {
+                        const img = this.scene.add.image(0, 0, imageKey);
+                        const imageSize = imageOpts.size ?? 'native';
+                        // For fitToWidth, use available width after accounting for left/right padding
+                        const availableWidth = columnWidth - cellPaddingLeft - cellPaddingRight;
+                        const sizingWidth = imageSize === 'fitToWidth' ? availableWidth : columnWidth;
+                        this.applyImageSizing(img, imageSize, sizingWidth, imageOpts.maxHeight);
+                        const scaleAffectsLayout = imageOpts.scaleAffectsLayout ?? true;
+
+                        // Calculate layout dimensions BEFORE applying scale if scale doesn't affect layout
+                        let layoutHeight: number;
+                        if (!scaleAffectsLayout) {
+                            layoutHeight = img.displayHeight;
+                            // Apply visual scale AFTER layout calculations (doesn't affect layout)
+                            this.applyImageOptsScale(img, imageOpts);
+                        } else {
+                            // Scale affects layout (default behavior)
+                            this.applyImageOptsScale(img, imageOpts);
+                            layoutHeight = img.displayHeight;
+                        }
+
+                        img.setOrigin(cellAnchorX, 0);
+                        // Position image accounting for padding based on anchor
+                        // cellX is the anchor point, so adjust based on anchor position
+                        let imageX: number;
+                        if (cellAnchorX === 0) {
+                            // Left anchor: add left padding
+                            imageX = cellX + cellPaddingLeft;
+                        } else if (cellAnchorX === 1) {
+                            // Right anchor: subtract right padding
+                            imageX = cellX - cellPaddingRight;
+                        } else {
+                            // Center anchor (0.5): no adjustment needed (padding is symmetric)
+                            imageX = cellX;
+                        }
+                        img.setPosition(imageX, rowStartY + cellPaddingTop);
+                        this.mainContentContainer.add(img);
+
+                        cellHeight = layoutHeight + cellPaddingTop + cellPaddingBottom;
+                        rowRenderedCells.push({ obj: img, height: cellHeight });
+                    }
+                }
+
+                // Store wireframe geometry; draw after row height is known
+                if (cellHeight > 0) {
+                    const cellLeft = cellX - cellAnchorX * columnWidth;
+                    rowCellWireframes.push({ left: cellLeft, width: columnWidth });
+                }
+
+                // Track the tallest cell in this row
+                if (cellHeight > maxRowHeight) {
+                    maxRowHeight = cellHeight;
+                }
+            }
+
+            // Vertically center each rendered cell item within the row's final slot height.
+            for (const rendered of rowRenderedCells) {
+                const yOffset = (maxRowHeight - rendered.height) / 2;
+                if (yOffset !== 0) {
+                    rendered.obj.setY(rendered.obj.y + yOffset);
+                }
+            }
+
+            // Draw each cell using full row slot height (not just rendered text/image height)
+            for (const wireframe of rowCellWireframes) {
+                this.drawGridCellWireframe(wireframe.left, rowStartY, wireframe.width, maxRowHeight);
+            }
+
+            // Move to next row
+            currentY = rowStartY + maxRowHeight + gapY;
+        }
+
+        return effectiveStartY + totalGridHeight + marginBottom;
+    }
+
+    /**
+     * Creates a Row content item; returns the Y position below it.
+     */
+    private createContentRow(
+        row: { opts?: RowOpts; items: ContentItem[] },
+        containerWidth: number,
+        startY: number
+    ): number {
+        return this.createContentRowWithOffset(row, containerWidth, startY, 0);
+    }
+
+    /**
+     * Resolves per-column widths for a grid, supporting optional column width percentages.
+     * When percentages are missing/invalid, columns are distributed equally.
+     */
+    private resolveGridColumnWidths(
+        columns: number,
+        availableWidth: number,
+        columnWidthPercents?: number[]
+    ): number[] {
+        const safeColumns = Math.max(1, columns);
+        const safeAvailableWidth = Math.max(0, availableWidth);
+        const equalWidth = safeAvailableWidth / safeColumns;
+
+        if (columnWidthPercents == null || columnWidthPercents.length === 0) {
+            return new Array(safeColumns).fill(equalWidth);
+        }
+
+        // Use provided percentages (up to column count), and if fewer are provided,
+        // distribute the remaining percentage equally to missing columns.
+        const providedCount = Math.min(safeColumns, columnWidthPercents.length);
+        const provided = columnWidthPercents
+            .slice(0, providedCount)
+            .map((v) => Math.max(0, Number(v) || 0));
+        const providedTotal = provided.reduce((sum, v) => sum + v, 0);
+
+        const missingCount = safeColumns - providedCount;
+        const remainingPercent = Math.max(0, 100 - providedTotal);
+        const fillForMissing = missingCount > 0 ? remainingPercent / missingCount : 0;
+
+        const percents: number[] = [...provided];
+        for (let i = 0; i < missingCount; i++) {
+            percents.push(fillForMissing);
+        }
+
+        // Normalize to ensure final widths always fit available width.
+        const total = percents.reduce((sum, v) => sum + v, 0);
+        if (total <= 0) {
+            return new Array(safeColumns).fill(equalWidth);
+        }
+
+        return percents.map((v) => (v / total) * safeAvailableWidth);
+    }
+
+    /**
+     * Creates a Row content item with X offset (for border content); returns the Y position below it.
+     * A Row allows multiple content items to share the same yPosition but spread horizontally.
+     * If inside a border (offsetX > 0), items are centered vertically within the border's content area.
+     * @param borderStartY Optional Y position where the border starts (for centering calculations)
+     * @param borderPaddingTop Optional top padding of the border (for centering calculations)
+     * @param borderPaddingBottom Optional bottom padding of the border (for centering calculations)
+     * @param borderRightEdge Optional X position of the border's right edge (for grid alignment)
+     */
+    private createContentRowWithOffset(
+        row: { opts?: RowOpts; items: ContentItem[] },
+        containerWidth: number,
+        startY: number,
+        offsetX: number,
+        borderStartY?: number,
+        borderPaddingTop?: number,
+        borderPaddingBottom?: number,
+        borderRightEdge?: number
+    ): number {
+        const opts = row.opts ?? {};
+        const marginTop = this.getMarginTop(opts.margin);
+        const marginBottom = this.getMarginBottom(opts.margin);
+        const paddingTop = this.getPaddingTop(opts.padding);
+        const paddingBottom = this.getPaddingBottom(opts.padding);
+        const effectiveStartY = startY + marginTop;
+        const spacing = opts.spacing ?? 'fit';
+        const gap = opts.gap ?? 0;
+
+        if (row.items.length === 0) {
+            return effectiveStartY + paddingTop + paddingBottom + marginBottom;
+        }
+
+        // Check if we're inside a border (border adds left padding, so offsetX > 0)
+        const isInsideBorder = offsetX > 0;
+
+        // First pass: calculate item heights for vertical centering
+        const itemHeights: number[] = [];
+        let maxItemHeight = 0;
+        for (const item of row.items) {
+            let itemHeight = 0;
+            if ('Image' in item && item.Image != null) {
+                const imageKey = item.Image.key ?? item.Image.src;
+                if (imageKey != null && this.scene.textures.exists(imageKey)) {
+                    const imageOpts = item.Image.opts ?? {};
+                    const tempImg = this.scene.add.image(0, 0, imageKey);
+                    const imageSize = imageOpts.size ?? 'native';
+                    this.applyImageSizing(tempImg, imageSize, containerWidth, imageOpts.maxHeight);
+                    const scaleAffectsLayout = imageOpts.scaleAffectsLayout ?? true;
+                    // For layout calculations, only apply scale if it affects layout
+                    if (scaleAffectsLayout) {
+                        this.applyImageOptsScale(tempImg, imageOpts);
+                    }
+                    const cellPaddingTop = this.getPaddingTop(imageOpts.padding);
+                    const cellPaddingBottom = this.getPaddingBottom(imageOpts.padding);
+                    itemHeight = tempImg.displayHeight + cellPaddingTop + cellPaddingBottom;
+                    tempImg.destroy();
+                }
+            } else if ('Grid' in item && item.Grid != null) {
+                // Calculate grid height
+                const gridOpts = item.Grid.opts;
+                if (gridOpts?.columns != null && gridOpts?.rows != null) {
+                    const gapX = typeof gridOpts.gap === 'number' ? gridOpts.gap : gridOpts.gap?.x ?? 0;
+                    const gapY = typeof gridOpts.gap === 'number' ? gridOpts.gap : gridOpts.gap?.y ?? 0;
+                    const availableGridWidth = containerWidth - gapX * (gridOpts.columns - 1);
+                    const columnWidths = this.resolveGridColumnWidths(
+                        gridOpts.columns,
+                        availableGridWidth,
+                        gridOpts.columnWidthPercents
+                    );
+                    const gridPaddingTop = this.getPaddingTop(gridOpts.padding);
+                    const gridPaddingBottom = this.getPaddingBottom(gridOpts.padding);
+                    let gridHeight = gridPaddingTop + gridPaddingBottom;
+                    for (let row = 0; row < gridOpts.rows; row++) {
+                        let maxRowHeight = 0;
+                        for (let col = 0; col < gridOpts.columns; col++) {
+                            const cellIndex = row * gridOpts.columns + col;
+                            const cell = item.Grid.cells[cellIndex];
+                            if (cell == null) continue;
+                            const columnWidth = columnWidths[col] ?? 0;
+                            let cellHeight = 0;
+                            if ('Text' in cell && cell.Text != null) {
+                                const textOpts = cell.Text.opts ?? {};
+                                const cellPaddingTop = this.getPaddingTop(textOpts.padding);
+                                const cellPaddingBottom = this.getPaddingBottom(textOpts.padding);
+                                const cellPaddingLeft = this.getPaddingLeft(textOpts.padding);
+                                const cellPaddingRight = this.getPaddingRight(textOpts.padding);
+                                const baseStyle = this.mergeTextStyle(HelpScreen.defaultBodyTextStyle, textOpts.style as Record<string, unknown>);
+                                const displayCellText = this.resolveHelpText(cell.Text.key, cell.Text.value);
+                                let tempText: Phaser.GameObjects.Text;
+                                if (textOpts.fitToBounds === true) {
+                                    const boundsWidth = Math.max(1, columnWidth - cellPaddingLeft - cellPaddingRight);
+                                    tempText = this.createTextFittingBounds(
+                                        displayCellText, boundsWidth, 9999, baseStyle, textOpts
+                                    );
+                                    cellHeight = tempText.displayHeight + cellPaddingTop + cellPaddingBottom;
+                                } else {
+                                    const styleWithSpacing = this.applyLineSpacing(baseStyle, textOpts.lineSpacing);
+                                    const style = this.getTextStyleWithWordWrap(styleWithSpacing, columnWidth);
+                                    tempText = this.scene.add.text(0, 0, displayCellText, style);
+                                    cellHeight = tempText.height + cellPaddingTop + cellPaddingBottom;
+                                }
+                                tempText.destroy();
+                            } else if ('Image' in cell && cell.Image != null) {
+                                const cellImageOpts = cell.Image.opts ?? {};
+                                const cellPaddingTop = this.getPaddingTop(cellImageOpts.padding);
+                                const cellPaddingBottom = this.getPaddingBottom(cellImageOpts.padding);
+                                const cellImageKey = cell.Image.key ?? cell.Image.src;
+                                if (cellImageKey != null && this.scene.textures.exists(cellImageKey)) {
+                                    const tempCellImg = this.scene.add.image(0, 0, cellImageKey);
+                                    const cellImageSize = cellImageOpts.size ?? 'native';
+                                    this.applyImageSizing(tempCellImg, cellImageSize, columnWidth, cellImageOpts.maxHeight);
+                                    const scaleAffectsLayout = cellImageOpts.scaleAffectsLayout ?? true;
+                                    // For layout calculations, only apply scale if it affects layout
+                                    if (scaleAffectsLayout) {
+                                        this.applyImageOptsScale(tempCellImg, cellImageOpts);
+                                    }
+                                    cellHeight = tempCellImg.displayHeight + cellPaddingTop + cellPaddingBottom;
+                                    tempCellImg.destroy();
+                                }
+                            }
+                            if (cellHeight > maxRowHeight) {
+                                maxRowHeight = cellHeight;
+                            }
+                        }
+                        gridHeight += maxRowHeight;
+                        if (row < gridOpts.rows - 1) {
+                            gridHeight += gapY;
+                        }
+                    }
+                    itemHeight = gridHeight;
+                }
+            } else if ('Text' in item && item.Text != null) {
+                const textOpts = item.Text.opts ?? {};
+                const cellPaddingTop = this.getPaddingTop(textOpts.padding);
+                const cellPaddingBottom = this.getPaddingBottom(textOpts.padding);
+                const baseStyle = this.mergeTextStyle(HelpScreen.defaultBodyTextStyle, textOpts.style as Record<string, unknown>);
+                const styleWithSpacing = this.applyLineSpacing(baseStyle, textOpts.lineSpacing);
+                const style = this.getTextStyleWithWordWrap(styleWithSpacing, containerWidth);
+                const displayItemText = this.resolveHelpText(item.Text.key, item.Text.value);
+                const tempText = this.scene.add.text(0, 0, displayItemText, style);
+                itemHeight = tempText.height + cellPaddingTop + cellPaddingBottom;
+                tempText.destroy();
+            }
+            itemHeights.push(itemHeight);
+            if (itemHeight > maxItemHeight) {
+                maxItemHeight = itemHeight;
+            }
+        }
+
+        // Row total height: single row uses max item height
+        const rowTotalHeight = maxItemHeight + paddingTop + paddingBottom;
+
+        // Calculate border center Y if inside a border
+        let borderCenterY: number | undefined;
+        if (isInsideBorder && borderStartY != null && borderPaddingTop != null && borderPaddingBottom != null) {
+            const estimatedBorderHeight = rowTotalHeight + borderPaddingTop + borderPaddingBottom;
+            borderCenterY = borderStartY + estimatedBorderHeight / 2;
+        }
+
+        // Starting Y: if inside a border, center row content vertically; otherwise below padding
+        let rowStartY: number;
+        if (isInsideBorder && borderCenterY != null) {
+            rowStartY = borderCenterY - paddingTop - maxItemHeight / 2;
+        } else {
+            rowStartY = effectiveStartY + paddingTop;
+        }
+
+        if (spacing === 'fit') {
+            // Calculate widths for each item based on their natural sizes
+            const naturalItemWidths: number[] = [];
+            let totalNaturalWidth = 0;
+
+            // Second pass: calculate natural widths
+            for (const item of row.items) {
+                let itemWidth = 0;
+                if ('Image' in item && item.Image != null) {
+                    const imageKey = item.Image.key ?? item.Image.src;
+                    if (imageKey != null && this.scene.textures.exists(imageKey)) {
+                        const imageOpts = item.Image.opts ?? {};
+                        const imageSize = imageOpts.size ?? 'native';
+
+                        // For accurate width calculation, create a temporary image, apply sizing, and measure its displayWidth
+                        const tempImg = this.scene.add.image(0, 0, imageKey);
+                        this.applyImageSizing(tempImg, imageSize, containerWidth, imageOpts.maxHeight);
+                        const scaleAffectsLayout = imageOpts.scaleAffectsLayout ?? true;
+                        // For layout calculations, only apply scale if it affects layout
+                        if (scaleAffectsLayout) {
+                            this.applyImageOptsScale(tempImg, imageOpts);
+                        }
+                        itemWidth = tempImg.displayWidth;
+                        tempImg.destroy();
+                    }
+                } else if ('Grid' in item && item.Grid != null) {
+                    // Estimate grid width based on columns
+                    const gridOpts = item.Grid.opts;
+                    if (gridOpts?.columns != null) {
+                        const gapX = typeof gridOpts.gap === 'number' ? gridOpts.gap : gridOpts.gap?.x ?? 0;
+                        itemWidth = (containerWidth - gapX * (gridOpts.columns - 1)) / gridOpts.columns * gridOpts.columns + gapX * (gridOpts.columns - 1);
+                    }
+                } else if ('Text' in item && item.Text != null) {
+                    // Estimate text width (will be refined when actually rendered)
+                    const textOpts = item.Text.opts ?? {};
+                    const baseStyle = this.mergeTextStyle(HelpScreen.defaultBodyTextStyle, textOpts.style as Record<string, unknown>);
+                    const styleWithSpacing = this.applyLineSpacing(baseStyle, textOpts.lineSpacing);
+                    const style = this.getTextStyleWithWordWrap(styleWithSpacing, containerWidth);
+                    const displayItemText = this.resolveHelpText(item.Text.key, item.Text.value);
+                const tempText = this.scene.add.text(0, 0, displayItemText, style);
+                    itemWidth = tempText.width;
+                    tempText.destroy();
+                }
+                naturalItemWidths.push(itemWidth);
+                totalNaturalWidth += itemWidth;
+            }
+
+            // Calculate available width after gaps
+            const totalGapWidth = gap * (row.items.length - 1);
+            const availableWidth = containerWidth - totalGapWidth;
+
+            // Distribute width proportionally or equally
+            let currentX = offsetX;
+            for (let i = 0; i < row.items.length; i++) {
+                const item = row.items[i];
+                const naturalWidth = naturalItemWidths[i];
+                const itemWidth = totalNaturalWidth > 0
+                    ? (naturalWidth / totalNaturalWidth) * availableWidth
+                    : availableWidth / row.items.length;
+
+                // Calculate vertical offset to center this item within maxItemHeight
+                const itemHeight = itemHeights[i];
+                const itemVerticalOffset = (maxItemHeight - itemHeight) / 2;
+                let itemY = rowStartY + itemVerticalOffset;
+
+                // If inside a border and this is an Image with anchor y=0.5, position it at border center Y
+                if (isInsideBorder && borderCenterY != null && 'Image' in item && item.Image != null) {
+                    const imageOpts = item.Image.opts ?? {};
+                    const anchorObj = imageOpts.anchor != null && typeof imageOpts.anchor === 'object' ? imageOpts.anchor : undefined;
+                    const anchorY = anchorObj?.y ?? 0;
+                    if (anchorY === 0.5) {
+                        // Position image so its center (anchor 0.5) is at border center Y
+                        itemY = borderCenterY;
+                    }
+                }
+
+                // Render item at current position (vertically centered)
+                const renderResult = this.renderRowItem(item, currentX, itemY, itemWidth, containerWidth, borderCenterY, borderRightEdge);
+                const nextX = renderResult.rightEdge ?? currentX + (renderResult.width ?? itemWidth);
+                currentX = nextX + gap;
+            }
+        } else if (spacing === 'spread') {
+            // Distribute items evenly across width
+            const totalGapWidth = gap * (row.items.length - 1);
+            const availableWidth = containerWidth - totalGapWidth;
+            const itemWidth = availableWidth / row.items.length;
+
+            let currentX = offsetX;
+            for (let i = 0; i < row.items.length; i++) {
+                const item = row.items[i];
+                // Calculate vertical offset to center this item within maxItemHeight
+                const itemHeight = itemHeights[i];
+                const itemVerticalOffset = (maxItemHeight - itemHeight) / 2;
+                let itemY = rowStartY + itemVerticalOffset;
+
+                // If inside a border and this is an Image with anchor y=0.5, position it at border center Y
+                if (isInsideBorder && borderCenterY != null && 'Image' in item && item.Image != null) {
+                    const imageOpts = item.Image.opts ?? {};
+                    const anchorObj = imageOpts.anchor != null && typeof imageOpts.anchor === 'object' ? imageOpts.anchor : undefined;
+                    const anchorY = anchorObj?.y ?? 0;
+                    if (anchorY === 0.5) {
+                        // Position image so its center (anchor 0.5) is at border center Y
+                        itemY = borderCenterY;
+                    }
+                }
+
+                // Render item at current position (vertically centered); fixed slots so advance by itemWidth + gap
+                this.renderRowItem(item, currentX, itemY, itemWidth, containerWidth, borderCenterY, borderRightEdge);
+                currentX += itemWidth + gap;
+            }
+        }
+
+        return rowStartY + maxItemHeight + paddingBottom + marginBottom;
+    }
+
+    /**
+     * Renders a single item within a row at the specified position.
+     * Returns height, optional width, and rightEdge (x of right edge) so the next item can be placed without overlap.
+     * @param borderCenterY Optional border center Y for special positioning (e.g., images with anchor 0.5)
+     * @param borderRightEdge Optional border right edge X for grid alignment
+     */
+    private renderRowItem(
+        item: ContentItem,
+        x: number,
+        y: number,
+        itemWidth: number,
+        containerWidth: number,
+        borderCenterY?: number,
+        borderRightEdge?: number
+    ): { height: number; width?: number; rightEdge?: number } {
+        if ('Image' in item && item.Image != null) {
+            const imageOpts = item.Image.opts ?? {};
+            const cellPaddingTop = this.getPaddingTop(imageOpts.padding);
+            const cellPaddingBottom = this.getPaddingBottom(imageOpts.padding);
+            const cellPaddingLeft = this.getPaddingLeft(imageOpts.padding);
+            const cellPaddingRight = this.getPaddingRight(imageOpts.padding);
+
+            const imageKey = item.Image.key ?? item.Image.src;
+            if (imageKey != null) {
+                const img = this.scene.add.image(0, 0, imageKey);
+                const imageSize = imageOpts.size ?? 'native';
+                // For fitToWidth, use available width after accounting for left/right padding
+                const availableWidth = itemWidth - cellPaddingLeft - cellPaddingRight;
+                const sizingWidth = imageSize === 'fitToWidth' ? availableWidth : itemWidth;
+                this.applyImageSizing(img, imageSize, sizingWidth, imageOpts.maxHeight);
+                const scaleAffectsLayout = imageOpts.scaleAffectsLayout ?? true;
+
+                // Calculate layout dimensions BEFORE applying scale if scale doesn't affect layout
+                let layoutHeight: number;
+                let layoutWidth: number;
+                if (!scaleAffectsLayout) {
+                    layoutHeight = img.displayHeight;
+                    layoutWidth = img.displayWidth;
+                    // Apply visual scale AFTER layout calculations (doesn't affect layout)
+                    this.applyImageOptsScale(img, imageOpts);
+                } else {
+                    // Scale affects layout (default behavior)
+                    this.applyImageOptsScale(img, imageOpts);
+                    layoutHeight = img.displayHeight;
+                    layoutWidth = img.displayWidth;
+                }
+
+                const anchorObj = imageOpts.anchor != null && typeof imageOpts.anchor === 'object' ? imageOpts.anchor : undefined;
+                const anchorX = anchorObj?.x ?? 0;
+                const anchorY = anchorObj?.y ?? 0.5;
+                img.setOrigin(anchorX, anchorY);
+
+                const align = typeof imageOpts.align === 'number' ? imageOpts.align : 0;
+                const offsetXFromOpts = imageOpts.offset?.x ?? 0;
+
+                // If borderCenterY is provided and anchorY is 0.5, position image center at border center Y
+                // Otherwise, use the provided y position (which may already account for centering)
+                let imageY: number;
+                if (borderCenterY != null && anchorY === 0.5) {
+                    // Position image center at border center Y (ignore paddingTop for anchor positioning)
+                    imageY = borderCenterY;
+                } else {
+                    // Use provided y position with padding
+                    imageY = y + cellPaddingTop;
+                }
+
+                // Position image accounting for left padding and alignment
+                const imageX = x + cellPaddingLeft + availableWidth * align + offsetXFromOpts;
+                img.setPosition(imageX, imageY);
+                this.mainContentContainer.add(img);
+
+                // rightEdge so next item starts after this image (avoids overlap when image is centered in slot)
+                const rightEdge = imageX + (1 - anchorX) * layoutWidth;
+                return {
+                    height: layoutHeight + cellPaddingTop + cellPaddingBottom,
+                    width: layoutWidth,
+                    rightEdge,
+                };
+            }
+            return { height: 0 };
+        } else if ('Grid' in item && item.Grid != null) {
+            // Render grid within the item width
+            // Calculate border right edge if we're inside a border (x > 0 typically indicates border offset)
+            // For Row items, we need to calculate based on the containerWidth and offsetX
+            // Since we're in a Row, x is the item's left position, and itemWidth is the allocated width
+            // The border right edge would be: we need to pass this from the Row rendering
+            // borderRightEdge is passed from Row rendering and is in absolute coordinates
+            // Pass it to grid so rightmost column can align to border edge
+            const gridHeight = this.createContentGridWithOffset(item.Grid, itemWidth, y, x, borderRightEdge, borderCenterY) - y;
+            return {
+                height: gridHeight,
+                width: itemWidth,
+                rightEdge: x + itemWidth,
+            };
+        } else if ('Text' in item && item.Text != null) {
+            const textOpts = item.Text.opts ?? {};
+            const cellPaddingTop = this.getPaddingTop(textOpts.padding);
+            const cellPaddingBottom = this.getPaddingBottom(textOpts.padding);
+
+            const baseStyle = this.mergeTextStyle(HelpScreen.defaultBodyTextStyle, textOpts.style as Record<string, unknown>);
+            const styleWithSpacing = this.applyLineSpacing(baseStyle, textOpts.lineSpacing);
+            const style = this.getTextStyleWithWordWrap(styleWithSpacing, itemWidth);
+
+            const isRTL = textOpts.rtl === true;
+            if (isRTL) {
+                style.rtl = true;
+            }
+
+            const displayItemText = this.resolveHelpText(item.Text.key, item.Text.value);
+            const textObj = this.scene.add.text(0, 0, displayItemText, style);
+
+            if (isRTL) {
+                textObj.setRTL(true);
+            }
+
+            const anchorObj = textOpts.anchor != null && typeof textOpts.anchor === 'object' ? textOpts.anchor : undefined;
+            const anchorX = anchorObj?.x ?? 0;
+            const anchorY = anchorObj?.y ?? 0.5;
+            textObj.setOrigin(anchorX, anchorY);
+
+            const align = typeof textOpts.align === 'number' ? textOpts.align : 0;
+            const offsetXFromOpts = textOpts.offset?.x ?? 0;
+            const textX = x + itemWidth * align + offsetXFromOpts;
+            textObj.setPosition(textX, y + cellPaddingTop);
+            this.mainContentContainer.add(textObj);
+
+            const textRightEdge = textX + (1 - anchorX) * textObj.width;
+            return {
+                height: textObj.height + cellPaddingTop + cellPaddingBottom,
+                width: itemWidth,
+                rightEdge: textRightEdge,
+            };
+        }
+        return { height: 0 };
+    }
+
+    /**
+     * Creates a ContentSection with X offset (for nested sections inside borders); returns the Y position below it.
+     */
+    private createContentSectionWithOffset(
+        contentSection: ContentSection,
+        startY: number,
+        offsetX: number,
+        containerWidth: number
+    ): number {
+        // Pass the offsetX and containerWidth to createContentSection so nested sections are positioned correctly; isRoot=false for wireframe green
+        return this.createContentSection(contentSection, startY, offsetX, containerWidth, false);
+    }
+
+    private getPaddingTop(padding: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): number {
+        if (padding === undefined) return 0;
+        if (typeof padding === 'number') return padding;
+        return padding.top ?? 0;
+    }
+
+    private getPaddingBottom(padding: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): number {
+        if (padding === undefined) return 0;
+        if (typeof padding === 'number') return padding;
+        return padding.bottom ?? 0;
+    }
+
+    private getPaddingLeft(padding: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): number {
+        if (padding === undefined) return 0;
+        if (typeof padding === 'number') return padding;
+        return padding.left ?? 0;
+    }
+
+    private getPaddingRight(padding: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): number {
+        if (padding === undefined) return 0;
+        if (typeof padding === 'number') return padding;
+        return padding.right ?? 0;
+    }
+
+    private getMarginTop(margin: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): number {
+        if (margin === undefined) return 0;
+        if (typeof margin === 'number') return margin;
+        return margin.top ?? 0;
+    }
+
+    private getMarginBottom(margin: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): number {
+        if (margin === undefined) return 0;
+        if (typeof margin === 'number') return margin;
+        return margin.bottom ?? 0;
+    }
+
+    private getMarginLeft(margin: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): number {
+        if (margin === undefined) return 0;
+        if (typeof margin === 'number') return margin;
+        return margin.left ?? 0;
+    }
+
+    private getMarginRight(margin: number | { top?: number; right?: number; bottom?: number; left?: number } | undefined): number {
+        if (margin === undefined) return 0;
+        if (typeof margin === 'number') return margin;
+        return margin.right ?? 0;
     }
 
     private setupScrollableRulesContent(scene: GameScene): void {
-        // Create scroll view container
         this.scrollView = scene.add.container(0, 0);
         this.contentContainer = scene.add.container(0, 0);
+        this.sectionWireframesContainer = scene.add.container(0, 0);
+        this.mainContentContainer = scene.add.container(0, 0);
+        this.elementWireframesContainer = scene.add.container(0, 0);
+        this.contentContainer.add(this.sectionWireframesContainer);
+        this.contentContainer.add(this.mainContentContainer);
+        this.contentContainer.add(this.elementWireframesContainer);
         this.scrollView.add(this.contentContainer);
-
-        // Create mask for scrolling
-        const maskGraphics = scene.add.graphics();
-        maskGraphics.fillStyle(0xffffff);
-        maskGraphics.fillRect(0, 0, this.contentArea.width, this.contentArea.height);
-        this.mask = maskGraphics.createGeometryMask();
-        this.scrollView.setMask(this.mask);
-        // Make the mask graphics invisible (it's only used for the mask, not for display)
-        maskGraphics.setVisible(false);
-
-        // Create the rules content
-        this.createHelpScreenContent(scene, this.rulesContent);
-
-        // Add scroll view to rules content
-        this.rulesContent.add(this.scrollView);
-
-        // Enable scrolling
         this.enableScrolling(scene);
     }
 
-    private addTitleText(scene: GameScene, text: string, container?: GameObjects.Container): GameObjects.Text {
-        const content = scene.add.text(
-            this.textHorizontalPadding ?? this.padding / 2,
-            this.yPosition,
-            text,
-            this.titleStyle as TextStyle
-        );
-
-        container?.add(content);
-
-        if (container === undefined) {
-            this.contentContainer.add(content);
-        }
-
-        if (text === 'Bonus Trigger') {
-            content.setPosition(0, content.y);
-        }
-        return content;
-    }
-
-    private addBodyText(
-        scene: GameScene,
-        text: string,
-        wordWrap: boolean = false,
-        wordWrapWidth: number = 0,
-        container?: GameObjects.Container
-    ): GameObjects.Text {
-        const style = { ...this.textStyle } as TextStyle;
-        if (wordWrap) {
-            style.wordWrap = { width: wordWrapWidth } as any;
-        }
-        const content = scene.add.text(
-            this.textHorizontalPadding ?? this.padding / 2,
-            this.yPosition,
-            text,
-            style
-        );
-        container?.add(content);
-        if (container === undefined) {
-            this.contentContainer.add(content);
-        }
-        return content;
-    }
-
-    private addHeaderText(
-        scene: GameScene,
-        text: string,
-        wordWrap: boolean = false,
-        wordWrapWidth: number = 0,
-        container?: GameObjects.Container
-    ): GameObjects.Text {
-        const style = { ...this.contentHeader1Style } as TextStyle;
-        if (wordWrap) {
-            style.wordWrap = { width: wordWrapWidth } as any;
-        }
-        // If we're adding the header into a nested container, its local Y should
-        // start at 0 (top of that container). Otherwise, use the running
-        // screen-level yPosition like the rest of the help sections.
-        const headerY = container ? 0 : this.yPosition;
-
-        const content = scene.add.text(
-            this.textHorizontalPadding ?? this.padding / 2,
-            headerY,
-            text,
-            style
-        );
-        container?.add(content);
-        if (container === undefined) {
-            this.contentContainer.add(content);
-        }
-        return content;
-    }
-
-    private createHelpScreenContent(scene: GameScene, contentArea: GameObjects.Container): void {
-        this.textHorizontalPadding = -2;
-        this.yPosition = this.padding + 10;
-
-        this.createGameRulesSection(scene, contentArea); // Create Game Rules section
-        this.createRTPSection(scene, contentArea); // Create RTP section
-        this.createMaxWinSection(scene, contentArea); // Create Max Win section
-
-        this.yPosition += this.sectionSpacing;
-        this.createPayoutContent(scene, contentArea); // Create Payout section
-        this.createScatterPayoutSection(scene, contentArea); // Create Scatter payout section
-        this.yPosition += this.sectionSpacing;
-
-        this.loadHelpScreenImages(scene, contentArea);
-
-        if(false)
-        {
-        // Divider between scatter payout and freespin rules section
-        this.yPosition += this.sectionSpacing;
-        this.addDivider(scene, this.dividerColor);
-        this.yPosition += this.sectionSpacing;
-
-        // Enhanced Bet
-        //this.createEnhancedBetSection(scene, contentArea);
-
-        // Buy Feature
-        //this.createBuyFeatureSection(scene, contentArea)
-
-        // Create Free Spin Rules section
-        // Create Bonus Trigger section
-        this.createFreeSpinRulesSection(scene, contentArea);
-
-        this.yPosition += this.sectionSpacing;
-
-        this.createGameSettingsSection(scene, contentArea);
-
-        this.yPosition += this.sectionSpacing;
-
-        this.createHowToPlaySection(scene, this.contentWidth, this.symbolSize);
-        }
-
-        contentArea.add(this.contentContainer);
-
-        // Measure the final rendered height of all help content so that
-        // scroll bounds line up with the actual content, stopping at the
-        // end of the How to Play section (the last section created).
-        // Add an extra sectionSpacing at the end so there is breathing
-        // room when the player scrolls all the way to the bottom.
-        const measuredHeight = this.measureContainerHeight(this.contentContainer) || this.yPosition;
-        this.contentHeight = measuredHeight + this.sectionSpacing / 2;
-    }
-
-    private createGameRulesSection(scene: GameScene, contentArea: GameObjects.Container): void {
-        this.addTextBlock(scene, 'header1', 'Game Rules', { spacingAfter: 15 });
-        this.addTextBlock(scene, 'content1', 'Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.', { wordWrapWidth: this.contentWidth, spacingAfter: 24 });
-    }
-
-    private createRTPSection(scene: GameScene, contentArea: GameObjects.Container): void {
-        const headerHeight = this.addTextBlock(scene, 'header2', 'RTP').height;
-        const bodyHeight = this.addBodyText(scene, '96.49% - 96.6%', false, 0).height;
-        
-        this.yPosition += headerHeight + bodyHeight;
-    }
-
-    private createMaxWinSection(scene: GameScene, contentArea: GameObjects.Container): void {
-        const headerHeight = this.addTextBlock(scene, 'header2', 'Max Win').height;
-        const bodyHeight = this.addBodyText(scene, '21,000x', false, 0).height;
-        this.yPosition += headerHeight + bodyHeight ;
-    }
-
-    private createPayoutContent(scene: GameScene, contentArea: GameObjects.Container): void {
-        this.addTextBlock(scene, 'header2', 'Payout');
-        this.yPosition += this.padding;
-
-        for (let symbolIndex = 1; symbolIndex <= this.payoutSymbolCount; symbolIndex++) {
-            const payoutData = SYMBOL_PAYOUTS[symbolIndex];
-
-            if (!payoutData) continue;
-
-            this.createSinglePayoutContent(scene, contentArea, symbolIndex, payoutData, PAYOUT_RANGES);
-        }
-    }
-
-    private createSinglePayoutContent(
-        scene: GameScene,
-        container: GameObjects.Container,
-        symbolIndex: number,
-        payoutData: [number, number, number],
-        payoutRange: readonly string[],
-    ): void {
-        void container;
-        const symbolContainer = scene.add.container(0, this.yPosition);
-        this.contentContainer.add(symbolContainer);
-
-        // Display symbol
-        const symbol = scene.add.image(0, 0, `${this.payoutSymbolKey}${symbolIndex}`);
-        symbol.displayWidth = this.symbolSize * this.symbolScale;
-        symbol.displayHeight = this.symbolSize * this.symbolScale;
-        symbol.setOrigin(0, 0.5);
-        symbolContainer.add(symbol);
-
-        // Left column start (to the right of the symbol), right column anchor (near right edge)
-        const rangeTextX = symbol.displayWidth + this.payoutInnerPadding;
-        const payoutTexts: Array<{ text: GameObjects.Text; row: number }> = [];
-        const rangeTexts: Array<{ text: GameObjects.Text; row: number }> = [];
-
-        // Check if demo mode is active - if so, use blank currency symbol
-        const isDemo = (scene as any)?.gameAPI?.getDemoState();
-        const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
-
-        for (let row = 0; row < 3; row++) {
-            const y = 0;
-            // Left column: range label (bold)
-            const rangeText = scene.add.text(rangeTextX, y, payoutRange[row] ?? '', {
-                fontSize: this.payoutRangeTextFontSize + 'px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins-Regular',
-                fontStyle: 'bold',
-                align: 'left',
-            });
-            rangeText.setOrigin(0, 0.5);
-            symbolContainer.add(rangeText);
-            rangeTexts.push({ text: rangeText, row });
-
-            // Right column: payout value from SYMBOL_PAYOUTS (display as-is, no bet scaling)
-            const value = payoutData[row] ?? 0;
-            const formattedAmount = this.formatPayout(value);
-            const valueText = currencyCode ? `${currencyCode} ${formattedAmount}` : formattedAmount;
-            const payoutText = scene.add.text(0, y, valueText, {
-                fontSize: this.payoutTextFontSize + 'px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins-Regular',
-                align: 'right',
-            });
-            payoutText.setOrigin(1, 0.5);
-            symbolContainer.add(payoutText);
-            payoutTexts.push({ text: payoutText, row });
-        }
-
-        const sectionHeight = this.createDynamicBorder(scene, symbolContainer, {
-            paddingTop: this.payoutInnerPadding,
-            paddingBottom: this.payoutInnerPadding,
-            offsetX: 0,
-        });
-
-        // Align payout texts after border has been drawn so frame metrics reflect actual bounds
-        const { frameW, frameX, frameY, frameH } = this.getFrameMetrics(symbolContainer);
-        const borderCenter = {
-            x: frameX + frameW / 2,
-            y: frameY + frameH / 2,
-        };
-        const rightColAnchorX = frameX + frameW - this.payoutInnerPadding;
-        const leftColAnchorX = frameX + this.payoutInnerPadding;
-
-        symbol.setY(borderCenter.y);
-        symbol.setX(leftColAnchorX);
-
-        const rowCount = Math.max(1, payoutRange.length);
-        const rowStartY = borderCenter.y - ((rowCount - 1) * this.payoutTextRowSpacing) / 2;
-
-        payoutTexts.forEach(({ text, row }) => {
-            text.setX(rightColAnchorX);
-            text.setY(rowStartY + row * this.payoutTextRowSpacing);
-        });
-
-        rangeTexts.forEach(({ text, row }) => {
-            text.setX(text.x + leftColAnchorX);
-            text.setY(rowStartY + row * this.payoutTextRowSpacing);
-        });
-
-        this.yPosition += sectionHeight + this.padding;
-    }
-
-    private createScatterPayoutSection(scene: GameScene, contentArea: GameObjects.Container): void {
-        // Create symbol container that will receive a dynamic border
-        const symbolContainer = scene.add.container(0, this.yPosition);
-        this.contentContainer.add(symbolContainer);
-        this.contentContainer.sendToBack(symbolContainer);
-
-        // Temporarily increase left padding for Scatter label only
-        const scatterHeader = this.addHeaderText(scene, 'Scatter', false, 0, symbolContainer);
-        scatterHeader.setY(scatterHeader.y + this.scatterHeaderTopPadding);
-        scatterHeader.setX(scatterHeader.x + this.scatterHeaderLeftPadding);
-
-        // Add symbol (Symbol0 in Payout – resize via scatterPayoutSymbolScale above)
-        const symbol = scene.add.image(0, 0, this.scatterSymbolKey);
-        symbol.setScale(this.scatterPayoutSymbolScale);
-        symbol.setOrigin(0.5, 0.5);
-        symbolContainer.add(symbol);
-
-        // Center symbol horizontally inside the bordered area
-        const { frameW } = this.getFrameMetrics(symbolContainer);
-
-        symbol.setPosition(frameW / 2, scatterHeader.y + scatterHeader.displayHeight + this.scaledSymbolSize + scatterHeader.displayHeight);
-
-        // Left column start (to the right of the symbol), right column anchor (near right edge)
-        const baseTextX = symbol.x;
-        const baseTextY = symbol.y + symbol.displayHeight / 2 + this.scatterElementSpacing;
-        const payoutTexts: Array<{ text: GameObjects.Text; row: number }> = [];
-        const rangeTexts: Array<{ text: GameObjects.Text; row: number }> = [];
-
-        // Check if demo mode is active - if so, use blank currency symbol
-        const isDemo = (scene as any)?.gameAPI?.getDemoState();
-        const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
-
-        for (let row = 0; row < 3; row++) {
-            const adjustedTextY = baseTextY + row * this.scatterPayoutTextRowSpacing;
-            
-            // Left column: range label (bold)
-            const rangeTextX = baseTextX - this.scatterPayoutTextColumnSpacing / 2;
-            const rangeText = scene.add.text(rangeTextX, adjustedTextY, SCATTER_COUNTS[row] ?? '', {
-                fontSize: this.scatterPayoutTextFontSize + 'px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins-Bold',
-                fontStyle: 'bold',
-                align: 'left',
-            });
-            rangeText.setOrigin(0, 0.5);
-            symbolContainer.add(rangeText);
-            rangeTexts.push({ text: rangeText, row });
-
-            // Right column: payout value from SCATTER_PAYOUTS (display as-is, no bet scaling)
-            const value = SCATTER_PAYOUTS[row] ?? 0;
-            const formattedAmount = this.formatPayout(value);
-            const valueText = currencyCode ? `${currencyCode} ${formattedAmount}` : formattedAmount;
-            const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
-            const payoutText = scene.add.text(payoutTextX, adjustedTextY, valueText, {
-                fontSize: this.scatterPayoutTextFontSize + 'px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins-Regular',
-                align: 'right',
-            });
-            payoutText.setOrigin(1, 0.5);
-            symbolContainer.add(payoutText);
-            payoutTexts.push({ text: payoutText, row });
-        }
-
-        const tableBottomLocalY = baseTextY;
-        const descTopLocalY = tableBottomLocalY + this.scatterElementSpacing + this.scatterPayoutTextRowSpacing * 3;
-
-        const scatterDescriptionText = SCATTER_DESCRIPTIONS.join('\n');
-        // Center the scatter description text under the Scatter symbol/table
-        const descText = scene.add.text(
-            symbol.x,
-            descTopLocalY,
-            scatterDescriptionText,
-            {
-                ...this.textStyle,
-                align: 'left',
-                wordWrap: { width: this.contentWidth - this.padding * 2 } as any,
-            }
-        );
-        descText.setOrigin(0.5, 0);
-        symbolContainer.add(descText);
-
-        // Dynamically size border to fit all content with custom padding,
-        // while keeping a similar vertical offset as before
-        const sectionHeight = this.createDynamicBorder(scene, symbolContainer, {
-            paddingTop: this.scatterHeaderTopPadding,
-            paddingBottom:  this.scatterBottomPadding,
-        });
-
-        this.yPosition += sectionHeight; // Move to next row based on actual container height
-    }
-
-    private loadHelpScreenImages(scene: GameScene, contentArea: GameObjects.Container): void {
-        void contentArea;
-
-        // Sequentially display help screen images named using an index.
-        // The loop stops when no matching texture key can be found.
-        let index = 0;
-        const spacing = this.sectionSpacing;
-        // const correctionOffset = 16;
-        const correctionOffset = 0;
-
-        while (true) {
-            // Support multiple possible texture key conventions:
-            // - "helpscreen_{index}" or "helpscreen_{index}.png"
-            // - "help_screen_{index}" (matches AssetConfig help_screen_0/1/2)
-            const candidateKeys = [
-                `helpscreen_${index}`,
-                `helpscreen_${index}.png`,
-                `help_screen_${index}`,
-            ];
-
-            const textureKey = candidateKeys.find((key) => scene.textures.exists(key));
-            if (!textureKey) {
-                break;
-            }
-
-            // Create image at the current vertical cursor and scale it
-            // so that it fits the full available width while preserving
-            // its aspect ratio.
-            const img = scene.add.image(0, this.yPosition, textureKey);
-            img.setOrigin(0, 0);
-
-            // Use the full content width with no horizontal padding.
-            const availableWidth = this.contentArea ? this.contentArea.width + correctionOffset : this.contentWidth + correctionOffset;
-            const nativeWidth = img.width || 1;
-            const scale = availableWidth / nativeWidth;
-            img.setScale(scale);
-
-            this.contentContainer.add(img);
-
-            // Advance global Y cursor so images appear one after another vertically.
-            this.yPosition += img.displayHeight + spacing;
-            index++;
-        }
-    }
-
-    private createFreeSpinRulesSection(scene: GameScene, container: GameObjects.Container): void {
-        this.addTextBlock(scene, 'header2', 'Free Spins Rules', { spacingAfter: this.freeSpinHeaderSpacing });
-
-        const freeSpinContainer = scene.add.container(0, this.yPosition);
-
-        this.contentContainer.add(freeSpinContainer);
-        this.contentContainer.sendToBack(freeSpinContainer);
-
-        // Use a common template for Bonus Trigger and Free Spins Start
-        const freeSpinsTitleOffset = this.padding * 15; // distance from image → title
-        const freeSpinsDescOffset = this.padding * 5; // distance from title → description
-        const bonusDesc = 'Land 4 or more             SCATTER \n\nand win 15 spins';
-        const bonusImageTop = this.padding * 31.5; // explicit image Y inside the bordered area
-        // Compute center X of the bordered container for image placement
-        const { frameW, frameX } = this.getFrameMetrics(freeSpinContainer);
-        const centerX0 = frameX + frameW / 2;
-        const bonusBottomY = this.addSubSectionInstruction(scene, freeSpinContainer, {
-            title: 'Bonus Trigger',
-            imageKey: 'scatterGame',
-            imageX: centerX0 - 10,
-            imageY: bonusImageTop,
-            imageOrigin: { x: 0.5, y: 0.33 },
-            imageScale: 1.1,
-            titleOffsetY: freeSpinsTitleOffset,
-            titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
-            desc: bonusDesc,
-            descOffsetY: freeSpinsDescOffset,
-            descX: this.padding * 3,
-            wordWrapWidth: this.contentWidth + this.padding * 3,
-        });
-
-        // Horizontal divider under Bonus Trigger
-        const dividerY = bonusBottomY + this.padding * 6;
-
-        const fsDesc = 'Land 3             SCATTER \n\nand win 5 more spins';
-        const titleX2 = (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1;
-        const descX2 = this.padding * 3;
-
-        // Text-only section (header and body) similar to Bonus Trigger
-        const headerY2 = dividerY + this.padding;
-        const headerText2 = this.addTextBlock(scene, 'header2', 'In-Bonus Freespin Retrigger', {
-            container: freeSpinContainer,
-            x: titleX2,
-            y: headerY2,
-        });
-        void headerText2;
-        const bodyY2 = headerY2 + freeSpinsDescOffset;
-        const bodyText2 = scene.add.text(descX2, bodyY2, fsDesc, {
-            ...this.textStyle,
-            wordWrap: { width: this.contentWidth + this.padding * 3 },
-        });
-        bodyText2.setOrigin(0, 0);
-        freeSpinContainer.add(bodyText2);
-        const fsStartBottom = bodyText2.y + bodyText2.displayHeight;
-
-        // Tumble Win info card – placed before the internal divider, with its own border
-        const tumbleTopY = fsStartBottom + this.padding * 4;
-        const tumbleBottomY = this.createTumbleWinSection(scene, freeSpinContainer, tumbleTopY);
-
-        // Divider after Tumble Win / Free Spins Start
-        const dividerY2 = tumbleBottomY + this.padding * 4;
-        const inset2 = this.padding * 2;
-        const lineWidth2 = Math.max(0, frameW - inset2 * 2);
-        const lineLeft2 = frameX + inset2;
-        const dividerG2 = scene.add.graphics();
-        dividerG2.fillStyle(this.dividerColor, 1);
-        dividerG2.fillRect(lineLeft2 - 10, dividerY2, lineWidth2, 1);
-        freeSpinContainer.add(dividerG2);
-
-        // New section: Free Spins Round (mirror Free Spins Start spacing)
-        const fsRoundDesc =
-            'The Free Spins Feature activates with 4+ Scatters, starting with 15 spins. Multiplier symbols add to a total multiplier applied to all wins, and 3+ Scatters during the round award 5 extra spin, with special reels in play.';
-        const fsRoundImageTop = dividerY2 + this.padding * 42;
-        this.addSubSectionInstruction(scene, freeSpinContainer, {
-            title: 'Free Spins Round',
-            imageKey: 'scatterGame',
-            imageX: frameX + frameW / 2 - 10,
-            imageY: fsRoundImageTop,
-            imageOrigin: { x: 0.5, y: 0.5 },
-            imageScale: 1.1,
-            titleOffsetY: freeSpinsTitleOffset - 111,
-            titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
-            desc: fsRoundDesc,
-            descOffsetY: freeSpinsDescOffset,
-            descX: this.padding * 3,
-            wordWrapWidth: this.contentWidth - this.padding * 3,
-            lineSpacing: 8,
-        });
-
-        // Border will be added after all children so its height fits content dynamically
-
-        const scatterSymbolInText = scene.add.image(0, 0, 'ScatterLabel');
-        scatterSymbolInText.setScale(0.3);
-        scatterSymbolInText.setOrigin(0.5, 0.5);
-        scatterSymbolInText.setPosition(215, 880);
-        freeSpinContainer.add(scatterSymbolInText);
-
-        const scatterSymbolInText2 = scene.add.image(0, 0, 'ScatterLabel');
-        scatterSymbolInText2.setScale(0.3);
-        scatterSymbolInText2.setOrigin(0.5, 0.5);
-        scatterSymbolInText2.setPosition(bodyText2.x + bodyText2.width * 0.5 - 15, bodyText2.y + bodyText2.height * 0.5 - 25);
-        freeSpinContainer.add(scatterSymbolInText2);
-
-        const scatterSymbolTopLeft = scene.add.image(30, 20, 'ScatterLabel');
-        scatterSymbolTopLeft.setScale(0.6);
-        scatterSymbolTopLeft.setOrigin(0, 0);
-        freeSpinContainer.add(scatterSymbolTopLeft);
-
-        const scatterWinImage = scene.add.image(0, 0, 'scatterWin');
-        scatterWinImage.setScale(0.5);
-        scatterWinImage.setOrigin(0.5, 0.5);
-        scatterWinImage.setPosition(
-            scatterSymbolTopLeft.x + scatterSymbolTopLeft.width * scatterSymbolTopLeft.scaleX,
-            scatterSymbolTopLeft.y + scatterSymbolTopLeft.height * scatterSymbolTopLeft.scaleY * 0.35
-        );
-        freeSpinContainer.add(scatterWinImage);
-
-        // Dynamically size border to fit all content with optional top/bottom padding
-        this.yPosition += this.createDynamicBorder(scene, freeSpinContainer, {
-            paddingTop: 0,
-            paddingBottom: 50, // This is an arbitrary padding to fill the container. FIX THIS ASAP
-        });
-    }
-
-    private createEnhancedBetSection(scene: GameScene, container: GameObjects.Container): void {
-        this.addTextBlock(scene, 'header2', 'Enhanced Bet');
-        const enhancedContainer = scene.add.container(0, this.yPosition);
-        this.yPosition += this.createBorder(
-            scene,
-            enhancedContainer,
-            this.padding,
-            0,
-            this.contentWidth + this.padding * 3,
-            this.scaledSymbolSize * 3.1
-        );
-        this.contentContainer.add(enhancedContainer);
-
-        // Use SlotController's amplify icon and center it in the section
-        const pillY = 40;
-        const pillH = 56;
-        const sectionAreaWidth1 = this.contentWidth + this.padding * 3;
-        const sectionCenterX1 = this.padding + sectionAreaWidth1 / 2;
-        const amplifyIcon = scene.add.image(sectionCenterX1, pillY + pillH / 2, 'amplify') as ButtonImage;
-        amplifyIcon.setOrigin(0.5, 0.5);
-        const amplifyScale = 1.5;
-        amplifyIcon.setScale(amplifyScale);
-        enhancedContainer.add(amplifyIcon);
-
-        // Description
-        const enhanceDesc = scene.add.text(
-            30,
-            pillY + pillH + 40,
-            "You’re wagering 25% more per spin, but you also have better\nchances at hitting big features.",
-            {
-                ...this.textStyle,
-                wordWrap: { width: this.contentWidth - this.padding * 2 },
-            }
-        ) as ButtonText;
-        enhanceDesc.setOrigin(0, 0);
-        enhancedContainer.add(enhanceDesc);
-    }
-
-    private createBuyFeatureSection(scene: GameScene, container: GameObjects.Container): void {
-        this.addTextBlock(scene, 'header2', 'Buy Feature');
-        const buyFeatContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
-        this.yPosition += this.createBorder(
-            scene,
-            buyFeatContainer,
-            this.padding,
-            0,
-            this.contentWidth + this.padding * 3,
-            this.scaledSymbolSize * 2.8
-        );
-        this.contentContainer.add(buyFeatContainer);
-
-        // Use controller feature button BG as the main visual button (centered)
-        const btnY = 70;
-        const sectionAreaWidth2 = this.contentWidth + this.padding * 3;
-        const btnCenterX = this.padding + sectionAreaWidth2 / 2;
-        const featureBg = scene.add.image(btnCenterX, btnY, 'feature') as ButtonImage;
-        featureBg.setOrigin(0.5, 0.5);
-        const featureBgScale = Math.min(
-            sectionAreaWidth2 / featureBg.width,
-            (this.scaledSymbolSize * 2.8) / featureBg.height
-        );
-        featureBg.setScale(featureBgScale);
-        featureBg.setSize(featureBg.displayWidth, featureBg.displayHeight);
-        buyFeatContainer.add(featureBg);
-
-        const btnCenterY = featureBg.y;
-
-        const buyLabel = scene.add.text(btnCenterX, btnCenterY - 8, 'BUY FEATURE', {
-            fontSize: '18px',
-            color: '#FFFFFF',
-            fontFamily: 'Poppins-Bold',
-        }) as ButtonText;
-        buyLabel.setOrigin(0.5, 0.5);
-        buyFeatContainer.add(buyLabel);
-
-        // Static price text centered on the button (hide currency in demo)
-        const isDemoBuyPrice = (scene as any)?.gameAPI?.getDemoState();
-        const currencyPrefixBuyPrice = isDemoBuyPrice ? '' : CurrencyManager.getCurrencyCode();
-        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencyPrefixBuyPrice}${currencyPrefixBuyPrice ? ' ' : ''}10,000`, {
-            fontSize: '18px',
-            color: '#FFFFFF',
-            fontFamily: 'Poppins-Bold',
-        }) as ButtonText;
-        buyPrice.setOrigin(0.5, 0.5);
-        buyFeatContainer.add(buyPrice);
-
-        // Description for Buy Feature
-        const buyDesc = scene.add.text(
-            30,
-            btnY + featureBg.displayHeight / 2 + 5,
-            'Lets you buy the free spins round for 100x your total bet.',
-            {
-                ...this.textStyle,
-                wordWrap: { width: this.contentWidth - this.padding * 2 },
-            }
-        ) as ButtonText;
-        buyDesc.setOrigin(0, 0);
-        buyFeatContainer.add(buyDesc);
-    }
-
-    private createGameSettingsSection(scene: GameScene, container: GameObjects.Container): void {
-        this.addTextBlock(scene, 'header2', 'Game Settings');
-
-        const gamesettingsContainer = scene.add.container(0, this.yPosition);
-        this.contentContainer.add(gamesettingsContainer);
-        const { frameW, frameX } = this.getFrameMetrics(gamesettingsContainer);
-        const borderCenter = frameX + frameW / 2;
-        const maxImageWidth = Math.max(0, frameW);
-
-        // Local Y cursor inside the Game Settings container
-        let currentY = this.gameSettingsTextTopPadding;
-
-        // 1) Paylines header
-        const paylinesText = this.addTextBlock(scene, 'header2', 'Paylines', {
-            container: gamesettingsContainer,
-            y: currentY,
-            x: this.gameSettingsTextHorizontalPadding,
-        });
-        currentY = paylinesText.y + paylinesText.displayHeight + this.gameSettingsElementSpacing;
-
-        // 2) Paylines description
-        const descriptionText = this.createHowToPlayEntry(
-            scene,
-            this.gameSettingsTextHorizontalPadding,
-            currentY,
-            gamesettingsContainer,
-            '',
-            'Symbols can land anywhere on the screen.',
-            true,
-            this.contentWidth - this.gameSettingsTextHorizontalPadding,
-            true // do not advance global yPosition; we manage spacing locally here
-        );
-        currentY = descriptionText.y + descriptionText.displayHeight + this.gameSettingsElementSpacing;
-
-        // 3) Winning payline image
-        const imgWin = scene.add.image(borderCenter - 10, currentY, 'paylineMobileWin') as ButtonImage;
-        imgWin.setOrigin(0.5, 0);
-        const scaleWin = Math.min(1, maxImageWidth / (imgWin.width || 1));
-        imgWin.setScale(scaleWin);
-        gamesettingsContainer.add(imgWin);
-        currentY = imgWin.y + imgWin.displayHeight + this.gameSettingsElementSpacing;
-
-        // 4) Non-winning payline image
-        const imgNoWin = scene.add.image(borderCenter - 10, currentY, 'paylineMobileNoWin') as ButtonImage;
-        imgNoWin.setOrigin(0.5, 0);
-        const scaleNoWin = Math.min(1, maxImageWidth / (imgNoWin.width || 1));
-        imgNoWin.setScale(scaleNoWin);
-        gamesettingsContainer.add(imgNoWin);
-        currentY = imgNoWin.y + imgNoWin.displayHeight + this.gameSettingsElementSpacing;
-
-        // 5) Payline notes text
-        const paylineNotes = [
-            'All wins are multiplied by the base bed',
-            'When multiple symbol wins occur, all values are combined into the total win.',
-            'Free spins rewards are granted after the round ends.',
-        ].join('\n\n');
-        const notesX = this.gameSettingsTextHorizontalPadding;
-        const notesY = currentY;
-        const notesText = scene.add.text(notesX, notesY, paylineNotes, {
-            ...this.textStyle,
-            wordWrap: { width: this.contentWidth - this.gameSettingsTextHorizontalPadding },
-        }) as ButtonText;
-        gamesettingsContainer.add(notesText);
-
-        this.yPosition += this.createDynamicBorder(scene, gamesettingsContainer, {
-            paddingTop: this.gameSettingsTextTopPadding,
-            paddingBottom: this.gameSettingsTextBottomPadding,
-        });
-    }
-
-    private createHowToPlaySection(scene: GameScene, genericTableWidth: number, scaledSymbolSize: number): void {
-        this.addTextBlock(scene, 'header2', 'How to Play');
-        let currentPaddingMultiplier: number = 0;
-
-        // Align How to Play container with other sections (same left offset and width)
-        const howToPlayContainer = scene.add.container(0, this.yPosition);
-        this.contentContainer.add(howToPlayContainer);
-
-        // Align header and entries with the same left padding used in other sections
-        this.addTextBlock(scene, 'header2', 'Bet Controls', { 
-            container: howToPlayContainer, 
-            x: this.howToPlayHorizontalPadding, 
-            y: this.howToPlayElementSpacing });
-
-        currentPaddingMultiplier += 6.25;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay1Mobile',
-            ''
-        );
-
-        currentPaddingMultiplier += 4.5;
-        this.addTextBlock(scene, 'header2', 'Game Actions', {
-            container: howToPlayContainer,
-            x: this.howToPlayHorizontalPadding,
-            y: this.howToPlayElementSpacing * currentPaddingMultiplier,
-        });
-
-        currentPaddingMultiplier += 6.25;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay2Mobile',
-            ''
-        );
-        currentPaddingMultiplier += 10;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay11Mobile',
-            ''
-        );
-        currentPaddingMultiplier += 12.5;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay12Mobile',
-            ''
-        );
-        currentPaddingMultiplier += 13;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay3Mobile',
-            ''
-        );
-        currentPaddingMultiplier += 10.75;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay4Mobile',
-            ''
-        );
-        currentPaddingMultiplier += 6;
-
-        this.addTextBlock(scene, 'header2', 'Display & Stats', {
-            container: howToPlayContainer,
-            x: this.howToPlayHorizontalPadding,
-            y: this.howToPlayElementSpacing * currentPaddingMultiplier,
-        });
-        currentPaddingMultiplier += 6;
-
-        // Original image-based entry for the balance display.
-        // Replaced with a bespoke bordered container that visually matches
-        // the BALANCE panel from the main UI.
-        //
-        // this.createHowToPlayEntry(
-        //     scene,
-        //     this.howToPlayHorizontalPadding,
-        //     this.howToPlayElementSpacing * currentPaddingMultiplier,
-        //     howToPlayContainer,
-        //     'howToPlay5',
-        //     'Shows your current available credits.',
-        //     true,
-        //     this.contentWidth - this.padding * 2
-        // );
-
-        // Container that holds the BALANCE card.
-        const balanceCardY = this.howToPlayElementSpacing * currentPaddingMultiplier;
-        const balanceCardContainer = scene.add.container(0, balanceCardY);
-        howToPlayContainer.add(balanceCardContainer);
-
-        // Size the card relative to the framed content width so it aligns
-        // with other bordered sections.
-        const { frameW } = this.getFrameMetrics(howToPlayContainer);
-        const cardInset = this.padding * 3;
-        const cardWidth = Math.max(0, frameW - cardInset * 2);
-        const cardLeft = cardInset;
-        const cardHeight = 90;
-
-        // Dark inner fill with a bright green outline to match the BALANCE
-        // widget styling.
-        this.createBorder(scene, balanceCardContainer, cardLeft, 0, cardWidth, cardHeight, {
-            fillColor: 0x000000,
-            strokeColor: 0x379557,
-            fillAlpha: 0.1,
-            strokeAlpha: 0.2,
-        });
-
-        // Top label: BALANCE
-        const balanceTitle = scene.add.text(
-            cardLeft + cardWidth / 2,
-            this.padding * 1.8,
-            'BALANCE',
-            {
-                ...this.header2Style,
-                fontFamily: 'Poppins-Bold',
-                color: '#3FFF0D',
-            }
-        );
-        balanceTitle.setOrigin(0.5, 0.5);
-        const gradient = balanceTitle.context.createLinearGradient(0, 0, 0, balanceTitle.height);
-        gradient.addColorStop(0, '#3FFF0D');  // top color
-        gradient.addColorStop(0.5, '#09FF5C');  // bottom color
-
-        (balanceTitle as any).setFill(gradient);
-
-        balanceCardContainer.add(balanceTitle);
-
-        // Main value text layer below the title.
-        const balanceValue = scene.add.text(
-            cardLeft + cardWidth / 2,
-            cardHeight / 2 + this.padding * 0.8,
-            (() => {
-                const isDemoBalance = (scene as any)?.gameAPI?.getDemoState();
-                const currencyPrefixBalance = isDemoBalance ? '' : CurrencyManager.getCurrencyCode();
-                return `${currencyPrefixBalance}${currencyPrefixBalance ? ' ' : ''}200,000.00`;
-            })(),
-            {
-                ...this.titleStyle,
-                color: '#ffffff',
-            }
-        );
-        balanceValue.setOrigin(0.5, 0.5);
-        balanceCardContainer.add(balanceValue);
-
-        currentPaddingMultiplier += 11;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay6',
-            'Display your total winnings from the current round.',
-            true,
-            this.contentWidth - this.padding * 2
-        );
-        currentPaddingMultiplier += 11.75;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay7',
-            'Adjust your wager using the - and + buttons.',
-            true,
-            this.contentWidth - this.padding * 2
-        );
-        currentPaddingMultiplier += 9;
-
-        this.addTextBlock(scene, 'header2', 'General Controls', {
-            container: howToPlayContainer,
-            x: this.howToPlayHorizontalPadding,
-            y: this.howToPlayElementSpacing * currentPaddingMultiplier,
-        });
-        currentPaddingMultiplier += 6;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay8Mobile',
-            ''
-        );
-        currentPaddingMultiplier += 8;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay9Mobile',
-            ''
-        );
-        currentPaddingMultiplier += 9.75;
-        this.createHowToPlayEntry(
-            scene,
-            this.howToPlayHorizontalPadding,
-            this.howToPlayElementSpacing * currentPaddingMultiplier,
-            howToPlayContainer,
-            'howToPlay10Mobile',
-            ''
-        );
-
-        // Draw the border sized to the How to Play content. Since this is
-        // the final section on the help screen, the scrollable area should
-        // effectively end at the bottom of this bordered container.
-        this.yPosition += this.createDynamicBorder(scene, howToPlayContainer, {
-            paddingBottom: -this.padding * 2,
-        });
-    }
-
-
-    private createHeader(scene: GameScene, x: number, y: number, container: GameObjects.Container, text: string, color: string): void {
-        const genericTableWidth = this.contentWidth + this.padding * 3;
-
-        const header = scene.add.text(
-            0,
-            0,
-            text,
-            {
-                ...this.textStyle,
-                wordWrap: { width: genericTableWidth - this.padding * 6 },
-                fontSize: '20px',
-                color: color,
-                fontFamily: 'Poppins-Regular',
-                fontStyle: 'bold',
-            }
-        );
-        header.setPosition(x, y);
-        container.add(header);
+    /** Returns scroll bounds used for clamping content container Y. */
+    private getScrollBounds(): { maxY: number; minY: number; contentHeight: number; viewHeight: number } {
+        const contentHeight = this.contentHeight || this.yPosition;
+        const viewHeight = this.contentArea.height;
+        const maxY = 0;
+        const minY = Math.min(0, viewHeight - contentHeight);
+        return { maxY, minY, contentHeight, viewHeight };
     }
 
     private enableScrolling(scene: Scene): void {
@@ -1114,8 +2314,8 @@ export class HelpScreen {
         const minVelocity = 0.1;
         const dragThreshold = 8;
         let hasExceededDragThreshold = false;
+        let hasMoved = false; // Track if pointer actually moved during drag
 
-        // Make the scroll view interactive for the content area width and height
         this.scrollView.setInteractive(
             new Phaser.Geom.Rectangle(0, 0, this.contentArea.width, this.contentArea.height),
             Phaser.Geom.Rectangle.Contains
@@ -1127,9 +2327,10 @@ export class HelpScreen {
             isDragging = true;
             startY = pointer.y;
             lastY = pointer.y;
+            dragVelocity = 0; // Reset drag velocity to prevent stale values
             hasExceededDragThreshold = false;
+            hasMoved = false; // Reset movement flag
             this.setTabInteractionBlocked(scene, false);
-            // Stop any ongoing momentum scrolling
             if (scene.tweens.isTweening(this.contentContainer)) {
                 scene.tweens.killTweensOf(this.contentContainer);
             }
@@ -1138,28 +2339,21 @@ export class HelpScreen {
         scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
             if (!isDragging || !this.isMenuVisible()) return;
 
+            const deltaY = pointer.y - lastY;
+            if (Math.abs(deltaY) > 0) {
+                hasMoved = true; // Mark that movement occurred
+            }
+
             if (!hasExceededDragThreshold && Math.abs(pointer.y - startY) >= dragThreshold) {
                 hasExceededDragThreshold = true;
                 this.setTabInteractionBlocked(scene, true);
             }
 
-            // Calculate the distance moved since last frame
-            const deltaY = pointer.y - lastY;
             lastY = pointer.y;
-
-            // Update velocity
             dragVelocity = deltaY;
-
-            // Update position
             currentY = this.contentContainer.y + deltaY;
 
-            // Calculate bounds
-            const maxY = 0;
-            const contentHeight = this.contentHeight || this.yPosition;
-            const viewHeight = this.contentArea.height;
-            const minY = Math.min(0, viewHeight - contentHeight);
-
-            // Apply bounds with elastic effect
+            const { maxY, minY } = this.getScrollBounds();
             if (currentY > maxY) {
                 currentY = maxY + (currentY - maxY) * 0.5;
             } else if (currentY < minY) {
@@ -1177,61 +2371,43 @@ export class HelpScreen {
             }
             hasExceededDragThreshold = false;
 
-            // Apply momentum scrolling
-            if (Math.abs(dragVelocity) > minVelocity) {
-                let targetY = this.contentContainer.y + dragVelocity * 20;
+            // Only process scroll momentum/adjustment if there was actual movement
+            if (hasMoved) {
+                if (Math.abs(dragVelocity) > minVelocity) {
+                    const { maxY, minY } = this.getScrollBounds();
+                    let targetY = this.contentContainer.y + dragVelocity * 20;
+                    targetY = Phaser.Math.Clamp(targetY, minY, maxY);
 
-                // Calculate bounds
-                const maxY = 0;
-                const contentHeight = this.contentHeight || this.yPosition;
-                const viewHeight = this.contentArea.height;
-                const minY = Math.min(0, viewHeight - contentHeight);
-
-                // Clamp target position
-                targetY = Phaser.Math.Clamp(targetY, minY, maxY);
-
-                scene.tweens.add({
-                    targets: this.contentContainer,
-                    y: targetY,
-                    duration: 500,
-                    ease: 'Cubic.out',
-                });
-            } else {
-                // If velocity is too low, just snap to bounds
-                const maxY = 0;
-                const contentHeight = this.contentHeight || this.yPosition;
-                const viewHeight = this.contentArea.height;
-                const minY = Math.min(0, viewHeight - contentHeight);
-                const targetY = Phaser.Math.Clamp(this.contentContainer.y, minY, maxY);
-
-                if (targetY !== this.contentContainer.y) {
                     scene.tweens.add({
                         targets: this.contentContainer,
                         y: targetY,
-                        duration: 200,
+                        duration: 500,
                         ease: 'Cubic.out',
                     });
+                } else {
+                    const { maxY, minY } = this.getScrollBounds();
+                    const targetY = Phaser.Math.Clamp(this.contentContainer.y, minY, maxY);
+
+                    if (targetY !== this.contentContainer.y) {
+                        scene.tweens.add({
+                            targets: this.contentContainer,
+                            y: targetY,
+                            duration: 200,
+                            ease: 'Cubic.out',
+                        });
+                    }
                 }
             }
+            // Reset movement flag for next interaction
+            hasMoved = false;
         });
 
-        // Enable mouse wheel scrolling
-        scene.input.on('wheel', (_pointer: any, _gameObjects: any, _deltaX: number, deltaY: number) => {
+        scene.input.on('wheel', (_pointer: unknown, _gameObjects: unknown, _deltaX: number, deltaY: number) => {
             if (!this.isMenuVisible()) return;
 
-            // Calculate new position
-            currentY = this.contentContainer.y - deltaY;
+            const { maxY, minY } = this.getScrollBounds();
+            currentY = Phaser.Math.Clamp(this.contentContainer.y - deltaY, minY, maxY);
 
-            // Calculate bounds
-            const maxY = 0;
-            const contentHeight = this.contentHeight || this.yPosition;
-            const viewHeight = this.contentArea.height;
-            const minY = Math.min(0, viewHeight - contentHeight);
-
-            // Clamp the position
-            currentY = Phaser.Math.Clamp(currentY, minY, maxY);
-
-            // Animate to new position
             scene.tweens.add({
                 targets: this.contentContainer,
                 y: currentY,
@@ -1286,541 +2462,4 @@ export class HelpScreen {
 
         this.isTabInteractionBlocked = shouldBlock;
     }
-
-    private createHowToPlayEntry(
-        scene: GameScene,
-        x: number,
-        y: number,
-        container: GameObjects.Container,
-        image: string,
-        text: string,
-        wordWrap: boolean = false,
-        wordWrapWidth: number = 0,
-        skipYPositionIncrement: boolean = false
-    ): GameObjects.Text {
-        let imageElement: Phaser.GameObjects.Image | null = null;
-        if (image !== '') {
-            imageElement = scene.add.image(0, 0, image);
-        }
-        if (imageElement != null) {
-            if (image === 'wheelSpin_helper' || image === 'scatterGame' || image === 'multiplierGame') {
-                imageElement.setScale(1.1);
-            }
-            imageElement.setOrigin(0.5, image === 'scatterGame' ? 0.33 : 0.5);
-
-            // Center horizontally within the container's framed area if available
-            const { frameW, frameX } = this.getFrameMetrics(container);
-            const centerX = frameX + frameW / 2;
-            imageElement.setPosition(centerX - 10, y);
-            container.add(imageElement);
-        }
-
-        const textElement = scene.add.text(0, 0, text, {
-            ...this.textStyle,
-            wordWrap: wordWrap ? { width: wordWrapWidth } : undefined,
-        });
-        // Place text below the image (or at y if no image), left-aligned with container padding
-        const textX = this.padding * 3;
-        const textY = imageElement ? imageElement.y + imageElement.displayHeight / 2 + this.padding * 2 : y;
-        textElement.setPosition(textX, textY);
-        textElement.setOrigin(0, 0);
-
-        if (image === 'BuyFeatMobile') {
-            textElement.setPosition(textX, y + this.padding * 5);
-        }
-        if (image === 'scatterGame') {
-            textElement.setPosition(textX, textElement.y + this.padding * 6);
-        }
-        container.add(textElement);
-
-        if (!skipYPositionIncrement) {
-            this.yPosition += (imageElement ? imageElement.displayHeight * 2 : 0) + textElement.displayHeight + this.padding * 2;
-        }
-
-        return textElement;
-    }
-
-    // Helper: render a help subsection with title, centered image, and description
-    // Returns the bottom Y of the description to aid in subsequent spacing
-    private addHelpSubSection(
-        scene: GameScene,
-        container: GameObjects.Container,
-        title: string,
-        imageKey: string,
-        titleY: number,
-        description: string,
-        opts?: {
-            imageY?: number;
-            descY?: number;
-            descX?: number;
-            titleX?: number;
-            titleToImageGap?: number;
-            imageToDescGap?: number;
-        }
-    ): number {
-        // Title (use header2 style) with same horizontal inset as Bonus Trigger
-        this.addTextBlock(scene, 'header2', title, {
-            container,
-            x: opts?.titleX ?? (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 1.5,
-            y: titleY,
-        });
-
-        // Frame metrics for centering
-        const { frameW, frameX } = this.getFrameMetrics(container);
-        const centerX = frameX + frameW / 2;
-
-        // Image
-        const imageY = opts?.imageY ?? titleY + (opts?.titleToImageGap ?? this.padding * 7);
-        const img = scene.add.image(centerX, imageY, imageKey);
-        const useOffsetOrigin = imageKey === 'scatterGame' || imageKey === 'wheelSpin_helper';
-        img.setOrigin(0.5, useOffsetOrigin ? 0.33 : 0.5);
-        img.setScale(1.1);
-        container.add(img);
-
-        // Description
-        const descX = opts?.descX ?? this.padding * 3;
-        const descY = opts?.descY ?? img.y + img.displayHeight / 2 + (opts?.imageToDescGap ?? this.padding * 3);
-        const descText = scene.add.text(descX, descY, description, {
-            ...this.textStyle,
-            wordWrap: { width: this.contentWidth + this.padding * 3 },
-        });
-        descText.setOrigin(0, 0);
-        container.add(descText);
-
-        return descText.y + descText.displayHeight;
-    }
-
-    // Helper: image → title → description layout; returns bottom Y
-    private addHelpSubSectionImageFirst(
-        scene: GameScene,
-        container: GameObjects.Container,
-        title: string,
-        imageKey: string,
-        topY: number,
-        description: string,
-        opts?: { descX?: number; titleX?: number; imageToTitleGap?: number; titleToDescGap?: number }
-    ): number {
-        // Frame metrics
-        const { frameW, frameX } = this.getFrameMetrics(container);
-        const centerX = frameX + frameW / 2;
-
-        // Image centered at topY
-        const img = scene.add.image(centerX, topY, imageKey);
-        const useOffsetOrigin = imageKey === 'scatterGame' || imageKey === 'wheelSpin_helper';
-        img.setOrigin(0.5, useOffsetOrigin ? 0.33 : 0.5);
-        img.setScale(1.1);
-        container.add(img);
-
-        // Title below image
-        const titleY = img.y + img.displayHeight / 2 + (opts?.imageToTitleGap ?? this.padding * 3);
-        this.addTextBlock(scene, 'header2', title, {
-            container,
-            x: opts?.titleX ?? (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 1.5,
-            y: titleY,
-        });
-
-        // Description below title
-        const descX = opts?.descX ?? this.padding * 3;
-        const descY = titleY + (opts?.titleToDescGap ?? this.padding * 3);
-        const descText = scene.add.text(descX, descY, description, {
-            ...this.textStyle,
-            wordWrap: { width: this.contentWidth + this.padding * 3 },
-        });
-        descText.setOrigin(0, 0);
-        container.add(descText);
-
-        return descText.y + descText.displayHeight;
-    }
-
-    // New helper as requested: explicit image position, relative offsets for title and description
-    private addSubSectionInstruction(
-        scene: GameScene,
-        container: GameObjects.Container,
-        params: {
-            title: string;
-            imageKey: string;
-            imageX: number;
-            imageY: number;
-            imageOrigin?: { x: number; y: number };
-            imageScale?: number;
-            titleOffsetY: number; // distance below image
-            titleX?: number;
-            desc: string;
-            descOffsetY: number; // distance below title
-            descX?: number;
-            wordWrapWidth?: number;
-            lineSpacing?: number;
-        }
-    ): number {
-        const img = scene.add.image(params.imageX, params.imageY, params.imageKey);
-        img.setOrigin(params.imageOrigin?.x ?? 0.5, params.imageOrigin?.y ?? 0.5);
-        if (params.imageScale) {
-            img.setScale(params.imageScale);
-        }
-        container.add(img);
-
-        const titleY = img.y + img.displayHeight / 2 + params.titleOffsetY;
-        this.addTextBlock(scene, 'header2', params.title, {
-            container,
-            x: params.titleX ?? (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 1.5,
-            y: titleY,
-        });
-
-        const descY = titleY + params.descOffsetY;
-        const descText = scene.add.text(params.descX ?? this.padding * 3, descY, params.desc, {
-            ...this.textStyle,
-            wordWrap: params.wordWrapWidth ? { width: params.wordWrapWidth } : { width: this.contentWidth + this.padding * 3 },
-        });
-        descText.setOrigin(0, 0);
-        if (typeof params.lineSpacing === 'number') {
-            descText.setLineSpacing(params.lineSpacing);
-        }
-        container.add(descText);
-
-        return descText.y + descText.displayHeight;
-    }
-
-    /**
-     * Creates the "Tumble Win" information card shown inside the Free Spins Rules section.
-     * The card has its own rounded border nested inside the Free Spins border.
-     *
-     * @param scene Current game scene
-     * @param parentContainer The Free Spins Rules container
-     * @param startY Local Y position (inside parentContainer) where the card should start
-     * @returns The Y coordinate of the bottom of the card (inside parentContainer)
-     */
-    private createTumbleWinSection(
-        scene: GameScene,
-        parentContainer: GameObjects.Container,
-        startY: number
-    ): number {
-        const tumbleContainer = scene.add.container(0, startY);
-        parentContainer.add(tumbleContainer);
-
-        // Use the Free Spins frame metrics to size the inner card slightly inset from the outer border
-        const { frameW } = this.getFrameMetrics(parentContainer);
-        const inset = this.padding * 2;
-        const cardWidth = Math.max(0, frameW - inset * 2);
-        const cardLeft = inset;
-
-        // Local Y cursor within the tumble card
-        let localY = this.padding * 1.5;
-
-        // Header: "Tumble Win"
-        const title = this.addTextBlock(scene, 'header2', 'Tumble Win', {
-            container: tumbleContainer,
-            x: cardLeft + this.padding * 1.5,
-            y: localY,
-        });
-        localY = title.y + title.displayHeight + this.padding * 1.5;
-
-        // Screenshot image centered in the card
-        const centerX = cardLeft + cardWidth / 2;
-        const tumbleImage = scene.add.image(centerX, localY, 'tumbleWin') as GameObjects.Image;
-        tumbleImage.setOrigin(0.5, 0);
-
-        // Scale image to fit nicely within the card width
-        const maxImageWidth = Math.max(1, cardWidth - this.padding * 2);
-        const scale = Math.min(1, maxImageWidth / (tumbleImage.width || 1));
-        tumbleImage.setScale(scale);
-        tumbleContainer.add(tumbleImage);
-
-        localY = tumbleImage.y + tumbleImage.displayHeight + this.padding * 1.5;
-
-        // Body copy describing tumble behaviour
-        const tumbleText =
-            'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\n' +
-            'Tumbles continue as long as new winning combinations appear — there is no limit to the number of tumbles per spin.\n\n' +
-            "All wins are credited to the player's balance after all tumbles from a base spin are completed.";
-
-        const body = scene.add.text(cardLeft + this.padding * 1.5, localY, tumbleText, {
-            ...this.textStyle,
-            wordWrap: { width: cardWidth - this.padding * 3 },
-        });
-        body.setOrigin(0, 0);
-        tumbleContainer.add(body);
-
-        const contentBottom = body.y + body.displayHeight;
-
-        // Add the card's own rounded border, keeping it inset within the Free Spins frame.
-        // This section intentionally keeps the original, lighter border styling.
-        const sectionHeight = this.createDynamicBorder(scene, tumbleContainer, {
-            paddingTop: this.padding,
-            paddingBottom: this.padding * 1.5,
-            offsetX: cardLeft,
-            offsetY: 0,
-            width: cardWidth,
-            minHeight: contentBottom + this.padding * 2,
-            fillColor: 0x333333,
-            strokeColor: this.borderStrokeColor,
-            alpha: this.borderStrokeAlpha,
-        });
-
-        return startY + sectionHeight;
-    }
-
-    private getFrameMetrics(container: GameObjects.Container): { frameX: number; frameY: number; frameW: number; frameH: number } {
-        const defaultFrameX = this.padding;
-        const defaultFrameY = 0;
-        const defaultFrameW = this.contentWidth + this.padding * 3;
-        const defaultFrameH = 0;
-
-        const getData = typeof (container as any).getData === 'function' ? (container as any).getData.bind(container) : undefined;
-
-        return {
-            frameX: getData ? getData('frameX') ?? defaultFrameX : defaultFrameX,
-            frameY: getData ? getData('frameY') ?? defaultFrameY : defaultFrameY,
-            frameW: getData ? getData('frameW') ?? defaultFrameW : defaultFrameW,
-            frameH: getData ? getData('frameH') ?? defaultFrameH : defaultFrameH,
-        };
-    }
-
-    private measureContainerHeight(container: GameObjects.Container): number {
-        let minTop = Number.POSITIVE_INFINITY;
-        let maxBottom = Number.NEGATIVE_INFINITY;
-
-        container.iterate((child: Phaser.GameObjects.GameObject) => {
-            if (!child || typeof (child as any).getBounds !== 'function') {
-                return;
-            }
-            const bounds = (child as any).getBounds();
-            if (!bounds) {
-                return;
-            }
-            if (bounds.top < minTop) {
-                minTop = bounds.top;
-            }
-            if (bounds.bottom > maxBottom) {
-                maxBottom = bounds.bottom;
-            }
-        });
-
-        return isFinite(minTop) && isFinite(maxBottom) && maxBottom > minTop ? maxBottom - minTop : 0;
-    }
-
-    private createDynamicBorder(
-        scene: GameScene,
-        container: GameObjects.Container,
-        options: {
-            paddingTop?: number;
-            paddingBottom?: number;
-            offsetX?: number;
-            offsetY?: number;
-            width?: number;
-            minHeight?: number;
-            /**
-             * Optional style overrides for this border.
-             * If not provided, a darker default style is used.
-             */
-            fillColor?: number;
-            strokeColor?: number;
-            alpha?: number;
-        } = {}
-    ): number {
-        const paddingTop = options.paddingTop ?? this.padding * 2;
-        const paddingBottom = options.paddingBottom ?? this.padding * 2;
-        const offsetX = options.offsetX ?? 0;
-        const offsetY = options.offsetY ?? 0;
-        const width = options.width ?? this.contentWidth + this.padding * 3;
-        const minHeight = options.minHeight ?? 0;
-
-        const contentHeight = this.measureContainerHeight(container);
-        const dynamicHeight = Math.max(minHeight, Math.ceil(contentHeight + paddingTop + paddingBottom));
-
-        return this.createBorder(scene, container, offsetX, offsetY, width, dynamicHeight, {
-            fillColor: options.fillColor,
-            strokeColor: options.strokeColor,
-            fillAlpha: 0.1,
-            strokeAlpha: 0.2,
-        });
-    }
-
-    private createBorder(
-        scene: GameScene,
-        _container: GameObjects.Container,
-        _x: number,
-        _y: number,
-        _width: number,
-        _height: number,
-        style?: {
-            fillColor?: number;
-            strokeColor?: number;
-            fillAlpha?: number;
-            strokeAlpha?: number;
-        }
-    ): number {
-        const border = scene.add.graphics();
-        // Default border style matched to the payout card frame
-        // (slightly lighter stroke, darker inner fill).
-        const fillColor = style?.fillColor ?? this.borderFillColor; // inner fill
-        const strokeColor = style?.strokeColor ?? this.borderStrokeColor; // outer stroke
-        const fillAlpha = style?.fillAlpha ?? this.borderFillAlpha;
-        const strokeAlpha = style?.strokeAlpha ?? this.borderStrokeAlpha;
-
-        border.fillStyle(fillColor, fillAlpha);
-        border.fillRoundedRect(_x, _y, _width, _height, 8);
-        border.lineStyle(1.5, strokeColor, strokeAlpha);
-        border.strokeRoundedRect(_x, _y, _width, _height, 8);
-        _container.add(border);
-        _container.sendToBack(border);
-        // Store frame metrics on the container for layout helpers
-        try {
-            // Using Data Manager only if available on container
-            // @ts-ignore
-            if (_container.setData) {
-                // @ts-ignore
-                _container.setData('frameX', _x);
-                // @ts-ignore
-                _container.setData('frameY', _y);
-                // @ts-ignore
-                _container.setData('frameW', _width);
-                // @ts-ignore
-                _container.setData('frameH', _height);
-            }
-        } catch {
-            /* no-op */
-        }
-        return _height;
-    }
-
-    private addDivider(scene: GameScene, _color: number = 0xffffff): void {
-        // Add centered divider across the visible content width
-        const divider = scene.add.graphics();
-        divider.lineStyle(1, _color);
-        const worldLeft = 20; // content area left padding
-        const worldRight = scene.scale.width - 20; // content area right padding
-        const parentOffsetX = this.contentArea ? this.contentArea.x : 0;
-        const localLeft = worldLeft - parentOffsetX;
-        const localRight = worldRight - parentOffsetX;
-        divider.lineBetween(localLeft, this.yPosition, localRight, this.yPosition);
-        this.contentContainer.add(divider);
-    }
-
-    private formatPayout(value: number): string {
-        return value.toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-    }
-
-    private applyBetToPayout(baseValue: number): number {
-        const betAmount = this.getResolvedBetAmount();
-        return baseValue * betAmount;
-    }
-
-    private getResolvedBetAmount(): number {
-        try {
-            const bet = this.getBetAmount();
-            if (Number.isFinite(bet) && bet > 0) {
-                return bet;
-            }
-        } catch (error) {
-            console.warn('[HelpScreen] Failed to resolve bet amount, falling back to 1:', error);
-        }
-        return 1;
-    }
-
-    private createPayoutTable(scene: GameScene, x: number, y: number, container: GameObjects.Container, symbolIndex: number): void {
-        const cellWidth1 = 60;
-        const cellWidth2 = 100;
-        const cellHeight = 22.5;
-        const cellPadding = 5;
-
-        const tableHeight = (cellHeight + cellPadding) * 4;
-        // Center the table vertically relative to the symbol
-        const tableY = y - tableHeight / 2;
-
-        for (let row = 0; row < 3; row++) {
-            for (let col = 0; col < 3; col++) {
-                let cellWidth = 0;
-                if (col === 0) {
-                    cellWidth = cellWidth1;
-                } else if (col === 1) {
-                    cellWidth = cellWidth2;
-                } else {
-                    cellWidth = cellWidth2 * 2;
-                }
-                const cellX = x + (col === 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
-                const cellY = tableY + row * (cellHeight + cellPadding);
-
-                const isScatter = symbolIndex === 0;
-                let textValue: string | undefined;
-                let wrapWidth: number | undefined;
-
-                if (isScatter) {
-                    if (col === 0) {
-                        textValue = SCATTER_COUNTS[row];
-                    } else if (col === 1) {
-                        textValue = this.formatPayout(SCATTER_PAYOUTS[row] ?? 0);
-                    } else {
-                        // Scatter descriptions are rendered below the table in the Scatter section
-                        textValue = undefined;
-                    }
-                } else if (col < 2) {
-                    if (col === 0) {
-                        textValue = PAYOUT_RANGES[row] ?? '';
-                    } else {
-                        const payoutValue = SYMBOL_PAYOUTS[symbolIndex]?.[row] ?? 0;
-                        textValue = this.formatPayout(payoutValue);
-                    }
-                }
-
-                if (!textValue) {
-                    continue;
-                }
-
-                const valueText = scene.add.text(cellX + cellWidth / 2, cellY + cellHeight / 2, textValue, {
-                    fontSize: '16px',
-                    color: '#FFFFFF',
-                    fontFamily: 'Poppins-Regular',
-                    align: 'center',
-                    wordWrap: wrapWidth ? { width: wrapWidth } : undefined,
-                });
-                valueText.setOrigin(0.5, 0.5);
-                container.add(valueText);
-            }
-        }
-    }
-
-    private addTextBlock(
-        scene: GameScene,
-        kind: 'header1' | 'header2' | 'content1',
-        text: string,
-        opts?: {
-            x?: number;
-            y?: number;
-            container?: GameObjects.Container;
-            spacingAfter?: number;
-            wordWrapWidth?: number;
-        }
-    ): GameObjects.Text {
-        let baseStyle: any;
-        switch (kind) {
-            case 'header1':
-                baseStyle = this.header1Style;
-                break;
-            case 'header2':
-                baseStyle = this.header2Style;
-                break;
-            case 'content1':
-                baseStyle = this.content1Style;
-                break;
-        }
-        const style = { ...baseStyle } as Phaser.Types.GameObjects.Text.TextStyle;
-        if (opts?.wordWrapWidth) {
-            style.wordWrap = { width: opts.wordWrapWidth } as any;
-        }
-        const container = opts?.container ?? this.contentContainer;
-        const x = opts?.x ?? (this.textHorizontalPadding ?? this.padding / 2);
-        const y = opts?.y ?? this.yPosition;
-        const txt = scene.add.text(x, y, text, style);
-        container.add(txt);
-        if (opts?.y === undefined) {
-            const spacing = opts?.spacingAfter ?? this.padding;
-            this.yPosition += txt.height + spacing;
-        }
-        return txt;
-    }
 }
-
-

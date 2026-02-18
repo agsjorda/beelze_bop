@@ -147,7 +147,7 @@ export class SlotController {
 	private showButtonHitboxes: boolean = false;
 	private buttonHitboxGraphics: Phaser.GameObjects.Graphics | null = null;
 	// Buy feature hitbox scale (1 = full image size)
-	private buyFeatureHitboxScale: number = 1;
+	private buyFeatureHitboxScale: { x: number; y: number } = { x: 0.66, y: 0.46 };
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -1221,8 +1221,8 @@ export class SlotController {
 	 * Apply the buy feature button hitbox scaling.
 	 */
 	private applyBuyFeatureHitbox(featureButton: Phaser.GameObjects.Image): void {
-		const hitW = featureButton.displayWidth * this.buyFeatureHitboxScale;
-		const hitH = featureButton.displayHeight * this.buyFeatureHitboxScale;
+		const hitW = featureButton.displayWidth * this.buyFeatureHitboxScale.x;
+		const hitH = featureButton.displayHeight * this.buyFeatureHitboxScale.y;
 		featureButton.setInteractive(
 			new Phaser.Geom.Rectangle(
 				-hitW * 0.5,
@@ -1941,14 +1941,6 @@ export class SlotController {
 			featureY,
 			'feature'
 		).setOrigin(0.5, 0.5).setDepth(10);
-		const featureContainerWidth = 125 * assetScale;
-		const featureContainerHeight = 100 * assetScale;
-		const featureScale = Math.min(
-			featureContainerWidth / featureButton.width,
-			featureContainerHeight / featureButton.height
-		);
-		featureButton.setScale(featureScale);
-		featureButton.setSize(featureButton.displayWidth, featureButton.displayHeight);
 		this.applyBuyFeatureHitbox(featureButton);
 		featureButton.on('pointerdown', () => {
 			console.log('[SlotController] Feature button clicked');
