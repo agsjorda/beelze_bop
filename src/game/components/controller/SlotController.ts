@@ -2715,16 +2715,18 @@ export class SlotController {
 				}
 			}
 			
-			// If scatter bonus just triggered or bonus mode is active, keep buttons disabled
-			if (gameStateManager.isScatter || gameStateManager.isBonus) {
+			// If scatter bonus just triggered or bonus mode is active, keep buttons disabled.
+			// During free-round mode, don't treat bonus mode as a hard lock for the spin button.
+			const gsmAny: any = gameStateManager as any;
+			const inFreeRoundMode = gsmAny.isInFreeSpinRound === true;
+			if (gameStateManager.isScatter || (gameStateManager.isBonus && !inFreeRoundMode)) {
 				console.log('[SlotController] Scatter/Bonus active - keeping buttons disabled on REELS_STOP');
 				return;
 			}
 
 			// If we are in free-round mode: only turbo and menu on REELS_STOP when wins are pending.
 			// When there are no wins (no pending win lock), enable spin now; when there are wins, do not enable spin here so it never briefly re-enables — spin is enabled in TUMBLE_SEQUENCE_DONE after wins/tumbles finish.
-			const gsmAny: any = gameStateManager as any;
-			if (gsmAny.isInFreeSpinRound === true) {
+			if (inFreeRoundMode) {
 				this.lockControlsForFreeRoundMode();
 				if (!this.pendingWinLock && !gameStateManager.isShowingWinDialog) {
 					this.updateSpinButtonState();
@@ -2828,8 +2830,9 @@ export class SlotController {
 			const gsmAny: any = gameStateManager as any;
 			const inFreeRoundMode = gsmAny.isInFreeSpinRound === true;
 			if (!gameStateManager.isAutoPlaying) {
-				// Scatter/bonus: disable spin and return (don't re-enable any controls)
-				if (gameStateManager.isScatter || gameStateManager.isBonus) {
+				// Scatter/bonus: disable spin and return (don't re-enable any controls).
+				// During free-round mode, don't treat bonus mode as a hard lock for the spin button.
+				if (gameStateManager.isScatter || (gameStateManager.isBonus && !inFreeRoundMode)) {
 					this.disableSpinButton();
 					return;
 				}
@@ -2846,7 +2849,11 @@ export class SlotController {
 			if (gameStateManager.isScatter || gameStateManager.isBonus || inFreeRoundMode) {
 				this.lockControlsForFreeRoundMode();
 				if (inFreeRoundMode) {
-					this.updateSpinButtonState();
+					if (!this.pendingWinLock && !gameStateManager.isShowingWinDialog) {
+						this.updateSpinButtonState();
+					} else {
+						this.disableSpinButton();
+					}
 				}
 				return;
 			}
@@ -2937,7 +2944,11 @@ export class SlotController {
 			const gsmAny: any = gameStateManager as any;
 			if (gsmAny.isInFreeSpinRound === true) {
 				this.lockControlsForFreeRoundMode();
-				this.updateSpinButtonState();
+				if (!this.pendingWinLock && !gameStateManager.isShowingWinDialog) {
+					this.updateSpinButtonState();
+				} else {
+					this.disableSpinButton();
+				}
 				console.log('[SlotController] AUTO_STOP during free-round mode - turbo, menu and spin enabled');
 				return;
 			}
@@ -2999,16 +3010,18 @@ export class SlotController {
 				}
 			}
 			
-			// If scatter bonus is in progress or bonus mode is active, keep buttons disabled
-			if (gameStateManager.isScatter || gameStateManager.isBonus) {
-				console.log('[SlotController] Scatter/Bonus in progress - skipping UI re-enable in WIN_STOP');
+			// If free-round mode is active, re-check state now that WIN_STOP cleared pending win lock.
+			const gsmWinStop: any = gameStateManager as any;
+			if (gsmWinStop.isInFreeSpinRound === true) {
+				this.lockControlsForFreeRoundMode();
+				this.updateSpinButtonState();
+				console.log('[SlotController] Free-round mode active - re-evaluated spin state in WIN_STOP');
 				return;
 			}
 			
-			// If free-round mode is active, don't re-enable buttons (only turbo and menu stay enabled)
-			const gsmWinStop: any = gameStateManager as any;
-			if (gsmWinStop.isInFreeSpinRound === true) {
-				console.log('[SlotController] Free-round mode active - skipping UI re-enable in WIN_STOP');
+			// If scatter bonus is in progress or bonus mode is active, keep buttons disabled
+			if (gameStateManager.isScatter || gameStateManager.isBonus) {
+				console.log('[SlotController] Scatter/Bonus in progress - skipping UI re-enable in WIN_STOP');
 				return;
 			}
 			
@@ -3153,17 +3166,24 @@ export class SlotController {
 			this.spinIconTween.resume();
 		}
 		
-		// If scatter/bonus active, keep controls disabled
-		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+		const gsmStop: any = gameStateManager as any;
+		const inFreeRoundMode = gsmStop.isInFreeSpinRound === true;
+
+		// If scatter/bonus active, keep controls disabled.
+		// During free-round mode, don't treat bonus mode as a hard lock for the spin button.
+		if (gameStateManager.isScatter || (gameStateManager.isBonus && !inFreeRoundMode)) {
 			this.lockControlsForScatterOrBonus();
 			return;
 		}
 		
 		// If free-round mode active, only turbo, menu and spin stay enabled
-		const gsmStop: any = gameStateManager as any;
-		if (gsmStop.isInFreeSpinRound === true) {
+		if (inFreeRoundMode) {
 			this.lockControlsForFreeRoundMode();
-			this.updateSpinButtonState();
+			if (!this.pendingWinLock && !gameStateManager.isShowingWinDialog) {
+				this.updateSpinButtonState();
+			} else {
+				this.disableSpinButton();
+			}
 			return;
 		}
 		
@@ -4850,7 +4870,9 @@ export class SlotController {
 			return;
 		}
 
-		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+		const gsmAny: any = gameStateManager as any;
+		const inFreeRoundMode = gsmAny.isInFreeSpinRound === true;
+		if (gameStateManager.isScatter || (gameStateManager.isBonus && !inFreeRoundMode)) {
 			this.disableSpinButton();
 			return;
 		}
