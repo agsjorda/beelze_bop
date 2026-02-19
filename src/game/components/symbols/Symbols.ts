@@ -3688,13 +3688,6 @@ export class Symbols {
         }
       } catch { }
 
-      try {
-        const am = (window as any)?.audioManager;
-        if (am && typeof am.playSoundEffect === 'function') {
-          am.playSoundEffect(SoundEffectType.MULTIPLIER_TRIGGER);
-        }
-      } catch { }
-
       let overlayAnimated = false;
       let overlayStarted = false;
       const startFlyingOverlay = () => {
@@ -3817,6 +3810,8 @@ export class Symbols {
                     if (!entry || entry.animation?.name !== winAnim) return;
                   } catch { }
                   try { if (animState.removeListener) animState.removeListener(winListener); } catch { }
+                  // If overlay flight already started at explosion start, do not re-trigger timing.
+                  if (overlayStarted) return;
 
                   // Show overlay number, wiggle briefly, then fly.
                   try {
@@ -3869,11 +3864,29 @@ export class Symbols {
           }
         } catch { }
         const explosionDurationMs = Math.max(1200, winDurationMs);
+        const explosionStartDelayMs = this.getExplosionStartDelayMs();
+        const multiplierExplosionSoundDelayMs = this.getBonusMultiplierExplosionSoundDelayMs();
+        const multiplierNumberDelayMs = this.getBonusMultiplierNumberDelayMs();
+        const multiplierExplosionSoundStartDelayMs = Math.max(0, explosionStartDelayMs + multiplierExplosionSoundDelayMs);
+        const multiplierNumberStartDelayMs = Math.max(0, explosionStartDelayMs + multiplierNumberDelayMs);
 
         const pos = this.getSymbolWorldPosition(obj);
         if (pos) {
-          this.playExplosionVfx(pos.x, pos.y, false, explosionDurationMs);
+          this.scene.time.delayedCall(explosionStartDelayMs, () => {
+            this.playExplosionVfx(pos.x, pos.y, false, explosionDurationMs);
+          });
         }
+        this.scene.time.delayedCall(multiplierExplosionSoundStartDelayMs, () => {
+          try {
+            const am = (window as any)?.audioManager;
+            if (am && typeof am.playSoundEffect === 'function') {
+              am.playSoundEffect(SoundEffectType.MULTIPLIER_TRIGGER);
+            }
+          } catch { }
+        });
+        this.scene.time.delayedCall(multiplierNumberStartDelayMs, () => {
+          startFlyingOverlay();
+        });
         startWinAnimation();
         // Safety: ensure flight starts even if win completion doesn't fire.
         const fallbackMs = winDurationMs + 900;
@@ -4273,6 +4286,29 @@ export class Symbols {
               // For multipliers, allow win animation only when this item actually had wins
               const canPlayMultiplierWin = !!multiplierWinAnim && !!(self as any).hadWinsInCurrentItem && obj.animationState && obj.animationState.setAnimation;
               const shouldExplode = !!isSugarWin;
+              // Keep explosion on-screen longer than symbol removal safety timeout so
+              // symbols are never visible when the explosion finishes.
+              const configuredWinUp = Number(self.scene?.gameData?.winUpDuration || 700);
+              const safeWinUp = (!isNaN(configuredWinUp) && configuredWinUp > 0) ? configuredWinUp : 700;
+              const explosionStartDelayMs = this.getExplosionStartDelayMs();
+              let estimatedSugarWinMs = 0;
+              try {
+                if (sugarWinAnim) {
+                  const animDurationSec = Number((obj as any)?.skeleton?.data?.findAnimation?.(sugarWinAnim)?.duration || 0);
+                  if (!isNaN(animDurationSec) && animDurationSec > 0) {
+                    estimatedSugarWinMs = Math.round(animDurationSec * 1000);
+                  }
+                }
+              } catch { }
+              // Max symbol lifetime when exploding:
+              // - pre-scale before removal starts (200ms)
+              // - actual win animation runtime (if known)
+              // - fallback removal timeout (winUpDuration + 700ms)
+              const symbolRemovalMaxMs = Math.max(
+                safeWinUp + 700,
+                200 + estimatedSugarWinMs + 400
+              );
+              const explosionMinDurationMs = symbolRemovalMaxMs + 300;
               let vfxTriggered = false;
               const triggerRemovalVfx = () => {
                 if (!shouldExplode || vfxTriggered) return;
@@ -4286,7 +4322,9 @@ export class Symbols {
                     y = matrix.ty;
                   }
                   if (x === null || y === null) return;
-                  this.playExplosionVfx(x, y, false);
+                  self.scene.time.delayedCall(explosionStartDelayMs, () => {
+                    this.playExplosionVfx(x, y, false, explosionMinDurationMs);
+                  });
                 } catch { }
               };
 
@@ -4309,10 +4347,35 @@ export class Symbols {
                   if (shouldExplode) {
                     triggerRemovalVfx();
                   }
+                  let completed = false;
+                  const finalizeRemoval = () => {
+                    if (completed) return;
+                    completed = true;
+                    try { this.destroySymbolOverlays(obj); } catch { }
+                    try { obj.destroy(); } catch { }
+                    if (self.symbols[col]) {
+                      self.symbols[col][row] = null as any;
+                    }
+                    if (self.currentSymbolData && self.currentSymbolData[row]) {
+                      (self.currentSymbolData[row] as any)[col] = null;
+                    }
+                    resolve();
+                  };
+
+                  if (shouldExplode) {
+                    // Always remove at VFX midpoint, even if win animation can't play.
+                    const midpointMs = Math.max(
+                      120,
+                      Math.round(explosionStartDelayMs + (explosionMinDurationMs * 0.5))
+                    );
+                    self.scene.time.delayedCall(midpointMs, () => {
+                      finalizeRemoval();
+                    });
+                  }
+
                   if (canPlaySugarWin || canPlayMultiplierWin) {
                     try { if (obj.animationState.clearTracks) obj.animationState.clearTracks(); } catch { }
                     const winAnim = canPlaySugarWin ? (sugarWinAnim as string) : (multiplierWinAnim as string);
-                    let completed = false;
                     try {
                       if (obj.animationState.addListener) {
                         const listener = {
@@ -4320,23 +4383,18 @@ export class Symbols {
                             try {
                               if (!entry || entry.animation?.name !== winAnim) return;
                             } catch { }
-                            if (completed) return; completed = true;
-                            try { this.destroySymbolOverlays(obj); } catch { }
-                            try { obj.destroy(); } catch { }
-                            if (self.symbols[col]) {
-                              self.symbols[col][row] = null as any;
-                            }
-                            if (self.currentSymbolData && self.currentSymbolData[row]) {
-                              (self.currentSymbolData[row] as any)[col] = null;
-                            }
-                            resolve();
+                            finalizeRemoval();
                           }
                         } as any;
                         obj.animationState.addListener(listener);
                       }
                       if (canPlayMultiplierWin) {
                         const pos = this.getSymbolWorldPosition(obj);
-                        if (pos) this.playExplosionVfx(pos.x, pos.y, false);
+                        if (pos) {
+                          self.scene.time.delayedCall(explosionStartDelayMs, () => {
+                            this.playExplosionVfx(pos.x, pos.y, false);
+                          });
+                        }
                         this.showMultiplierOverlay(obj);
                       }
                       obj.animationState.setAnimation(0, winAnim, false);
@@ -4350,16 +4408,7 @@ export class Symbols {
                       }
                       // Safety timeout in case complete isn't fired
                       self.scene.time.delayedCall(self.scene.gameData.winUpDuration + 700, () => {
-                        if (completed) return; completed = true;
-                        try { this.destroySymbolOverlays(obj); } catch { }
-                        try { obj.destroy(); } catch { }
-                        if (self.symbols[col]) {
-                          self.symbols[col][row] = null as any;
-                        }
-                        if (self.currentSymbolData && self.currentSymbolData[row]) {
-                          (self.currentSymbolData[row] as any)[col] = null;
-                        }
-                        resolve();
+                        finalizeRemoval();
                       });
                     } catch {
                       // Fallback to fade if animation fails
@@ -4372,15 +4421,7 @@ export class Symbols {
                         duration: self.scene.gameData.winUpDuration,
                         ease: Phaser.Math.Easing.Cubic.In,
                         onComplete: () => {
-                          try { this.destroySymbolOverlays(obj); } catch { }
-                          try { obj.destroy(); } catch { }
-                          if (self.symbols[col]) {
-                            self.symbols[col][row] = null as any;
-                          }
-                          if (self.currentSymbolData && self.currentSymbolData[row]) {
-                            (self.currentSymbolData[row] as any)[col] = null;
-                          }
-                          resolve();
+                          finalizeRemoval();
                         }
                       });
                     }
@@ -4395,29 +4436,17 @@ export class Symbols {
                       duration: self.scene.gameData.winUpDuration,
                       ease: Phaser.Math.Easing.Cubic.In,
                       onComplete: () => {
-                        try { this.destroySymbolOverlays(obj); } catch { }
-                        try { obj.destroy(); } catch { }
-                        // Leave null placeholder for compression step
-                        self.symbols[col][row] = null as any;
-                        if (self.currentSymbolData && self.currentSymbolData[row]) {
-                          (self.currentSymbolData[row] as any)[col] = null;
-                        }
-                        resolve();
+                        finalizeRemoval();
                       }
                     });
                   }
                 } catch {
-                  try { obj.destroy(); } catch { }
-                  self.symbols[col][row] = null as any;
-                  if (self.currentSymbolData && self.currentSymbolData[row]) {
-                    (self.currentSymbolData[row] as any)[col] = null;
-                  }
-                  resolve();
+                  finalizeRemoval();
                 }
               };
 
-              if (shouldExplode && !disableScaling) {
-                this.playPreExplosionPulse(obj, startRemoval);
+              if (shouldExplode) {
+                this.playPreExplosionScaleUp(obj, startRemoval);
               } else {
                 startRemoval();
               }
@@ -4861,6 +4890,23 @@ export class Symbols {
     // For now, this is a placeholder
   }
 
+  private getExplosionStartDelayMs(): number {
+    const configuredExplosionDelay = Number(this.scene?.gameData?.tumbleExplosionStartDelayMs ?? 150);
+    return (!isNaN(configuredExplosionDelay) && configuredExplosionDelay >= 0)
+      ? configuredExplosionDelay
+      : 150;
+  }
+
+  private getBonusMultiplierNumberDelayMs(): number {
+    const configuredDelay = Number(this.scene?.gameData?.bonusMultiplierNumberDelayMs ?? 0);
+    return (!isNaN(configuredDelay) && isFinite(configuredDelay)) ? configuredDelay : 0;
+  }
+
+  private getBonusMultiplierExplosionSoundDelayMs(): number {
+    const configuredDelay = Number(this.scene?.gameData?.bonusMultiplierExplosionSoundDelayMs ?? 0);
+    return (!isNaN(configuredDelay) && isFinite(configuredDelay)) ? configuredDelay : 0;
+  }
+
   private playExplosionVfx(x: number, y: number, useMergeScale: boolean = false, minDurationMs?: number): void {
     const spineKey = 'Explosion_BZ_VFX';
     const atlasKey = `${spineKey}-atlas`;
@@ -4955,7 +5001,7 @@ export class Symbols {
     this.scene.time.delayedCall(fallbackMs, destroyVfx);
   }
 
-  private playPreExplosionPulse(target: any, onComplete: () => void): void {
+  private playPreExplosionScaleUp(target: any, onComplete: () => void): void {
     try {
       if (!this.scene || !target) {
         onComplete();
@@ -4965,27 +5011,17 @@ export class Symbols {
       const baseY = (target as any)?.scaleY;
       const safeBaseX = (typeof baseX === 'number' && isFinite(baseX)) ? baseX : 1;
       const safeBaseY = (typeof baseY === 'number' && isFinite(baseY)) ? baseY : 1;
-      const shrinkFactor = 0.85;
-      const shrinkDuration = 90;
-      const restoreDuration = 110;
+      const scaleFactor = 1.3;
+      const scaleDuration = 200;
 
       try { this.scene.tweens.killTweensOf(target); } catch { }
       this.scene.tweens.add({
         targets: target,
-        scaleX: safeBaseX * shrinkFactor,
-        scaleY: safeBaseY * shrinkFactor,
-        duration: shrinkDuration,
+        scaleX: safeBaseX * scaleFactor,
+        scaleY: safeBaseY * scaleFactor,
+        duration: scaleDuration,
         ease: Phaser.Math.Easing.Cubic.Out,
-        onComplete: () => {
-          this.scene.tweens.add({
-            targets: target,
-            scaleX: safeBaseX,
-            scaleY: safeBaseY,
-            duration: restoreDuration,
-            ease: Phaser.Math.Easing.Cubic.Out,
-            onComplete: () => onComplete(),
-          });
-        }
+        onComplete: () => onComplete(),
       });
     } catch {
       try { onComplete(); } catch { }

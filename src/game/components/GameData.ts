@@ -43,6 +43,13 @@ export class GameData {
 	
 	// Tumble-specific timing controls
 	public tumbleStaggerMs: number = TIMING_CONFIG.SYMBOL_STAGGER_MS * 2;
+	public tumbleExplosionStartDelayMs: number = 300;
+	// Delay for multiplier explosion SFX relative to explosion start (ms).
+	// 0 = same time as explosion, positive = after, negative = before.
+	public bonusMultiplierExplosionSoundDelayMs: number = 100;
+	// Delay for bonus multiplier number relative to explosion start (ms).
+	// 0 = same time as explosion, positive = after, negative = before.
+	public bonusMultiplierNumberDelayMs: number = 700;
 	public tumbleDropStaggerMs: number | null = null;
 	public tumbleDropStartDelayMs: number = 0;
 	public tumbleSkipPreHop: boolean = true;

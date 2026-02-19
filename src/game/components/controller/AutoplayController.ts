@@ -184,7 +184,7 @@ export class AutoplayController {
     
     // Apply turbo mode to animations if enabled
     const symbols = this.callbacks.getSymbols();
-    if (gameStateManager.isTurbo && symbols?.setTurboMode) {
+    if (this.isTurboEnabled() && symbols?.setTurboMode) {
       symbols.setTurboMode(true);
     }
     
@@ -289,7 +289,7 @@ export class AutoplayController {
     
     // Calculate delay
     const baseDelay = 500;
-    const delay = gameStateManager.isTurbo 
+    const delay = this.isTurboEnabled()
       ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER 
       : baseDelay;
     
@@ -338,6 +338,14 @@ export class AutoplayController {
   // ============================================================================
   // PRIVATE METHODS
   // ============================================================================
+
+  private isTurboEnabled(): boolean {
+    const sceneGameData = (this.scene as any)?.gameData;
+    if (sceneGameData && typeof sceneGameData.isTurbo === 'boolean') {
+      return sceneGameData.isTurbo;
+    }
+    return !!gameStateManager.isTurbo;
+  }
 
   private setupEventListeners(): void {
     // REELS_START - decrement counter

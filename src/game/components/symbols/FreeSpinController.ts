@@ -276,7 +276,7 @@ export class FreeSpinController {
     }
     
     // Apply turbo mode if enabled
-    if (gameStateManager.isTurbo && this.callbacks.onSetTurboMode) {
+    if (this.isTurboEnabled() && this.callbacks.onSetTurboMode) {
       console.log('[FreeSpinController] Applying turbo mode');
       this.callbacks.onSetTurboMode(true);
     }
@@ -331,7 +331,7 @@ export class FreeSpinController {
       this.scene.events.once('dialogAnimationsComplete', () => {
         console.log('[FreeSpinController] Dialog complete - retrying spin');
         const baseDelay = 0;
-        const turboDelay = gameStateManager.isTurbo 
+        const turboDelay = this.isTurboEnabled()
           ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER 
           : baseDelay;
         this.scene.time.delayedCall(turboDelay, () => this.performSpin());
@@ -430,7 +430,7 @@ export class FreeSpinController {
 
         // Schedule next spin with appropriate delay
         const baseDelay = 400;
-        const turboDelay = gameStateManager.isTurbo
+        const turboDelay = this.isTurboEnabled()
           ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
           : baseDelay;
 
@@ -450,7 +450,7 @@ export class FreeSpinController {
 
         // Schedule next spin with appropriate delay
         const baseDelay = 300; // 300ms to allow "TOTAL WIN" to be visible
-        const turboDelay = gameStateManager.isTurbo
+        const turboDelay = this.isTurboEnabled()
           ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
           : baseDelay;
 
@@ -533,6 +533,14 @@ export class FreeSpinController {
   // ============================================================================
   // STOP & CLEANUP
   // ============================================================================
+
+  private isTurboEnabled(): boolean {
+    const sceneGameData = (this.scene as any)?.gameData;
+    if (sceneGameData && typeof sceneGameData.isTurbo === 'boolean') {
+      return sceneGameData.isTurbo;
+    }
+    return !!gameStateManager.isTurbo;
+  }
 
   /**
    * Stop free spin autoplay

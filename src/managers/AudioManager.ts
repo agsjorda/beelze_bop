@@ -28,8 +28,6 @@ export enum SoundEffectType {
 	SYMBOL_WIN_2 = 'symbol_win_2',
 	SYMBOL_WIN_3 = 'symbol_win_3',
 	SYMBOL_WIN_4 = 'symbol_win_4',
-	COIN_THROW = 'coin_throw',
-	COIN_DROP = 'coin_drop',
 	// Win dialog effects
 	WIN_BIG = 'win_big',
 	WIN_MEGA = 'win_mega',
@@ -89,9 +87,9 @@ export class AudioManager {
 		this.scene.load.audio('scatterdrop3_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_3.ogg');
 		this.scene.load.audio('scatterdrop4_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_4.ogg');
 		this.scene.load.audio('turbodrop_bz', 'assets/sounds/SFX/turbodrop_ka.ogg');
+		this.scene.load.audio('bomb_bz', 'assets/sounds/SFX/tbomb_BB.ogg');
 		this.scene.load.audio('tbomb_bz', 'assets/sounds/SFX/tbomb_BB.ogg');
 		this.scene.load.audio('paper_roll_bz', 'assets/sounds/SFX/paper_roll_BB.ogg');
-		this.scene.load.audio('coin_drop_bz', 'assets/sounds/SFX/coin_drop_ka.ogg');
 		this.scene.load.audio('laugh_transition_bz', 'assets/sounds/SFX/laugh_transition_BB.ogg');
 		this.scene.load.audio('whistle_bz', 'assets/sounds/SFX/whistle_BB.ogg');
 		
@@ -215,24 +213,6 @@ export class AudioManager {
 				this.sfxInstances.set(SoundEffectType.SYMBOL_WIN_4, twin4);
 			} catch (e) { console.warn('[AudioManager] Failed to create twin4_bz SFX instance:', e); }
 			console.log('[AudioManager] Tumble symbol-win SFX instances created');
-
-			// Create coin throw SFX instance
-			try {
-				const coinThrow = this.scene.sound.add('coin_throw_bz', { volume: this.sfxVolume, loop: false });
-				this.sfxInstances.set(SoundEffectType.COIN_THROW, coinThrow);
-				console.log('[AudioManager] Coin throw SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create coin_throw_bz SFX instance:', e);
-			}
-
-			// Create coin drop SFX instance
-			try {
-				const coinDrop = this.scene.sound.add('coin_drop_bz', { volume: this.sfxVolume, loop: false });
-				this.sfxInstances.set(SoundEffectType.COIN_DROP, coinDrop);
-				console.log('[AudioManager] Coin drop SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create coin_drop_bz SFX instance:', e);
-			}
 
 			// Create multiplier trigger / bomb SFX instance (bonus-mode multipliers)
 			try {

@@ -349,6 +349,14 @@ export class Preloader extends Scene
 		this.assetLoader.loadBuyFeatureAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
+		// Ensure radial dimmer whistle is ready before "Press to Play" can be clicked.
+		try {
+			if (!(this.cache.audio as any)?.exists?.('whistle_bz')) {
+				this.load.audio('whistle_bz', 'assets/sounds/SFX/whistle_BB.ogg');
+			}
+		} catch {
+			this.load.audio('whistle_bz', 'assets/sounds/SFX/whistle_BB.ogg');
+		}
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 	}

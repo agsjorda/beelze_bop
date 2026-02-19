@@ -487,10 +487,8 @@ export class AssetConfig {
 				'candy_transition_bz': 'assets/sounds/SFX/candy_transition.ogg',
 				// Scatter win SFX (paper_roll) – played when scatter win animation runs
 				'paper_roll_bz': 'assets/sounds/SFX/paper_roll_BB.ogg',
-				'coin_throw_bz': 'assets/sounds/SFX/coin_throw_ka.ogg',
-				'coin_drop_bz': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
-				'bomb_bz': 'assets/sounds/SFX/bomb_sw.ogg',
+				'bomb_bz': 'assets/sounds/SFX/tbomb_BB.ogg',
 				'tbomb_bz': 'assets/sounds/SFX/tbomb_BB.ogg',
 				// Transition_BZ SFX (laugh_transition)
 				'laugh_transition_bz': 'assets/sounds/SFX/laugh_transition_BB.ogg',
