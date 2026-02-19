@@ -59,7 +59,8 @@ export class SlotController {
 	// UI elements not managed by controllers
 	private featureAmountText!: Phaser.GameObjects.Text;
 	private featureLabelContainer!: Phaser.GameObjects.Container;
-	private featureButtonHitZone: Phaser.GameObjects.Zone | null = null;
+	private featureButtonImage: Phaser.GameObjects.Image | null = null;
+	private featureButtonHitbox: Phaser.GameObjects.Zone | null = null;
 	private primaryControllers!: Phaser.GameObjects.Container;
 	private controllerTexts: Phaser.GameObjects.Text[] = [];
 	private freeSpinLabel!: Phaser.GameObjects.Text;
@@ -287,8 +288,8 @@ export class SlotController {
 		if (featureButton) {
 			featureButton.setVisible(false);
 		}
-		if (this.featureButtonHitZone) {
-			this.featureButtonHitZone.setVisible(false);
+		if (this.featureButtonHitbox) {
+			this.featureButtonHitbox.setVisible(false);
 		}
 		if (this.featureLabelContainer) {
 			this.featureLabelContainer.setVisible(false);
@@ -340,8 +341,8 @@ export class SlotController {
 		if (featureButton) {
 			featureButton.setVisible(true);
 		}
-		if (this.featureButtonHitZone) {
-			this.featureButtonHitZone.setVisible(true);
+		if (this.featureButtonHitbox) {
+			this.featureButtonHitbox.setVisible(true);
 		}
 		if (this.featureLabelContainer) {
 			this.featureLabelContainer.setVisible(true);
@@ -1168,8 +1169,8 @@ export class SlotController {
 			featureButton.setAlpha(0.5); // Make it semi-transparent/greyed out
 			featureButton.setTint(0x555555); // Apply dark grey tint
 			featureButton.disableInteractive(); // Disable clicking
-			if (this.featureButtonHitZone) {
-				this.featureButtonHitZone.disableInteractive();
+			if (this.featureButtonHitbox) {
+				this.featureButtonHitbox.disableInteractive();
 			}
 			console.log('[SlotController] Feature button disabled');
 		}
@@ -1200,58 +1201,19 @@ export class SlotController {
 			}
 			featureButton.setAlpha(1.0); // Restore full opacity
 			featureButton.clearTint(); // Remove grey tint
-			this.applyBuyFeatureHitbox(featureButton);
-			if (this.featureButtonHitZone) {
-				this.featureButtonHitZone.setInteractive();
+			if (this.featureButtonHitbox) {
+				this.featureButtonHitbox.setInteractive();
 			}
 			console.log('[SlotController] Feature button enabled');
 		}
 	}
 
 	private handleBuyFeaturePress(): void {
-		const featureButton = this.buttons.get('feature');
-		const inputEnabled = (featureButton as any)?.input?.enabled;
-		if (featureButton && inputEnabled === false) {
+		const hitboxEnabled = (this.featureButtonHitbox as any)?.input?.enabled;
+		if (this.featureButtonHitbox && hitboxEnabled === false) {
 			return;
 		}
 		this.showBuyFeatureDrawer();
-	}
-
-	/**
-	 * Apply the buy feature button hitbox scaling.
-	 */
-	private applyBuyFeatureHitbox(featureButton: Phaser.GameObjects.Image): void {
-		const hitW = featureButton.displayWidth * this.buyFeatureHitboxScale.x;
-		const hitH = featureButton.displayHeight * this.buyFeatureHitboxScale.y;
-		featureButton.setInteractive(
-			new Phaser.Geom.Rectangle(
-				-hitW * 0.5,
-				-hitH * 0.5,
-				hitW,
-				hitH
-			),
-			Phaser.Geom.Rectangle.Contains
-		);
-
-		if (!this.scene) {
-			return;
-		}
-
-		if (!this.featureButtonHitZone) {
-			this.featureButtonHitZone = this.scene.add.zone(
-				featureButton.x,
-				featureButton.y,
-				hitW,
-				hitH
-			).setOrigin(0.5, 0.5);
-			this.featureButtonHitZone.setDepth(featureButton.depth + 1);
-			this.featureButtonHitZone.setInteractive();
-			this.featureButtonHitZone.on('pointerdown', () => this.handleBuyFeaturePress());
-			this.controllerContainer.add(this.featureButtonHitZone);
-		} else {
-			this.featureButtonHitZone.setPosition(featureButton.x, featureButton.y);
-			this.featureButtonHitZone.setSize(hitW, hitH);
-		}
 	}
 
 	/**
@@ -1935,17 +1897,29 @@ export class SlotController {
 		// Check if demo mode is active - if so, hide currency symbol
 		const isDemoFeature = this.gameAPI?.getDemoState();
 
-		// Feature button image (serves as background)
+		// Feature button image (visual only; hitbox is separate)
 		const featureButton = scene.add.image(
 			featureX,
 			featureY,
 			'feature'
 		).setOrigin(0.5, 0.5).setDepth(10);
-		this.applyBuyFeatureHitbox(featureButton);
-		featureButton.on('pointerdown', () => {
-			console.log('[SlotController] Feature button clicked');
+		this.featureButtonImage = featureButton;
+		// Feature button hitbox: same position as image, dimensions scaled by buyFeatureHitboxScale
+		const hitboxW = featureButton.displayWidth * this.buyFeatureHitboxScale.x;
+		const hitboxH = featureButton.displayHeight * this.buyFeatureHitboxScale.y;
+		this.featureButtonHitbox = scene.add.zone(
+			featureButton.x,
+			featureButton.y,
+			hitboxW,
+			hitboxH
+		).setOrigin(0.5, 0.5);
+		this.featureButtonHitbox.setDepth(featureButton.depth + 2);
+		this.featureButtonHitbox.setInteractive();
+		this.featureButtonHitbox.on('pointerdown', () => {
+			console.log('[SlotController] Feature button hitbox clicked');
 			this.handleBuyFeaturePress();
 		});
+		this.controllerContainer.add(this.featureButtonHitbox);
 		this.buttons.set('feature', featureButton);
 		this.controllerContainer.add(featureButton);
 

@@ -221,7 +221,7 @@ export class AssetConfig {
 				'turbo_off': `assets/controller/${screenMode}/${quality}/turbo_off.png`,
 				'turbo_on': `assets/controller/${screenMode}/${quality}/turbo_on.png`,
 				'amplify': `assets/controller/${screenMode}/${quality}/amplify.png`,
-				'feature': `assets/controller/${screenMode}/${quality}/feature.png`,
+				'feature': `assets/controller/${screenMode}/${quality}/buy_feature.png`,
 				'long_button': `assets/controller/${screenMode}/${quality}/long_button.png`,
 				'maximize': `assets/controller/${screenMode}/${quality}/maximize.png`,
 				'minimize': `assets/controller/${screenMode}/${quality}/minimize.png`,
