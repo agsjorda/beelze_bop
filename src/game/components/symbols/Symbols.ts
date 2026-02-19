@@ -1619,6 +1619,15 @@ export class Symbols {
     } catch { /* ignore */ }
 
     // Show dialog
+    try {
+      const bonusHeader = gameScene?.bonusHeader;
+      if (bonusHeader && typeof (bonusHeader as any).showTotalWinBeforeCongrats === 'function' && totalWin > 0) {
+        (bonusHeader as any).showTotalWinBeforeCongrats(totalWin);
+      }
+    } catch (e) {
+      console.warn('[Symbols] Failed to sync TOTAL WIN in bonus header before total win dialog', e);
+    }
+
     if (gameScene.dialogs?.showTotalWin) {
       gameScene.dialogs.showTotalWin(this.scene, {
         winAmount: totalWin
