@@ -357,17 +357,52 @@ export class AutoplayController {
     
     // WIN_STOP - continue autoplay
     gameEventManager.on(GameEventType.WIN_STOP, () => {
-      if (this.isManagingAutoplay && gameStateManager.isAutoPlaying && !gameStateManager.isShowingWinDialog) {
+      if (
+        this.isManagingAutoplay &&
+        gameStateManager.isAutoPlaying &&
+        !gameStateManager.isShowingWinDialog &&
+        !this.isScatterOrBonusTransitionActive()
+      ) {
         this.continueAutoplayIfNeeded();
       }
     });
     
     // WIN_DIALOG_CLOSED - continue autoplay after dialog
     gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => {
-      if (this.isManagingAutoplay && gameStateManager.isAutoPlaying) {
+      if (
+        this.isManagingAutoplay &&
+        gameStateManager.isAutoPlaying &&
+        !this.isScatterOrBonusTransitionActive()
+      ) {
         this.continueAutoplayIfNeeded();
       }
     });
+  }
+
+  private isScatterOrBonusTransitionActive(): boolean {
+    if (gameStateManager.isScatter || gameStateManager.isBonus) {
+      return true;
+    }
+
+    const symbols = this.callbacks.getSymbols?.();
+    if (!symbols) {
+      return false;
+    }
+
+    try {
+      const scatterAnimationInProgress = !!(
+        symbols.scatterAnimationManager &&
+        typeof symbols.scatterAnimationManager.isAnimationInProgress === 'function' &&
+        symbols.scatterAnimationManager.isAnimationInProgress()
+      );
+      if (scatterAnimationInProgress) {
+        return true;
+      }
+    } catch {
+      // Ignore symbol-scatter introspection errors and fall back to state flags only.
+    }
+
+    return false;
   }
 
   private handleAutoplayButtonClick(): void {
@@ -387,6 +422,11 @@ export class AutoplayController {
   private async performAutoplaySpin(): Promise<void> {
     if (this.autoplaySpinsRemaining <= 0) {
       this.stopAutoplay();
+      return;
+    }
+
+    if (this.isScatterOrBonusTransitionActive()) {
+      log.debug('Autoplay paused - scatter/bonus transition active');
       return;
     }
     

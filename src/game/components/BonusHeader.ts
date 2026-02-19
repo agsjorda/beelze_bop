@@ -377,6 +377,50 @@ export class BonusHeader {
 	}
 
 	/**
+	 * Compute a stable "TOTAL WIN" display value from free-spin items:
+	 * scatter base + previous item totals (+ current item when requested).
+	 * This mirrors felice_in_space behavior and avoids relying on ambiguous slot.totalWin.
+	 */
+	private getTotalWinForDisplay(spinData: any, includeCurrentSpin: boolean): number {
+		const basePlusScatter = Math.max(0, Number(this.scatterBaseWin) || 0);
+		try {
+			const slotAny: any = spinData?.slot || {};
+			const fs = slotAny.freespin || slotAny.freeSpin;
+			const items = Array.isArray(fs?.items) ? fs.items : [];
+			const area = slotAny.area;
+			if (items.length === 0 || !Array.isArray(area)) {
+				return this.cumulativeBonusWin;
+			}
+
+			const areaJson = JSON.stringify(area);
+			const currentIndex = items.findIndex((item: any) =>
+				Array.isArray(item?.area) && JSON.stringify(item.area) === areaJson
+			);
+			if (currentIndex < 0) {
+				return this.cumulativeBonusWin;
+			}
+
+			let previousTotalWin = 0;
+			for (let i = 0; i < currentIndex; i++) {
+				const item = items[i];
+				const w = Number((item as any)?.totalWin ?? (item as any)?.subTotalWin ?? 0);
+				if (!isNaN(w) && w > 0) previousTotalWin += w;
+			}
+
+			let currentSpinWin = 0;
+			if (includeCurrentSpin && currentIndex >= 0 && currentIndex < items.length) {
+				const currentItem = items[currentIndex];
+				const w = Number((currentItem as any)?.totalWin ?? (currentItem as any)?.subTotalWin ?? 0);
+				if (!isNaN(w) && w > 0) currentSpinWin = w;
+			}
+
+			return basePlusScatter + previousTotalWin + currentSpinWin;
+		} catch {
+			return this.cumulativeBonusWin;
+		}
+	}
+
+	/**
 	 * Add to the cumulative bonus total (e.g., for scatter retriggers)
 	 * This preserves the existing cumulative total and adds the new amount
 	 */
@@ -394,6 +438,30 @@ export class BonusHeader {
 	 */
 	public getCumulativeBonusWin(): number {
 		return this.cumulativeBonusWin;
+	}
+
+	/**
+	 * Ensure header shows accumulated TOTAL WIN immediately before TotalW_BZ dialog.
+	 * Symbols calls this right before showing the dialog.
+	 */
+	public showTotalWinBeforeCongrats(totalWin: number): void {
+		try {
+			const symbolsComponent = (this.bonusHeaderContainer?.scene as any)?.symbols;
+			const spinData = symbolsComponent?.currentSpinData;
+			const fromFormula = spinData ? this.getTotalWinForDisplay(spinData, true) : 0;
+			const displayTotal = Math.max(Number(totalWin) || 0, fromFormula, this.cumulativeBonusWin);
+			if (!(displayTotal > 0)) return;
+
+			this.cumulativeBonusWin = Math.max(this.cumulativeBonusWin, displayTotal);
+			this.hasStartedBonusTracking = true;
+			this.showingTotalWin = true;
+
+			if (this.youWonText) this.youWonText.setText('TOTAL WIN');
+			this.showWinningsDisplay(displayTotal);
+			console.log(`[BonusHeader] showTotalWinBeforeCongrats: TOTAL WIN $${displayTotal}`);
+		} catch (e) {
+			console.warn('[BonusHeader] Failed to show TOTAL WIN before congrats:', e);
+		}
 	}
 
 	/**
@@ -1142,11 +1210,13 @@ export class BonusHeader {
 				}
 
 				if (isFinalSpin) {
+					const formulaTotal = this.getTotalWinForDisplay(spinData, true);
 					const backendTotal = this.calculateBackendTotalWin(spinData);
-					if (backendTotal > 0) {
-						this.cumulativeBonusWin = backendTotal;
+					const finalTotal = Math.max(this.cumulativeBonusWin, formulaTotal, backendTotal);
+					if (finalTotal > 0) {
+						this.cumulativeBonusWin = finalTotal;
 						this.hasStartedBonusTracking = true;
-						console.log(`[BonusHeader] WIN_STOP (bonus): aligned cumulative total to backend totalWin=$${backendTotal}`);
+						console.log(`[BonusHeader] WIN_STOP (bonus): aligned cumulative total for last spin=$${finalTotal} (formula=${formulaTotal}, backend=${backendTotal})`);
 					}
 				}
 			} catch { }

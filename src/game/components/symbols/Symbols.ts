@@ -62,6 +62,23 @@ import {
   MULTIPLIER_STAGGER_MS,
 } from './constants';
 
+type ReelDropTimingSnapshot = {
+  winUpDuration: number;
+  dropDuration: number;
+  dropReelsDelay: number;
+};
+
+type TumbleTimingSnapshot = {
+  winUpDuration: number;
+  dropDuration: number;
+  tumbleStaggerMs: number;
+  compressionDelayMultiplier: number;
+  tumbleOverlapDropsDuringCompression: boolean;
+  tumbleDropStaggerMs: number;
+  tumbleDropStartDelayMs: number;
+  tumbleSkipPreHop: boolean;
+};
+
 /**
  * Main Symbols class - orchestrates the symbol grid system
  * 
@@ -1532,11 +1549,7 @@ export class Symbols {
         }
 
         if (Array.isArray(slot.tumbles) && slot.tumbles.length > 0) {
-          const tumblesWin = slot.tumbles.reduce((sum: number, tumble: any) => {
-            const win = Number(tumble?.win || 0);
-            return sum + (isNaN(win) ? 0 : win);
-          }, 0);
-          totalWin += tumblesWin;
+          totalWin += this.calculateTotalWinFromTumbles(slot.tumbles);
         }
       }
     } catch (e) {
@@ -1554,6 +1567,95 @@ export class Symbols {
       total += isNaN(win) ? 0 : win;
     }
     return total;
+  }
+
+  private calculateTotalWinFromTumbles(tumbles: any[]): number {
+    if (!Array.isArray(tumbles) || tumbles.length === 0) return 0;
+    let total = 0;
+    for (const tumble of tumbles) {
+      const tumbleWin = Number(tumble?.win ?? 0);
+      if (!isNaN(tumbleWin) && tumbleWin > 0) {
+        total += tumbleWin;
+        continue;
+      }
+      const outs = Array.isArray(tumble?.symbols?.out) ? tumble.symbols.out : [];
+      total += outs.reduce((sum: number, out: any) => sum + (Number(out?.win) || 0), 0);
+    }
+    return total;
+  }
+
+  private hasFreeSpinAwardFromSpinData(spinData: any): boolean {
+    try {
+      const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+      const items = Array.isArray(fs?.items) ? fs.items : [];
+      const count = Number(fs?.count || 0);
+      const spinsLeft = Number(items?.[0]?.spinsLeft ?? fs?.spinsLeft ?? 0);
+      return items.length > 0 || count > 0 || spinsLeft > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private countScatterSymbolsInArea(area: any): number {
+    if (!Array.isArray(area)) return 0;
+    let scatterCount = 0;
+    for (const column of area) {
+      if (!Array.isArray(column)) continue;
+      for (const symbol of column) {
+        if (Number(symbol) === SCATTER_SYMBOL_ID) {
+          scatterCount++;
+        }
+      }
+    }
+    return scatterCount;
+  }
+
+  private getScatterTriggerMultiplier(scatterCount: number): number {
+    if (scatterCount >= 6) return 100;
+    if (scatterCount === 5) return 5;
+    if (scatterCount === 4) return 3;
+    return 0;
+  }
+
+  private seedScatterTriggerWinForHeader(spinData: any, scatterCount: number): void {
+    try {
+      const scatterMultiplier = this.getScatterTriggerMultiplier(scatterCount);
+      const bet = Number(spinData?.bet ?? 0);
+      const scatterBaseWin = (Number.isFinite(bet) && bet > 0 && scatterMultiplier > 0)
+        ? bet * scatterMultiplier
+        : 0;
+
+      const slot: any = spinData?.slot || {};
+      const paylineWin = Array.isArray(slot?.paylines)
+        ? this.calculateTotalWinFromPaylines(slot.paylines)
+        : 0;
+      const tumbleWin = Array.isArray(slot?.tumbles)
+        ? this.calculateTotalWinFromTumbles(slot.tumbles)
+        : 0;
+      const totalForHeader = scatterBaseWin + paylineWin + tumbleWin;
+
+      if (!(totalForHeader > 0)) {
+        return;
+      }
+
+      const gameScene: any = this.scene as any;
+      const header = gameScene?.header;
+      if (header && typeof header.showWinningsDisplay === 'function') {
+        header.showWinningsDisplay(totalForHeader);
+      }
+
+      const bonusHeader = gameScene?.bonusHeader;
+      if (bonusHeader && typeof bonusHeader.seedCumulativeWin === 'function') {
+        bonusHeader.seedCumulativeWin(totalForHeader);
+      }
+
+      console.log(
+        `[Symbols] Seeded scatter trigger total for header/bonus: $${totalForHeader.toFixed(2)} ` +
+        `(scatterCount=${scatterCount}, scatter=${scatterBaseWin.toFixed(2)}, paylines=${paylineWin.toFixed(2)}, tumbles=${tumbleWin.toFixed(2)})`
+      );
+    } catch (e) {
+      console.warn('[Symbols] Failed to seed scatter trigger total for header/bonus', e);
+    }
   }
 
   private async showCongratsDialogAfterDelay(): Promise<void> {
@@ -1789,14 +1891,19 @@ export class Symbols {
     console.log('[Symbols] ScatterGrids found:', scatterGrids.length);
 
     const scatterCount = scatterGrids.length;
-    const isRetrigger = gameStateManager.isBonus && scatterCount >= SCATTER_RETRIGGER_COUNT;
-    const isTrigger = !gameStateManager.isBonus && scatterCount >= SCATTER_TRIGGER_COUNT;
+    const scatterCountFromArea = this.countScatterSymbolsInArea(spinData?.slot?.area);
+    const effectiveScatterCount = Math.max(scatterCount, scatterCountFromArea);
+    const hasFreeSpinAwardFromSpinData = this.hasFreeSpinAwardFromSpinData(spinData);
+    const isRetrigger = gameStateManager.isBonus && effectiveScatterCount >= SCATTER_RETRIGGER_COUNT;
+    const isTrigger = !gameStateManager.isBonus
+      && (effectiveScatterCount >= SCATTER_TRIGGER_COUNT || hasFreeSpinAwardFromSpinData);
     if (isRetrigger || isTrigger) {
       gameStateManager.isScatter = true;
 
       if (isRetrigger) {
         this.setPendingScatterRetrigger(scatterGrids);
       } else {
+        this.seedScatterTriggerWinForHeader(spinData, effectiveScatterCount);
         await this.animateScatterSymbols(mockData, scatterGrids);
         this.startScatterAnimationSequence(mockData);
       }
@@ -3081,6 +3188,11 @@ export class Symbols {
       ? this.symbols[0].length
       : SLOT_ROWS;
     const isTurbo = !!this.scene.gameData?.isTurbo;
+    const dropTimingSnapshot: ReelDropTimingSnapshot = {
+      winUpDuration: Number(this.scene.gameData?.winUpDuration ?? 0),
+      dropDuration: Number(this.scene.gameData?.dropDuration ?? 0),
+      dropReelsDelay: Number(this.scene.gameData?.dropReelsDelay ?? 0),
+    };
     if (this.skipReelDropsPending) {
       this.skipReelDropsPending = false;
       this.skipReelDropsActive = true;
@@ -3091,18 +3203,18 @@ export class Symbols {
     if (isSkip) {
       // Enforce strict bottom-left to top-right order during skip.
       const bonusPreDropDelay = gameStateManager.isBonus
-        ? (this.scene.gameData.winUpDuration * 2)
+        ? (dropTimingSnapshot.winUpDuration * 2)
         : 0.5;
       const preDelay = bonusPreDropDelay * 0.2;
-      const rowDelay = this.scene.gameData.dropReelsDelay * 0.2;
+      const rowDelay = dropTimingSnapshot.dropReelsDelay * 0.2;
 
       for (let step = 0; step < numRows; step++) {
         const actualRow = (numRows - 1) - step;
         const startDelay = step === 0 ? preDelay : rowDelay;
         await this.delay(startDelay);
         console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
-        await this.dropOldSymbols(actualRow);
-        await this.dropNewSymbols(actualRow, false);
+        await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+        await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
       }
 
       console.log('[Symbols] All reels completed');
@@ -3117,20 +3229,20 @@ export class Symbols {
 
         // In bonus mode, add small pre-drop delay
         const bonusPreDropDelay = gameStateManager.isBonus
-          ? (this.scene.gameData.winUpDuration * 2)
+          ? (dropTimingSnapshot.winUpDuration * 2)
           : 0.5;
 
         // In turbo mode, remove row stagger so all drop together
         const rowDelayFactor = isTurbo ? 0 : 1;
         const startDelay = bonusPreDropDelay +
-          (this.scene.gameData.dropReelsDelay * step * rowDelayFactor);
+          (dropTimingSnapshot.dropReelsDelay * step * rowDelayFactor);
 
         const p = (async () => {
           await this.delayOrSkip(startDelay);
-          await this.dropOldSymbols(actualRow);
+          await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
 
           // Then drop new symbols
-          await this.dropNewSymbols(actualRow, false);
+          await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
         })();
         reelPromises.push(p);
       }
@@ -3153,7 +3265,11 @@ export class Symbols {
     }
   }
 
-  private async dropOldSymbols(rowIndex: number): Promise<void> {
+  private async dropOldSymbols(
+    rowIndex: number,
+    turboOverride?: boolean,
+    timingOverride?: ReelDropTimingSnapshot
+  ): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!this.symbols || this.symbols.length === 0) {
         resolve();
@@ -3164,7 +3280,11 @@ export class Symbols {
       const totalAnimations = this.symbols.length;
       const STAGGER_MS = 100; // Same as new symbols
       const symbolHop = this.scene.gameData.winUpHeight * 0.5;
-      const isTurbo = !!this.scene.gameData?.isTurbo;
+      const isTurbo = typeof turboOverride === 'boolean'
+        ? turboOverride
+        : !!this.scene.gameData?.isTurbo;
+      const winUpDuration = Number(timingOverride?.winUpDuration ?? this.scene.gameData.winUpDuration);
+      const dropDuration = Number(timingOverride?.dropDuration ?? this.scene.gameData.dropDuration);
       const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
       const speed = isSkip ? 0.5 : 1;
 
@@ -3247,14 +3367,16 @@ export class Symbols {
 
         const tweens: any[] = [
           {
+            // Match felice behavior: in turbo, outgoing symbols clear simultaneously;
+            // incoming symbols keep sequential column landing.
             delay: (isTurbo || isSkip) ? 0 : STAGGER_MS * col,
             y: `-= ${symbolHop}`,
-            duration: Math.max(1, this.scene.gameData.winUpDuration * speed),
+            duration: Math.max(1, winUpDuration * speed),
             ease: Phaser.Math.Easing.Circular.Out,
           },
           {
             y: `+= ${distanceToScreenBottom + extraDistance}`,
-            duration: Math.max(1, this.scene.gameData.dropDuration * 0.9 * speed),
+            duration: Math.max(1, dropDuration * 0.9 * speed),
             ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
             onComplete: () => {
               // Destroy the symbol after it drops off screen
@@ -3294,7 +3416,7 @@ export class Symbols {
       // Safety timeout in case some animations don't complete
       // If timeout triggers, forcefully clean up any remaining symbols
       // Reduced timeout for faster cleanup (was dropDuration * 2, now * 1.5)
-      const timeoutDuration = this.scene.gameData.dropDuration * 1.5;
+      const timeoutDuration = dropDuration * 1.5;
       this.scene.time.delayedCall(timeoutDuration, () => {
         if (completedAnimations < totalAnimations) {
           const remaining = totalAnimations - completedAnimations;
@@ -3329,7 +3451,12 @@ export class Symbols {
     });
   }
 
-  private async dropNewSymbols(index: number, extendDuration: boolean = false): Promise<void> {
+  private async dropNewSymbols(
+    index: number,
+    extendDuration: boolean = false,
+    turboOverride?: boolean,
+    timingOverride?: ReelDropTimingSnapshot
+  ): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!this.newSymbols || this.newSymbols.length === 0) {
         resolve();
@@ -3349,7 +3476,11 @@ export class Symbols {
       const totalAnimations = this.newSymbols.length;
       const STAGGER_MS = 100;
       const symbolHop = this.scene.gameData.winUpHeight * 0.5;
-      const isTurbo = !!this.scene.gameData?.isTurbo;
+      const isTurbo = typeof turboOverride === 'boolean'
+        ? turboOverride
+        : !!this.scene.gameData?.isTurbo;
+      const winUpDuration = Number(timingOverride?.winUpDuration ?? this.scene.gameData.winUpDuration);
+      const dropDuration = Number(timingOverride?.dropDuration ?? this.scene.gameData.dropDuration);
       const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
       const speed = isSkip ? 0.2 : 1;
 
@@ -3366,19 +3497,19 @@ export class Symbols {
         const overlayObj: any = (baseObj as any)?.__overlayImage;
         const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
 
-        const delayMs = (isTurbo || isSkip) ? 0 : STAGGER_MS * col;
+        const delayMs = isSkip ? 0 : STAGGER_MS * col;
         console.log(`[Symbols] Column ${col}: delay=${delayMs}ms, targetY=${targetY}`);
 
         const tweens: any[] = [
           {
             delay: delayMs,
             y: `-= ${symbolHop}`,
-            duration: Math.max(1, this.scene.gameData.winUpDuration * speed),
+            duration: Math.max(1, winUpDuration * speed),
             ease: Phaser.Math.Easing.Circular.Out,
           },
           {
             y: targetY,
-            duration: Math.max(1, ((this.scene.gameData.dropDuration * 0.9) + extraMs) * speed),
+            duration: Math.max(1, ((dropDuration * 0.9) + extraMs) * speed),
             ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
           },
         ];
@@ -3387,15 +3518,15 @@ export class Symbols {
           tweens.push(
             {
               y: `+= ${10}`,
-              duration: Math.max(1, this.scene.gameData.dropDuration * 0.05 * speed),
+              duration: Math.max(1, dropDuration * 0.05 * speed),
               ease: Phaser.Math.Easing.Linear,
             },
             {
               y: `-= ${10}`,
-              duration: Math.max(1, this.scene.gameData.dropDuration * 0.05 * speed),
+              duration: Math.max(1, dropDuration * 0.05 * speed),
               ease: Phaser.Math.Easing.Linear,
               onComplete: () => {
-                if (!this.scene.gameData.isTurbo && (window as any).audioManager) {
+                if (!isTurbo && (window as any).audioManager) {
                   this.playSpinReelDropSoundForColumn(col);
                 }
 
@@ -3869,9 +4000,29 @@ export class Symbols {
         const multiplierNumberDelayMs = this.getBonusMultiplierNumberDelayMs();
         const multiplierExplosionSoundStartDelayMs = Math.max(0, explosionStartDelayMs + multiplierExplosionSoundDelayMs);
         const multiplierNumberStartDelayMs = Math.max(0, explosionStartDelayMs + multiplierNumberDelayMs);
+        const explosionStartDelayMs = this.getExplosionStartDelayMs();
+        const multiplierExplosionSoundDelayMs = this.getBonusMultiplierExplosionSoundDelayMs();
+        const multiplierNumberDelayMs = this.getBonusMultiplierNumberDelayMs();
+        const multiplierExplosionSoundStartDelayMs = Math.max(0, explosionStartDelayMs + multiplierExplosionSoundDelayMs);
+        const multiplierNumberStartDelayMs = Math.max(0, explosionStartDelayMs + multiplierNumberDelayMs);
 
         const pos = this.getSymbolWorldPosition(obj);
         if (pos) {
+          this.scene.time.delayedCall(explosionStartDelayMs, () => {
+            this.playExplosionVfx(pos.x, pos.y, false, explosionDurationMs);
+          });
+        }
+        this.scene.time.delayedCall(multiplierExplosionSoundStartDelayMs, () => {
+          try {
+            const am = (window as any)?.audioManager;
+            if (am && typeof am.playSoundEffect === 'function') {
+              am.playSoundEffect(SoundEffectType.MULTIPLIER_TRIGGER);
+            }
+          } catch { }
+        });
+        this.scene.time.delayedCall(multiplierNumberStartDelayMs, () => {
+          startFlyingOverlay();
+        });
           this.scene.time.delayedCall(explosionStartDelayMs, () => {
             this.playExplosionVfx(pos.x, pos.y, false, explosionDurationMs);
           });
@@ -3914,6 +4065,20 @@ export class Symbols {
     const self = this;
     const disableScaling = gameStateManager.isBonus || gameStateManager.isBuyFeatureSpin;
     const skipTumble = this.skipTumblesActive;
+    const tumbleTurboSnapshot = !!self.scene?.gameData?.isTurbo;
+    const tumbleTimingSnapshot: TumbleTimingSnapshot = {
+      winUpDuration: Number(self.scene?.gameData?.winUpDuration ?? 700),
+      dropDuration: Number(self.scene?.gameData?.dropDuration ?? 600),
+      tumbleStaggerMs: Number(self.scene?.gameData?.tumbleStaggerMs ?? 100),
+      compressionDelayMultiplier: Number(self.scene?.gameData?.compressionDelayMultiplier ?? 1),
+      tumbleOverlapDropsDuringCompression: !!(self.scene?.gameData?.tumbleOverlapDropsDuringCompression),
+      tumbleDropStaggerMs: Number(
+        self.scene?.gameData?.tumbleDropStaggerMs
+          ?? (Number(self.scene?.gameData?.tumbleStaggerMs ?? 100) * 0.25)
+      ),
+      tumbleDropStartDelayMs: Number(self.scene?.gameData?.tumbleDropStartDelayMs ?? 0),
+      tumbleSkipPreHop: !!(self.scene?.gameData?.tumbleSkipPreHop),
+    };
     // Keep currentSymbolData in sync with live grid to avoid removal mismatches
     this.syncCurrentSymbolDataFromSymbols();
     const outs = (tumble?.symbols?.out || []) as Array<{ symbol: number; count: number }>;
@@ -3937,7 +4102,7 @@ export class Symbols {
     const numRows = self.symbols[0].length;
 
     // Match manual drop timings and staggering for visual consistency
-    const MANUAL_STAGGER_MS: number = (self.scene?.gameData?.tumbleStaggerMs ?? 100);
+    const MANUAL_STAGGER_MS: number = tumbleTimingSnapshot.tumbleStaggerMs;
 
     // Debug: log incoming tumble payload
     try {
@@ -3966,7 +4131,6 @@ export class Symbols {
 
     // Build position indices by symbol (topmost-first per column)
     const positionsBySymbol: { [key: number]: Array<{ col: number; row: number }> } = {};
-    let sequenceIndex = 0; // ensures 1-by-1 ordering across columns left-to-right
     for (let col = 0; col < numCols; col++) {
       for (let row = 0; row < numRows; row++) {
         const val = self.currentSymbolData?.[row]?.[col];
@@ -4153,8 +4317,8 @@ export class Symbols {
           } catch { }
           try {
             const rise = Math.max(8, Math.round(self.displayHeight * 0.25));
-            const holdDuration = Math.max(1000, (self.scene?.gameData?.winUpDuration || 700) + 0);
-            const fadeDuration = Math.max(600, (self.scene?.gameData?.winUpDuration || 700) + 0);
+            const holdDuration = Math.max(1000, tumbleTimingSnapshot.winUpDuration);
+            const fadeDuration = Math.max(600, tumbleTimingSnapshot.winUpDuration);
             self.scene.tweens.chain({
               targets: txt,
               tweens: [
@@ -4229,7 +4393,7 @@ export class Symbols {
       const removalPromises: Promise<void>[] = [];
       const TurboConfig = (window as any)?.TurboConfig || { TURBO_SPEED_MULTIPLIER: 0.25 };
       const speedMultiplier = TurboConfig.TURBO_SPEED_MULTIPLIER || 0.25;
-      const animationDuration = Math.max(100, (self.scene?.gameData?.winUpDuration || 400) * speedMultiplier);
+      const animationDuration = Math.max(100, tumbleTimingSnapshot.winUpDuration * speedMultiplier);
       
       for (let col = 0; col < numCols; col++) {
         for (let row = 0; row < numRows; row++) {
@@ -4288,7 +4452,7 @@ export class Symbols {
               const shouldExplode = !!isSugarWin;
               // Keep explosion on-screen longer than symbol removal safety timeout so
               // symbols are never visible when the explosion finishes.
-              const configuredWinUp = Number(self.scene?.gameData?.winUpDuration || 700);
+              const configuredWinUp = Number(tumbleTimingSnapshot.winUpDuration);
               const safeWinUp = (!isNaN(configuredWinUp) && configuredWinUp > 0) ? configuredWinUp : 700;
               const explosionStartDelayMs = this.getExplosionStartDelayMs();
               let estimatedSugarWinMs = 0;
@@ -4407,7 +4571,7 @@ export class Symbols {
                         }
                       }
                       // Safety timeout in case complete isn't fired
-                      self.scene.time.delayedCall(self.scene.gameData.winUpDuration + 700, () => {
+                      self.scene.time.delayedCall(tumbleTimingSnapshot.winUpDuration + 700, () => {
                         finalizeRemoval();
                       });
                     } catch {
@@ -4418,7 +4582,7 @@ export class Symbols {
                         targets: tweenTargets,
                         alpha: 0,
                         // No scale change to avoid perceived scale-up/down
-                        duration: self.scene.gameData.winUpDuration,
+                        duration: tumbleTimingSnapshot.winUpDuration,
                         ease: Phaser.Math.Easing.Cubic.In,
                         onComplete: () => {
                           finalizeRemoval();
@@ -4433,7 +4597,7 @@ export class Symbols {
                       targets: tweenTargets,
                       alpha: 0,
                       // No scale change
-                      duration: self.scene.gameData.winUpDuration,
+                      duration: tumbleTimingSnapshot.winUpDuration,
                       ease: Phaser.Math.Easing.Cubic.In,
                       onComplete: () => {
                         finalizeRemoval();
@@ -4512,14 +4676,14 @@ export class Symbols {
         compressPromises.push(new Promise<void>((resolve) => {
           try {
             const tweenTargetsMove: any = this.getSymbolTweenTargets(obj);
-            const isTurbo = !!self.scene.gameData?.isTurbo;
-            const baseDuration = self.scene.gameData.dropDuration;
+            const isTurbo = tumbleTurboSnapshot;
+            const baseDuration = tumbleTimingSnapshot.dropDuration;
             // Use a slightly shorter duration in turbo, but long enough for easing
             // to be visible so the motion doesn't feel rigid.
             const compressionDuration = isTurbo
               ? Math.max(160, baseDuration * 0.6)
               : baseDuration;
-            const baseDelayMultiplier = (self.scene?.gameData?.compressionDelayMultiplier ?? 1);
+            const baseDelayMultiplier = tumbleTimingSnapshot.compressionDelayMultiplier;
             const colDelay = STAGGER_MS * col * baseDelayMultiplier;
             // In turbo, keep some stagger but reduce it so columns still feel snappy.
             const delay = isTurbo ? colDelay * 0.4 : colDelay;
@@ -4529,7 +4693,7 @@ export class Symbols {
               delay,
               duration: compressionDuration,
               // In turbo mode, keep motion snappy but smoothly decelerating
-              ease: self.scene.gameData?.isTurbo
+              ease: tumbleTurboSnapshot
                 ? Phaser.Math.Easing.Cubic.Out
                 : Phaser.Math.Easing.Bounce.Out,
               onComplete: () => resolve(),
@@ -4540,7 +4704,7 @@ export class Symbols {
     }
 
     // Overlap-aware drop scheduling: if enabled, start drops during compression; otherwise, drop after compression completes
-    const overlapDrops = !skipTumble && !!(self.scene?.gameData?.tumbleOverlapDropsDuringCompression);
+    const overlapDrops = !skipTumble && tumbleTimingSnapshot.tumbleOverlapDropsDuringCompression;
     const dropPromises: Promise<void>[] = [];
     const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
     const startX = self.slotX - self.totalGridWidth * 0.5;
@@ -4598,8 +4762,7 @@ export class Symbols {
 
           const srcIndex = Math.max(0, incoming.length - 1 - j);
           const value = incoming[srcIndex];
-          const topOfGridCenterY = startY + symbolTotalHeight * 0.5;
-          const startYPos = topOfGridCenterY - self.scene.scale.height + (j * symbolTotalHeight);
+          const startYPos = targetY - self.scene.scale.height;
           const created: any = this.factory.createSugarOrPngSymbol(value, xPos, skipTumble ? targetY : startYPos, 1);
 
           self.symbols[col][targetRow] = created;
@@ -4612,35 +4775,35 @@ export class Symbols {
             try { this.animationsModule.playDropAnimation(created); } catch { }
           }
 
-          const DROP_STAGGER_MS = (self.scene?.gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
+          const DROP_STAGGER_MS = tumbleTimingSnapshot.tumbleDropStaggerMs;
           const symbolHop = self.scene.gameData.winUpHeight * 0.5;
-          const isTurbo = !!self.scene.gameData?.isTurbo;
+          const isTurbo = tumbleTurboSnapshot;
           dropPromises.push(new Promise<void>((resolve) => {
             if (skipTumble) {
               resolve();
               return;
             }
             try {
-              const computedStartDelay = (self.scene?.gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
-              const skipPreHop = !!(self.scene?.gameData?.tumbleSkipPreHop);
+              const computedStartDelay = tumbleTimingSnapshot.tumbleDropStartDelayMs + (DROP_STAGGER_MS * col);
+              const skipPreHop = tumbleTimingSnapshot.tumbleSkipPreHop;
               const tweensArr: any[] = [];
               if (!skipPreHop) {
                 tweensArr.push({
                   delay: computedStartDelay,
                   y: `-= ${symbolHop}`,
-                  duration: self.scene.gameData.winUpDuration,
+                  duration: tumbleTimingSnapshot.winUpDuration,
                   ease: Phaser.Math.Easing.Circular.Out,
                 });
                 tweensArr.push({
                   y: targetY,
-                  duration: (self.scene.gameData.dropDuration * 0.9),
+                  duration: (tumbleTimingSnapshot.dropDuration * 0.9),
                   ease: Phaser.Math.Easing.Linear,
                 });
               } else {
                 tweensArr.push({
                   delay: computedStartDelay,
                   y: targetY,
-                  duration: (self.scene.gameData.dropDuration * 0.9),
+                  duration: (tumbleTimingSnapshot.dropDuration * 0.9),
                   ease: Phaser.Math.Easing.Linear,
                 });
               }
@@ -4649,16 +4812,16 @@ export class Symbols {
                 tweensArr.push(
                   {
                     y: `+= ${10}`,
-                    duration: self.scene.gameData.dropDuration * 0.05,
+                    duration: tumbleTimingSnapshot.dropDuration * 0.05,
                     ease: Phaser.Math.Easing.Linear,
                   },
                   {
                     y: `-= ${10}`,
-                    duration: self.scene.gameData.dropDuration * 0.05,
+                    duration: tumbleTimingSnapshot.dropDuration * 0.05,
                     ease: Phaser.Math.Easing.Linear,
                     onComplete: () => {
                       try {
-                        if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
+                        if (!tumbleTurboSnapshot && (window as any).audioManager) {
                           (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
                         }
                       } catch { }
@@ -4693,7 +4856,6 @@ export class Symbols {
               }
             } catch { resolve(); }
           }));
-          sequenceIndex++;
           totalSpawned++;
         }
       }
@@ -4749,8 +4911,7 @@ export class Symbols {
           const xPos = startX + col * symbolTotalWidth + symbolTotalWidth * 0.5;
           const srcIndex = Math.max(0, incoming.length - 1 - j);
           const value = incoming[srcIndex];
-          const topOfGridCenterY = startY + symbolTotalHeight * 0.5;
-          const startYPos = topOfGridCenterY - self.scene.scale.height + (j * symbolTotalHeight);
+          const startYPos = targetY - self.scene.scale.height;
           const created: any = this.factory.createSugarOrPngSymbol(value, xPos, skipTumble ? targetY : startYPos, 1);
           self.symbols[col][targetRow] = created;
           try { (created as any).__gridCol = col; (created as any).__gridRow = targetRow; } catch { }
@@ -4760,35 +4921,35 @@ export class Symbols {
           if (!skipTumble) {
             try { this.animationsModule.playDropAnimation(created); } catch { }
           }
-          const DROP_STAGGER_MS = (self.scene?.gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
+          const DROP_STAGGER_MS = tumbleTimingSnapshot.tumbleDropStaggerMs;
           const symbolHop = self.scene.gameData.winUpHeight * 0.5;
-          const isTurbo = !!self.scene.gameData?.isTurbo;
+          const isTurbo = tumbleTurboSnapshot;
           dropPromises.push(new Promise<void>((resolve) => {
             if (skipTumble) {
               resolve();
               return;
             }
             try {
-              const computedStartDelay = (self.scene?.gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
-              const skipPreHop = !!(self.scene?.gameData?.tumbleSkipPreHop);
+              const computedStartDelay = tumbleTimingSnapshot.tumbleDropStartDelayMs + (DROP_STAGGER_MS * col);
+              const skipPreHop = tumbleTimingSnapshot.tumbleSkipPreHop;
               const tweensArr: any[] = [];
               if (!skipPreHop) {
-                tweensArr.push({ delay: computedStartDelay, y: `-= ${symbolHop}`, duration: self.scene.gameData.winUpDuration, ease: Phaser.Math.Easing.Circular.Out });
-                tweensArr.push({ y: targetY, duration: (self.scene.gameData.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
+                tweensArr.push({ delay: computedStartDelay, y: `-= ${symbolHop}`, duration: tumbleTimingSnapshot.winUpDuration, ease: Phaser.Math.Easing.Circular.Out });
+                tweensArr.push({ y: targetY, duration: (tumbleTimingSnapshot.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
               } else {
-                tweensArr.push({ delay: computedStartDelay, y: targetY, duration: (self.scene.gameData.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
+                tweensArr.push({ delay: computedStartDelay, y: targetY, duration: (tumbleTimingSnapshot.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
               }
               if (!isTurbo) {
                 // Normal mode: include the small post-drop bounce and SFX
                 tweensArr.push(
-                  { y: `+= ${10}`, duration: self.scene.gameData.dropDuration * 0.05, ease: Phaser.Math.Easing.Linear },
+                  { y: `+= ${10}`, duration: tumbleTimingSnapshot.dropDuration * 0.05, ease: Phaser.Math.Easing.Linear },
                   {
                     y: `-= ${10}`,
-                    duration: self.scene.gameData.dropDuration * 0.05,
+                    duration: tumbleTimingSnapshot.dropDuration * 0.05,
                     ease: Phaser.Math.Easing.Linear,
                     onComplete: () => {
                       try {
-                        if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
+                        if (!tumbleTurboSnapshot && (window as any).audioManager) {
                           (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
                         }
                       } catch { }
@@ -4816,7 +4977,6 @@ export class Symbols {
               self.scene.tweens.chain({ targets: created, tweens: tweensArr });
             } catch { resolve(); }
           }));
-          sequenceIndex++;
           totalSpawned++;
         }
       }

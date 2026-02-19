@@ -4267,10 +4267,17 @@ export class SlotController {
 			console.log(`[SlotController] scatterBonusActivated event received with data:`, data);
 			console.log(`[SlotController] Data validation: scatterIndex=${data.scatterIndex}, actualFreeSpins=${data.actualFreeSpins}`);
 			
-			// Stop normal autoplay when scatter is hit
+			// Stop normal autoplay when scatter is hit.
+			// Use state flags in addition to counter because the triggering spin may have
+			// already decremented remaining to 0 before scatter transition begins.
 			const spinsRemaining = this.getAutoplaySpinsRemaining();
-			if (spinsRemaining > 0) {
-				console.log(`[SlotController] Scatter hit during autoplay - stopping normal autoplay (${spinsRemaining} spins remaining)`);
+			const autoplayActive =
+				spinsRemaining > 0 ||
+				!!this.autoplayController?.isActive?.() ||
+				!!gameStateManager.isAutoPlaying ||
+				!!this.gameData?.isAutoPlaying;
+			if (autoplayActive) {
+				console.log(`[SlotController] Scatter hit during autoplay - stopping normal autoplay (spinsRemaining=${spinsRemaining})`);
 				this.stopAutoplay();
 			}
 			
