@@ -54,6 +54,8 @@ export class BetController {
   private baseBetAmount: number = 0.2;
   private isButtonsDisabled: boolean = false;
   private disabledAlpha: number = 0.5;
+  private readonly betAmountMaxWidth: number = 60;
+  private readonly minAmountScale: number = 0.6;
 
   constructor(
     scene: Scene,
@@ -130,11 +132,12 @@ export class BetController {
       color: '#ffffff',
       fontFamily: 'poppins-bold'
     }).setOrigin(0.5, 0.5).setDepth(9);
+    this.fitTextToWidth(this.betAmountText, this.betAmountMaxWidth);
     this.container.add(this.betAmountText);
 
     // Currency symbol
     this.betDollarText = this.scene.add.text(
-      betX - (this.betAmountText.width / 2) - 3,
+      betX - ((this.betAmountText.displayWidth || this.betAmountText.width) / 2) - 3,
       betY + 8,
       isDemoMode ? '' : '$',
       {
@@ -199,11 +202,12 @@ export class BetController {
         ? amount.toString() 
         : amount.toFixed(2);
       this.betAmountText.setText(formattedAmount);
+      this.fitTextToWidth(this.betAmountText, this.betAmountMaxWidth);
       
       // Reposition currency symbol
       if (this.betDollarText) {
         this.betDollarText.setX(
-          this.betAmountText.x - (this.betAmountText.width / 2) - 3
+          this.betAmountText.x - ((this.betAmountText.displayWidth || this.betAmountText.width) / 2) - 3
         );
       }
     }
@@ -466,6 +470,24 @@ export class BetController {
    */
   public getBetAmountText(): Phaser.GameObjects.Text | null {
     return this.betAmountText;
+  }
+
+  private fitTextToWidth(
+    textObj: Phaser.GameObjects.Text | null | undefined,
+    maxWidth: number
+  ): void {
+    if (!textObj || !Number.isFinite(maxWidth) || maxWidth <= 0) {
+      return;
+    }
+
+    textObj.setScale(1);
+    const sourceWidth = textObj.width || textObj.displayWidth || 0;
+    if (sourceWidth <= 0) {
+      return;
+    }
+
+    const widthScale = Math.min(1, maxWidth / sourceWidth);
+    textObj.setScale(Math.max(this.minAmountScale, widthScale));
   }
 
   private getClosestBetIndex(currentBet: number): number {

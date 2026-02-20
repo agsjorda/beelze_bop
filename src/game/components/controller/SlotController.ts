@@ -61,6 +61,9 @@ export class SlotController {
 	private featureLabelContainer!: Phaser.GameObjects.Container;
 	private featureButtonImage: Phaser.GameObjects.Image | null = null;
 	private featureButtonHitbox: Phaser.GameObjects.Zone | null = null;
+	private readonly betAmountMaxWidth: number = 60;
+	private readonly buyFeatureAmountMaxWidth: number = 82;
+	private readonly minHudAmountScale: number = 0.6;
 	private primaryControllers!: Phaser.GameObjects.Container;
 	private controllerTexts: Phaser.GameObjects.Text[] = [];
 	private freeSpinLabel!: Phaser.GameObjects.Text;
@@ -1770,6 +1773,7 @@ export class SlotController {
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.betAmountText);
+		this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 		this.betAmountText.setInteractive();
 		this.betAmountText.on('pointerdown', () => {
 			console.log('[SlotController] Bet amount clicked');
@@ -2003,6 +2007,7 @@ export class SlotController {
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.featureAmountText);
+		this.fitHudTextToWidth(this.featureAmountText, this.buyFeatureAmountMaxWidth);
 		this.featureAmountText.setInteractive();
 		this.featureAmountText.on('pointerdown', () => this.handleBuyFeaturePress());
 
@@ -2212,6 +2217,7 @@ export class SlotController {
 			if (gameData && gameData.isEnhancedBet && this.betAmountText) {
 				const increasedBet = betAmount * 1.25;
 				this.betAmountText.setText(increasedBet.toFixed(2));
+				this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 				// Amount text is already centered, no need to reposition
 			}
 		} finally {
@@ -2226,6 +2232,7 @@ export class SlotController {
 		const displayBet = isEnhanced ? betAmount * 1.25 : betAmount;
 		if (this.betAmountText) {
 			this.betAmountText.setText(displayBet.toFixed(2));
+			this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 			// Amount text is already centered, no need to reposition
 		}
 
@@ -2258,6 +2265,7 @@ export class SlotController {
 		const price = baseBet * 100;
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+		this.fitHudTextToWidth(this.featureAmountText, this.buyFeatureAmountMaxWidth);
 		// Amount text is already centered, no need to reposition
 	}
 
@@ -2421,13 +2429,31 @@ export class SlotController {
 		currencyText.setVisible(true);
 		currencyText.setText(glyph);
 
-		const glyphWidth = currencyText.width || 0;
-		const amountWidth = amountText.width || 0;
+		const glyphWidth = currencyText.displayWidth || currencyText.width || 0;
+		const amountWidth = amountText.displayWidth || amountText.width || 0;
 		const totalWidth = glyphWidth + spacing + amountWidth;
 		const startX = centerX - (totalWidth / 2);
 
 		currencyText.setPosition(startX + glyphWidth / 2, y);
 		amountText.setPosition(startX + glyphWidth + spacing + (amountWidth / 2), y);
+	}
+
+	private fitHudTextToWidth(
+		textObj: Phaser.GameObjects.Text | null | undefined,
+		maxWidth: number
+	): void {
+		if (!textObj || !Number.isFinite(maxWidth) || maxWidth <= 0) {
+			return;
+		}
+
+		textObj.setScale(1);
+		const sourceWidth = textObj.width || textObj.displayWidth || 0;
+		if (sourceWidth <= 0) {
+			return;
+		}
+
+		const widthScale = Math.min(1, maxWidth / sourceWidth);
+		textObj.setScale(Math.max(this.minHudAmountScale, widthScale));
 	}
 
 	getBetAmountText(): string | null {
@@ -3332,6 +3358,7 @@ export class SlotController {
 		// Do not show or layout currency here - bet display uses "BET (USD)" label above and amount only between -/+.
 		if (this.betAmountText) {
 			this.betAmountText.setText(increasedBet.toFixed(2));
+			this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 			if (this.betDollarText) this.betDollarText.setVisible(false);
 		}
 		
@@ -3348,6 +3375,7 @@ export class SlotController {
 		// Restore display to base bet amount. Keep currency hidden (label above shows "BET (USD)").
 		if (this.betAmountText) {
 			this.betAmountText.setText(this.baseBetAmount.toFixed(2));
+			this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 			if (this.betDollarText) this.betDollarText.setVisible(false);
 		}
 		
