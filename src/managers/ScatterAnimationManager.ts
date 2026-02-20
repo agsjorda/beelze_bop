@@ -113,16 +113,15 @@ export class ScatterAnimationManager {
       // Step 2: Skip all spinner animations; directly determine free spins and show dialog
       this.determineFreeSpins(data);
 
-      if (isBuyFeature) {
-        // Ensure symbols are visible behind the free spins dialog.
-        try {
-          const gameScene: any = this.scene as any;
-          await gameScene?.symbols?.forceScatterResetImmediate?.();
-          gameScene?.symbols?.ensureScatterSymbolsVisible?.();
-          gameScene?.symbols?.container?.setVisible?.(true);
-          gameScene?.symbols?.container?.setAlpha?.(1);
-        } catch { }
-      }
+      // Align normal scatter with buy-feature flow: ensure symbols are reset/visible
+      // before the free-spin dialog transition completes.
+      try {
+        const gameScene: any = this.scene as any;
+        await gameScene?.symbols?.forceScatterResetImmediate?.();
+        gameScene?.symbols?.ensureScatterSymbolsVisible?.();
+        gameScene?.symbols?.container?.setVisible?.(true);
+        gameScene?.symbols?.container?.setAlpha?.(1);
+      } catch { }
 
       // Wait for Symbols transition (merge + Transition_BZ) before showing dialog - same for normal and buy feature
       await this.waitForBuyFeatureTransitions();

@@ -19,7 +19,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
-import { GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX, MAX_IDLE_TIME_MINUTES } from '../../config/GameConfig';
+import { GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX, MAX_IDLE_TIME_MINUTES, MIN_CLUSTER_SIZE } from '../../config/GameConfig';
 import { PaylineData } from '../../backend/SpinData';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { Symbols } from '../components/symbols/index';
@@ -263,10 +263,6 @@ export class Game extends Scene {
 		});
 		this.character2.create();
 		console.log('[Game] Characters created successfully');
-
-		// Create header using the managers
-		this.header = new Header(this.networkManager, this.screenModeManager);
-		this.header.create(this);
 
 		// Create persistent clock display (stays on screen)
 		// Clock on top-left, DiJoker on top-right
@@ -626,11 +622,14 @@ export class Game extends Scene {
 			if (this.symbols && this.symbols.currentSpinData) {
 				const spinData = this.symbols.currentSpinData;
 				let freeSpinItem: any | null = null;
+				const rawBetAmount = Number((spinData as any)?.bet);
+				const betAmount = Number.isFinite(rawBetAmount) ? rawBetAmount : 0;
 				let totalWin = 0;
-				const betAmount = parseFloat(spinData.bet);
 
-				// During free spins, try to resolve the current item (by area match) so we can
-				// use its totalWin and tumbles for accurate win dialog gating.
+				// During free spins, try to resolve the current item by matching area.
+				// We only use it as a tumbles fallback when slot.tumbles is unavailable.
+				// Avoid falling back to items[0] because that can select the wrong spin
+				// and trigger incorrect win dialog thresholds.
 				if (gameStateManager.isBonus) {
 					try {
 						const slotAny: any = spinData.slot || {};
@@ -644,31 +643,14 @@ export class Game extends Scene {
 								Array.isArray(item?.area) && JSON.stringify(item.area) === areaJson
 							) || null;
 						}
-
-						if (!freeSpinItem && items.length > 0) {
-							freeSpinItem = items[0];
-						}
-
-						if (freeSpinItem) {
-							const itemTotalWinRaw = (freeSpinItem as any).totalWin ?? (freeSpinItem as any).subTotalWin ?? 0;
-							const itemTotalWin = Number(itemTotalWinRaw);
-							if (!isNaN(itemTotalWin) && itemTotalWin > 0) {
-								console.log(`[Game] WIN_STOP: Using freespin item totalWin=${itemTotalWin}`);
-								totalWin = itemTotalWin;
-							}
-						}
 					} catch (e) {
-						console.warn('[Game] WIN_STOP: Failed to derive freespin item totalWin, falling back to tumble totalWin', e);
+						console.warn('[Game] WIN_STOP: Failed to derive freespin item by area (tumbles fallback only)', e);
 					}
 				}
 
 				// Prefer slot.totalWin when provided (includes full tumble sequence)
 				const slotTotalWinRaw = (spinData.slot as any)?.totalWin;
 				const slotTotalWin = Number(slotTotalWinRaw);
-				if (totalWin === 0 && Number.isFinite(slotTotalWin) && slotTotalWin > 0) {
-					console.log(`[Game] WIN_STOP: Using slot.totalWin=${slotTotalWin}`);
-					totalWin = slotTotalWin;
-				}
 
 				const slotTumbles = spinData.slot?.tumbles || [];
 				const bonusTumbles = freeSpinItem?.tumbles;
@@ -676,18 +658,26 @@ export class Game extends Scene {
 					? slotTumbles
 					: (Array.isArray(bonusTumbles) ? bonusTumbles : []);
 				const tumbleResult = this.calculateTotalWinFromTumbles(tumblesToUse);
-				if (totalWin === 0) {
-					totalWin = tumbleResult.totalWin;
-				}
 				const hasCluster = tumbleResult.hasCluster;
 
+				if (Number.isFinite(slotTotalWin) && slotTotalWin > 0) {
+					console.log(`[Game] WIN_STOP: Using slot.totalWin=${slotTotalWin}`);
+					totalWin = slotTotalWin;
+				} else {
+					totalWin = tumbleResult.totalWin;
+				}
 
-				   console.log(`[Game] WIN_STOP: totalWin used for win dialog=$${totalWin}, hasCluster>=8=${hasCluster}`);
-				   if (hasCluster && totalWin > 0) {
-					   this.checkAndShowWinDialog(totalWin, betAmount);
-				   } else {
-					   console.log('[Game] WIN_STOP: No qualifying cluster wins (>=8) detected');
-				   }
+
+				console.log(`[Game] WIN_STOP: totalWin used for win dialog=$${totalWin}, hasCluster>=${MIN_CLUSTER_SIZE}=${hasCluster}, bet=${betAmount}`);
+				if (!Number.isFinite(betAmount) || betAmount <= 0) {
+					console.warn('[Game] WIN_STOP: Invalid bet amount for win dialog gating, skipping', { betAmount });
+					return;
+				}
+				if (hasCluster && totalWin > 0) {
+					this.checkAndShowWinDialog(totalWin, betAmount);
+				} else {
+					console.log(`[Game] WIN_STOP: No qualifying cluster wins (>=${MIN_CLUSTER_SIZE}) detected`);
+				}
 
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');
@@ -740,6 +730,23 @@ export class Game extends Scene {
 
 			// Note: Autoplay continuation is now handled by SlotController's WIN_DIALOG_CLOSED handler
 			// No need to retry spin here as it conflicts with SlotController's autoplay logic
+
+			// During initial FreeSpin dialog close, skip queued base-spin wins so
+			// free-spin autoplay can start immediately without a stale BigWin popup.
+			try {
+				const sceneAny: any = this as any;
+				if (sceneAny.__skipWinQueueOnNextDialogComplete) {
+					sceneAny.__skipWinQueueOnNextDialogComplete = false;
+					if (sceneAny.__clearWinQueueOnNextDialogComplete) {
+						sceneAny.__clearWinQueueOnNextDialogComplete = false;
+						this.clearWinQueue();
+						console.log('[Game] Skipping and clearing win queue on FreeSpin dialog completion');
+					} else {
+						console.log('[Game] Skipping win queue processing on this dialog completion');
+					}
+					return;
+				}
+			} catch { }
 
 			// Process any remaining wins in the queue
 			this.processWinQueue();
@@ -919,17 +926,29 @@ export class Game extends Scene {
 		if (!Array.isArray(tumbles) || tumbles.length === 0) {
 			return { totalWin: 0, hasCluster: false };
 		}
+		const getOutCount = (out: any): number => {
+			const c = Number(out?.count);
+			if (Number.isFinite(c) && c > 0) return c;
+			const s = Number(out?.size);
+			if (Number.isFinite(s) && s > 0) return s;
+			return 0;
+		};
 		let totalWin = 0;
 		let hasCluster = false;
 		let triggeredWinAnim = false;
 		for (const tumble of tumbles) {
-			const w = Number(tumble?.win || 0);
-			totalWin += isNaN(w) ? 0 : w;
 			const outs = tumble?.symbols?.out || [];
 			if (Array.isArray(outs)) {
+				const qualifyingOuts = outs.filter((out: any) => getOutCount(out) >= MIN_CLUSTER_SIZE);
+				if (qualifyingOuts.length > 0) {
+					totalWin += qualifyingOuts.reduce((sum: number, out: any) => sum + (Number(out?.win) || 0), 0);
+				} else {
+					const w = Number(tumble?.win || 0);
+					totalWin += isNaN(w) ? 0 : w;
+				}
 				for (const out of outs) {
-					const c = Number(out?.count || 0);
-					if (c >= 8) {
+					const c = getOutCount(out);
+					if (c >= MIN_CLUSTER_SIZE) {
 						hasCluster = true;
 						// Only trigger win animation for normal game (not bonus)
 						if (!this.gameStateManager.isBonus && !triggeredWinAnim) {
@@ -956,6 +975,10 @@ export class Game extends Scene {
 		// Suppress win dialogs if we're transitioning out of bonus back to base
 		if (this.suppressWinDialogsUntilNextSpin) {
 			console.log('[Game] Suppressing win dialog (transitioning from bonus to base)');
+			return;
+		}
+		if (!Number.isFinite(payout) || payout <= 0 || !Number.isFinite(bet) || bet <= 0) {
+			console.warn('[Game] Invalid payout/bet for win dialog gating - skipping', { payout, bet });
 			return;
 		}
 		console.log(`[Game] checkAndShowWinDialog called with payout: $${payout}, bet: $${bet}`);
@@ -1048,6 +1071,10 @@ export class Game extends Scene {
 		}
 
 		const multiplier = payout / bet;
+		if (!Number.isFinite(multiplier)) {
+			console.warn('[Game] Invalid multiplier for win dialog gating - skipping', { payout, bet, multiplier });
+			return;
+		}
 		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}, Multiplier: ${multiplier}x`);
 
 		// Only show dialogs for wins that meet the configured thresholds
@@ -1285,6 +1312,7 @@ export class Game extends Scene {
 			// Hide normal header
 			if (this.header) {
 				this.header.getContainer().setVisible(false);
+				try { this.header.hideWinningsDisplay(); } catch { }
 				console.log('[Game] Normal header hidden');
 			}
 
@@ -1327,6 +1355,7 @@ export class Game extends Scene {
 			// Hide bonus header
 			if (this.bonusHeader) {
 				this.bonusHeader.getContainer().setVisible(false);
+				try { this.bonusHeader.forceHideWinningsDisplay(); } catch { }
 				console.log('[Game] Bonus header hidden');
 			}
 		});

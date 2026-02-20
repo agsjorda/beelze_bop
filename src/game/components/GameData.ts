@@ -49,7 +49,7 @@ export class GameData {
 	public bonusMultiplierExplosionSoundDelayMs: number = 100;
 	// Delay for bonus multiplier number relative to explosion start (ms).
 	// 0 = same time as explosion, positive = after, negative = before.
-	public bonusMultiplierNumberDelayMs: number = 700;
+	public bonusMultiplierNumberDelayMs: number = 600;
 	public tumbleDropStaggerMs: number | null = null;
 	public tumbleDropStartDelayMs: number = 0;
 	public tumbleSkipPreHop: boolean = true;

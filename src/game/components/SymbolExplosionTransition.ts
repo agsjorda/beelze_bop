@@ -1,6 +1,5 @@
 import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
-import { SoundEffectType } from '../../managers/AudioManager';
 
 /**
  * SymbolExplosionTransition
@@ -104,31 +103,6 @@ import { SoundEffectType } from '../../managers/AudioManager';
 		}
 		this.isPlaying = true;
 		this.show();
-
-		// Play candy transition SFX twice whenever the explosion transition starts,
-		// with a 0.5s delay between each play.
-		try {
-			const sceneAny: any = this.scene as any;
-			const audioManager =
-				(sceneAny && sceneAny.audioManager) ||
-				((window as any)?.audioManager ?? null);
-
-			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
-				// First immediate play
-				audioManager.playSoundEffect(SoundEffectType.CANDY_TRANSITION);
-				// Second play after 500ms
-				this.scene.time.delayedCall(2300, () => {
-					try {
-						audioManager.playSoundEffect(SoundEffectType.CANDY_TRANSITION);
-					} catch (inner) {
-						console.warn('[SymbolExplosionTransition] Failed second candy transition SFX play:', inner);
-					}
-				});
-				console.log('[SymbolExplosionTransition] Playing candy_transition SFX twice on play()');
-			}
-		} catch (e) {
-			console.warn('[SymbolExplosionTransition] Failed to play candy transition SFX:', e);
-		}
 
 		this.destroyParticles();
 

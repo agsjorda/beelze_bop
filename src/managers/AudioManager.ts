@@ -14,7 +14,6 @@ export enum SoundEffectType {
 	SCATTER_DROP_3 = 'scatter_drop_3',
 	SCATTER_DROP_4 = 'scatter_drop_4',
 	TURBO_DROP = 'turbodrop',
-	CANDY_TRANSITION = 'candy_transition',
 	// Scatter win SFX (Symbol0 win animation – paper_roll)
 	SCATTER_NOMNOM = 'scatter_nomnom',
 	MENU_CLICK = 'menu_click',
@@ -72,13 +71,13 @@ export class AudioManager {
 		this.scene.load.audio('bonusbg_bz', 'assets/sounds/BG/bonusbg_BB.ogg');
 		
 		// Free spin background music
-		this.scene.load.audio('freespinbg_bz', 'assets/sounds/BG/freespinbg_BB.ogg');
+		this.scene.load.audio('freespinbg_bz', 'assets/sounds/BG/freespinwonbg_BB.ogg');
 		
 		// Ambient audio
 		//this.scene.load.audio('ambience_ka', 'assets/sounds/SFX/ambience_ka.ogg');
 		
 		// Sound effects
-		this.scene.load.audio('spinb_bz', 'assets/sounds/SFX/spinb_BB.ogg');
+		this.scene.load.audio('spinb_bz', 'assets/sounds/SFX/spin_BB.ogg');
 		this.scene.load.audio('click_bz', 'assets/sounds/click_sw.ogg');
 		this.scene.load.audio('reelroll_bz', 'assets/sounds/SFX/reelroll_BB.ogg');
 		this.scene.load.audio('reeldrop_bz', 'assets/sounds/SFX/reeldrop_BB.ogg');
@@ -86,7 +85,7 @@ export class AudioManager {
 		this.scene.load.audio('scatterdrop2_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_2.ogg');
 		this.scene.load.audio('scatterdrop3_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_3.ogg');
 		this.scene.load.audio('scatterdrop4_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_4.ogg');
-		this.scene.load.audio('turbodrop_bz', 'assets/sounds/SFX/turbodrop_ka.ogg');
+		this.scene.load.audio('turbodrop_bz', 'assets/sounds/SFX/turbodrop_BB.ogg');
 		this.scene.load.audio('bomb_bz', 'assets/sounds/SFX/tbomb_BB.ogg');
 		this.scene.load.audio('tbomb_bz', 'assets/sounds/SFX/tbomb_BB.ogg');
 		this.scene.load.audio('paper_roll_bz', 'assets/sounds/SFX/paper_roll_BB.ogg');
@@ -182,18 +181,6 @@ export class AudioManager {
 			});
 			this.sfxInstances.set(SoundEffectType.TURBO_DROP, turboDropSfx);
 			console.log('[AudioManager] Turbo drop sound effect instance created');
-
-			// Candy explosion transition SFX (SymbolExplosionTransition)
-			try {
-				const candyTransition = this.scene.sound.add('candy_transition_bz', {
-					volume: this.sfxVolume,
-					loop: false
-				});
-				this.sfxInstances.set(SoundEffectType.CANDY_TRANSITION, candyTransition);
-				console.log('[AudioManager] Candy transition SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create candy_transition_bz SFX instance:', e);
-			}
 
 			// Create tumble symbol-win SFX instances (twin1..4_bz)
 			try {

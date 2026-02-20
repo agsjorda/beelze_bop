@@ -66,6 +66,8 @@ export class Dialogs {
 
 	// Auto-close timer for win dialogs during autoplay
 	private autoCloseTimer: Phaser.Time.TimerEvent | null = null;
+	private numberDisplayFadeInTimer: Phaser.Time.TimerEvent | null = null;
+	private clickEnableTimer: Phaser.Time.TimerEvent | null = null;
 	private configAutoCloseMs: number | null = null;
 	private configAutoCloseEnabled: boolean = false;
 	private defaultWinDialogAutoCloseMs: number | null = 2500;
@@ -395,7 +397,18 @@ export class Dialogs {
 			}
 
 			// Fade in number display(s) after a short delay (replacing paint effect trigger)
-			scene.time.delayedCall(500, () => {
+			if (this.numberDisplayFadeInTimer) {
+				this.numberDisplayFadeInTimer.destroy();
+				this.numberDisplayFadeInTimer = null;
+			}
+			this.numberDisplayFadeInTimer = scene.time.delayedCall(500, () => {
+				this.numberDisplayFadeInTimer = null;
+				if (!this.isDialogActive) {
+					return;
+				}
+				if (!this.numberDisplayContainer && !this.congratsFreeSpinsContainer) {
+					return;
+				}
 				console.log('[Dialogs] Fading in number display(s)');
 				this.fadeInNumberDisplay(scene);
 			});
@@ -982,6 +995,9 @@ export class Dialogs {
 	 */
 	private fadeInNumberDisplay(scene: Scene): void {
 		console.log('[Dialogs] fadeInNumberDisplay called');
+		if (!this.isDialogActive) {
+			return;
+		}
 
 		if (this.numberDisplayContainer) {
 			console.log('[Dialogs] Popping in primary number display');
@@ -1026,7 +1042,7 @@ export class Dialogs {
 				console.warn('[Dialogs] No inner primary number container found for pop animation');
 			}
 		} else {
-			console.error('[Dialogs] numberDisplayContainer is null, cannot fade in');
+			console.warn('[Dialogs] numberDisplayContainer is null, skipping number display fade-in');
 		}
 
 		// If a secondary congrats free spins display exists, pop it in too (no counting animation)
@@ -1234,7 +1250,12 @@ export class Dialogs {
 		if (this.isWinDialog()) {
 			console.log('[Dialogs] Win dialog - enabling clicking after 1.5s delay for continue text visibility');
 			// Delay to ensure continue text appears before allowing clicks
-			scene.time.delayedCall(1500, () => {
+			if (this.clickEnableTimer) {
+				this.clickEnableTimer.destroy();
+				this.clickEnableTimer = null;
+			}
+			this.clickEnableTimer = scene.time.delayedCall(1500, () => {
+				this.clickEnableTimer = null;
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
 						this.handleDialogClick(scene);
@@ -1245,7 +1266,12 @@ export class Dialogs {
 		} else {
 			console.log('[Dialogs] Free spin dialog - delaying click enablement for 2.2 seconds');
 			// Delay for free spin dialogs to allow animations to complete
-			scene.time.delayedCall(2200, () => {
+			if (this.clickEnableTimer) {
+				this.clickEnableTimer.destroy();
+				this.clickEnableTimer = null;
+			}
+			this.clickEnableTimer = scene.time.delayedCall(2200, () => {
+				this.clickEnableTimer = null;
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
 						console.log('[Dialogs] Free spin dialog clicked!');
@@ -1422,6 +1448,10 @@ export class Dialogs {
 		try { this.dialogOverlay?.setVisible(false); } catch { }
 		try {
 			const sceneAny: any = scene as any;
+			// FreeSpin dialog completion should not immediately replay queued base-spin
+			// win dialogs before free-spin autoplay starts.
+			sceneAny.__skipWinQueueOnNextDialogComplete = true;
+			sceneAny.__clearWinQueueOnNextDialogComplete = true;
 			sceneAny.__deferredBonusStart = () => {
 				this.cleanupDialog();
 				try {
@@ -1936,6 +1966,14 @@ export class Dialogs {
 			console.log('[Dialogs] Destroying auto-close timer during cleanup');
 			this.autoCloseTimer.destroy();
 			this.autoCloseTimer = null;
+		}
+		if (this.numberDisplayFadeInTimer) {
+			this.numberDisplayFadeInTimer.destroy();
+			this.numberDisplayFadeInTimer = null;
+		}
+		if (this.clickEnableTimer) {
+			this.clickEnableTimer.destroy();
+			this.clickEnableTimer = null;
 		}
 
 		// Now that all elements are destroyed, set dialog as inactive

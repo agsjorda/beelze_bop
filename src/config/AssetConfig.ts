@@ -483,8 +483,6 @@ export class AssetConfig {
 				'scatterdrop3_bz': 'assets/sounds/SFX/symbol_win/scatter_drop_3.ogg',
 				'scatterdrop4_bz': 'assets/sounds/SFX/symbol_win/scatter_drop_4.ogg',
 				'turbodrop_bz': 'assets/sounds/SFX/turbodrop_BB.ogg',
-				// Candy explosion transition SFX (used by SymbolExplosionTransition)
-				'candy_transition_bz': 'assets/sounds/SFX/candy_transition.ogg',
 				// Scatter win SFX (paper_roll) – played when scatter win animation runs
 				'paper_roll_bz': 'assets/sounds/SFX/paper_roll_BB.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)

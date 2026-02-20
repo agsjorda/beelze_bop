@@ -1053,38 +1053,20 @@ export class BonusHeader {
 		});
 
 		// Listen for reel done events to show winnings display (like regular header)
-		gameEventManager.on(GameEventType.REELS_STOP, (data: any) => {
+		gameEventManager.on(GameEventType.REELS_STOP, (_data: any) => {
 			console.log(`[BonusHeader] REELS_STOP received - checking for wins`);
 
-			// In bonus mode, per-spin display is handled on WIN_STOP; skip here to avoid label mismatch
+			// BonusHeader should never render base-game wins.
+			if (!gameStateManager.isBonus) {
+				this.forceHideWinningsDisplay();
+				console.log('[BonusHeader] Not in bonus mode - force-hiding bonus winbar');
+				return;
+			}
+
+			// In bonus mode, per-spin display is handled on WIN_STOP; skip here to avoid label mismatch.
 			if (gameStateManager.isBonus) {
 				console.log('[BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)');
 				return;
-			}
-			
-			// Get the current spin data from the Symbols component
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-			if (symbolsComponent && symbolsComponent.currentSpinData) {
-				const spinData = symbolsComponent.currentSpinData;
-				console.log(`[BonusHeader] Found current spin data:`, spinData);
-				
-				// Use the same logic as regular header - calculate from paylines
-				if (spinData.slot && spinData.slot.paylines && spinData.slot.paylines.length > 0) {
-					const totalWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
-					console.log(`[BonusHeader] Total winnings calculated from paylines: ${totalWin}`);
-					
-					if (totalWin > 0) {
-						this.showWinningsDisplay(totalWin);
-					} else {
-						this.hideWinningsDisplay();
-					}
-				} else {
-					console.log('[BonusHeader] No paylines in current spin data - hiding winnings display');
-					this.hideWinningsDisplay();
-				}
-			} else {
-				console.log('[BonusHeader] No current spin data available - hiding winnings display');
-				this.hideWinningsDisplay();
 			}
 		});
 
