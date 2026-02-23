@@ -96,11 +96,26 @@ const StartGame = (parent: string) => {
 	const installAudioVisibilityPolicy = (game: Phaser.Game) => {
 		const applyMuteToAllScenes = (muted: boolean) => {
 			try {
+				const gameSound = (game as any).sound;
+				if (gameSound) {
+					gameSound.mute = !!muted;
+				}
+			} catch {}
+			try {
 				const scenes = (game.scene as any).getScenes(false) as Phaser.Scene[] || [];
 				for (const s of scenes) {
 					if ((s as any).sound) {
 						((s as any).sound as any).mute = !!muted;
 					}
+				}
+			} catch {}
+		};
+		const applyPauseToGameLoop = (paused: boolean) => {
+			try {
+				if (paused) {
+					game.loop.sleep();
+				} else {
+					game.loop.wake();
 				}
 			} catch {}
 		};
@@ -116,24 +131,37 @@ const StartGame = (parent: string) => {
 		};
 		const onHidden = () => {
 			applyMuteToAllScenes(true);
+			applyPauseToGameLoop(true);
 		};
 		const onVisible = () => {
+			applyPauseToGameLoop(false);
 			if (shouldUnmute()) {
 				applyMuteToAllScenes(false);
 			}
 		};
-		const handleVisibility = () => {
-			if (document.visibilityState === 'hidden' || (document as any).hidden) {
+		const shouldPauseFromPageState = (): boolean => {
+			try {
+				// Pause only when the page is actually backgrounded/hidden.
+				// Do not pause on focus shifts like opening/using DevTools in the same tab.
+				return document.visibilityState === 'hidden' || (document as any).hidden;
+			} catch {
+				return false;
+			}
+		};
+		const handleActivityState = () => {
+			if (shouldPauseFromPageState()) {
 				onHidden();
 			} else {
 				onVisible();
 			}
 		};
-		document.addEventListener('visibilitychange', handleVisibility);
+		document.addEventListener('visibilitychange', handleActivityState);
+		window.addEventListener('blur', handleActivityState);
+		window.addEventListener('focus', handleActivityState);
 		window.addEventListener('pagehide', onHidden);
-		window.addEventListener('pageshow', onVisible);
+		window.addEventListener('pageshow', handleActivityState);
 		// Initial application
-		handleVisibility();
+		handleActivityState();
 	};
     // Helper to detect mobile devices (coarse heuristic)
     const isMobile = (): boolean => {

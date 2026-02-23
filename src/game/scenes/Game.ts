@@ -648,9 +648,17 @@ export class Game extends Scene {
 					}
 				}
 
-				// Prefer slot.totalWin when provided (includes full tumble sequence)
-				const slotTotalWinRaw = (spinData.slot as any)?.totalWin;
-				const slotTotalWin = Number(slotTotalWinRaw);
+				// In bonus mode, prefer the matched current free-spin item's totalWin/subTotalWin.
+				// slot.totalWin can be cumulative across the entire bonus and would overstate
+				// the win dialog amount for the current spin.
+				let freeSpinItemTotalWin = 0;
+				if (gameStateManager.isBonus && freeSpinItem) {
+					const itemTotalRaw = (freeSpinItem as any).totalWin ?? (freeSpinItem as any).subTotalWin ?? 0;
+					const itemTotal = Number(itemTotalRaw);
+					if (Number.isFinite(itemTotal) && itemTotal > 0) {
+						freeSpinItemTotalWin = itemTotal;
+					}
+				}
 
 				const slotTumbles = spinData.slot?.tumbles || [];
 				const bonusTumbles = freeSpinItem?.tumbles;
@@ -660,9 +668,9 @@ export class Game extends Scene {
 				const tumbleResult = this.calculateTotalWinFromTumbles(tumblesToUse);
 				const hasCluster = tumbleResult.hasCluster;
 
-				if (Number.isFinite(slotTotalWin) && slotTotalWin > 0) {
-					console.log(`[Game] WIN_STOP: Using slot.totalWin=${slotTotalWin}`);
-					totalWin = slotTotalWin;
+				if (freeSpinItemTotalWin > 0) {
+					console.log(`[Game] WIN_STOP: Using matched freespin item totalWin=${freeSpinItemTotalWin}`);
+					totalWin = freeSpinItemTotalWin;
 				} else {
 					totalWin = tumbleResult.totalWin;
 				}
