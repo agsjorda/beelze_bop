@@ -6,6 +6,7 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { PaylineData } from '../../backend/SpinData';
 import { CurrencyManager } from './CurrencyManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
 
 export class Header {
@@ -439,7 +440,7 @@ export class Header {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
 		const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-		const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		const formatted = formatCurrencyNumber(amount);
 		return `${currencyPrefix}${currencyPrefix ? ' ' : ''}${formatted}`;
 	}
 

@@ -4,6 +4,7 @@ import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameStateManager } from "../../managers/GameStateManager";
 import { ensureSpineFactory } from "../../utils/SpineGuard";
 import { CurrencyManager } from "./CurrencyManager";
+import { formatCurrencyNumber } from "../../utils/NumberPrecisionFormatter";
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -258,7 +259,7 @@ export class AutoplayOptions {
 		// Check if demo mode is active - if so, use blank currency prefix
 		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const prefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-		const balanceAmount = scene.add.text(150, 1, `${prefix}${prefix ? ' ' : ''}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
+		const balanceAmount = scene.add.text(150, 1, `${prefix}${prefix ? ' ' : ''}${formatCurrencyNumber(this.currentBalance)}`, {
 			fontSize: '20px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
@@ -381,7 +382,7 @@ export class AutoplayOptions {
 		
 		// Bet display
 		const displayPrefix = ((scene as any).gameAPI?.getDemoState?.() ? '' : CurrencyManager.getCurrencyCode());
-		this.autoplayDisplay = scene.add.text(x, y, `${displayPrefix}${displayPrefix ? ' ' : ''}${this.currentBet.toFixed(2)}` , {
+		this.autoplayDisplay = scene.add.text(x, y, `${displayPrefix}${displayPrefix ? ' ' : ''}${formatCurrencyNumber(this.currentBet)}` , {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -567,7 +568,7 @@ export class AutoplayOptions {
 			const displayBet = this.isEnhancedBet ? this.currentBet * 1.25 : this.currentBet;
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const prefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			this.autoplayDisplay.setText(`${prefix}${prefix ? ' ' : ''}${displayBet.toFixed(2)}`);
+			this.autoplayDisplay.setText(`${prefix}${prefix ? ' ' : ''}${formatCurrencyNumber(displayBet)}`);
 		}
 	}
 
@@ -575,7 +576,7 @@ export class AutoplayOptions {
 		if (this.balanceAmountText) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const prefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			this.balanceAmountText.setText(`${prefix}${prefix ? ' ' : ''}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+			this.balanceAmountText.setText(`${prefix}${prefix ? ' ' : ''}${formatCurrencyNumber(this.currentBalance)}`);
 		}
 	}
 

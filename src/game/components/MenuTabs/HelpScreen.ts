@@ -10,6 +10,7 @@ import { howToPlayContent } from './help_screen_content/HowToPlayContent';
 import { tumbleWinContent } from './help_screen_content/TumbleWinContent';
 import { localizationManager } from '../../../managers/LocalizationManager';
 import { CurrencyManager } from '../CurrencyManager';
+import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
 
 type TextStyle = Phaser.Types.GameObjects.Text.TextStyle;
 
@@ -177,10 +178,7 @@ export class HelpScreen {
             const amount = parseFloat(amountStr);
             if (!isNaN(amount)) {
                 const currencyPrefix = CurrencyManager.getCurrencyCode();
-                const formatted = amount.toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                });
+                const formatted = formatCurrencyNumber(amount);
                 return currencyPrefix ? `${currencyPrefix}\u00A0${formatted}` : formatted;
             }
             return match; // Return original if parsing fails

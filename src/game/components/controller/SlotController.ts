@@ -19,6 +19,7 @@ import { MenuButtonController } from './MenuButtonController';
 import { BuyFeatureController } from './BuyFeatureController';
 import { BalanceController } from './BalanceController';
 import { CurrencyManager } from '../CurrencyManager';
+import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
 import { 
 	BetController, 
 	AutoplayController, 
@@ -2216,7 +2217,7 @@ export class SlotController {
 			const gameData = this.getGameData();
 			if (gameData && gameData.isEnhancedBet && this.betAmountText) {
 				const increasedBet = betAmount * 1.25;
-				this.betAmountText.setText(increasedBet.toFixed(2));
+				this.betAmountText.setText(formatCurrencyNumber(increasedBet));
 				this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 				// Amount text is already centered, no need to reposition
 			}
@@ -2231,7 +2232,7 @@ export class SlotController {
 		const isEnhanced = !!gameData?.isEnhancedBet;
 		const displayBet = isEnhanced ? betAmount * 1.25 : betAmount;
 		if (this.betAmountText) {
-			this.betAmountText.setText(displayBet.toFixed(2));
+			this.betAmountText.setText(formatCurrencyNumber(displayBet));
 			this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 			// Amount text is already centered, no need to reposition
 		}
@@ -2263,8 +2264,7 @@ export class SlotController {
 		// Always use base bet for Buy Feature price; enhanced bet's +25% is display-only
 		const baseBet = this.getBaseBetAmount() || 0;
 		const price = baseBet * 100;
-		// Format with thousands separators and 2 decimals
-		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+		this.featureAmountText.setText(formatCurrencyNumber(price));
 		this.fitHudTextToWidth(this.featureAmountText, this.buyFeatureAmountMaxWidth);
 		// Amount text is already centered, no need to reposition
 	}
@@ -3357,7 +3357,7 @@ export class SlotController {
 		// Only update the display, keep baseBetAmount unchanged for API calls.
 		// Do not show or layout currency here - bet display uses "BET (USD)" label above and amount only between -/+.
 		if (this.betAmountText) {
-			this.betAmountText.setText(increasedBet.toFixed(2));
+			this.betAmountText.setText(formatCurrencyNumber(increasedBet));
 			this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 			if (this.betDollarText) this.betDollarText.setVisible(false);
 		}
@@ -3374,7 +3374,7 @@ export class SlotController {
 	private restoreOriginalBetAmount(): void {
 		// Restore display to base bet amount. Keep currency hidden (label above shows "BET (USD)").
 		if (this.betAmountText) {
-			this.betAmountText.setText(this.baseBetAmount.toFixed(2));
+			this.betAmountText.setText(formatCurrencyNumber(this.baseBetAmount));
 			this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 			if (this.betDollarText) this.betDollarText.setVisible(false);
 		}

@@ -1,5 +1,6 @@
 import type { SlotInitializeData } from "../../backend/GameAPI";
 import { Scene, GameObjects } from "phaser";
+import { formatCurrencyNumber } from "../../utils/NumberPrecisionFormatter";
 
 type CurrencyInit = Pick<SlotInitializeData, "currency" | "currencySymbol">;
 
@@ -88,9 +89,16 @@ export class CurrencyManager {
 	public static formatAmount(amount: number, decimals = 2): string {
 		const safe = Number.isFinite(amount) ? amount : 0;
 		const currencyCode = CurrencyManager.getCurrencyCode();
-		// Ensure there's always a space between currency and amount
 		const space = currencyCode ? ' ' : '';
-		return currencyCode ? `${currencyCode}${space}${safe.toFixed(decimals)}` : safe.toFixed(decimals);
+		const normalizedDecimals = Number.isFinite(decimals) ? Math.max(0, Math.floor(decimals)) : 2;
+		const formatted =
+			normalizedDecimals === 2
+				? formatCurrencyNumber(safe)
+				: safe.toLocaleString("en-US", {
+					minimumFractionDigits: normalizedDecimals,
+					maximumFractionDigits: normalizedDecimals,
+				});
+		return currencyCode ? `${currencyCode}${space}${formatted}` : formatted;
 	}
 
 	/**

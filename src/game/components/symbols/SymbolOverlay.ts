@@ -19,6 +19,7 @@ import {
 } from './constants';
 import { MultiplierSymbols } from './MultiplierSymbols';
 import { CurrencyManager } from '../CurrencyManager';
+import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
 
 /**
  * Manages overlay graphics and win text for the symbol grid
@@ -247,14 +248,11 @@ export class SymbolOverlay {
         if (Number.isInteger(amount)) {
           textValue = `${amount}`;
         } else {
-          textValue = Number(amount).toFixed(2);
+          textValue = formatCurrencyNumber(Number(amount));
         }
       } else {
         // Use currency code (prefer code over symbol, matching WinTracker pattern)
-        const formattedAmount = amount.toLocaleString('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        });
+        const formattedAmount = formatCurrencyNumber(amount);
         const currencyCode = CurrencyManager.getCurrencyCode();
         textValue = currencyCode ? `${currencyCode}\u00A0${formattedAmount}` : formattedAmount;
       }

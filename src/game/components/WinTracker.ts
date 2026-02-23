@@ -6,6 +6,7 @@ import { Logger } from '../../utils/Logger';
 import { getMultiplierValue, isMultiplierSymbol } from '../../types/SymbolTypes';
 import { CurrencyManager } from './CurrencyManager';
 import { gameStateManager } from '../../managers/GameStateManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
 interface WinTrackerLayoutOptions {
   offsetX?: number;
@@ -388,7 +389,7 @@ export class WinTracker {
       (() => {
         const isDemo = (this.scene as any).gameAPI?.getDemoState();
         const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
-        return `${currencyPrefix}${data.totalWin.toFixed(2)}`;
+        return `${currencyPrefix}${formatCurrencyNumber(data.totalWin)}`;
       })(),
       {
         fontSize: `${this.labelFontSize}px`,

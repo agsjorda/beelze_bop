@@ -838,7 +838,7 @@ export class Dialogs {
 			scale: 0.3,
 			spacing: 0,
 			alignment: 'center',
-			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
+			decimalPlaces: freeSpins !== undefined ? 0 : 3, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
 			// For total win dialog use currency code (not symbol) so e.g. Tunisian "." doesn't render as extra dot in NumberDisplay.
 			prefix: isTotalWinDialog ? (isDemo ? '' : (CurrencyManager.getCurrencyCode() ? `${CurrencyManager.getCurrencyCode()} ` : '')) : '',

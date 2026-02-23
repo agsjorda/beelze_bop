@@ -4,6 +4,7 @@ import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { CurrencyManager } from './CurrencyManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
 export class BonusHeader {
 	private bonusHeaderContainer!: Phaser.GameObjects.Container;
@@ -642,12 +643,7 @@ export class BonusHeader {
 	 */
 	private formatCurrency(amount: number): string {
 		const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
-
-		// Format with commas for thousands and 2 decimal places
-		const formatted = new Intl.NumberFormat('en-US', {
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 2
-		}).format(amount);
+		const formatted = formatCurrencyNumber(amount);
 
 		if (isDemo) {
 			return formatted;
@@ -666,8 +662,7 @@ export class BonusHeader {
 		if (Number.isFinite(amount) && Math.abs(amount - Math.round(amount)) < 1e-6) {
 			return Math.round(amount).toString();
 		}
-		const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-		return formatted;
+		return formatCurrencyNumber(amount);
 	}
 
 	/**
@@ -678,7 +673,7 @@ export class BonusHeader {
 		if (Number.isFinite(amount) && Math.abs(amount - Math.round(amount)) < 1e-6) {
 			return Math.round(amount).toString();
 		}
-		return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		return formatCurrencyNumber(amount);
 	}
 
 	/**

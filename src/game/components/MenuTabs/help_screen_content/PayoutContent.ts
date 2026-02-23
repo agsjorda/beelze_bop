@@ -1,5 +1,6 @@
 import type { BorderOpts, ContentItem, ContentSection, GridCell, TextOpts } from '../ContentSection';
 import { CurrencyManager } from '../../CurrencyManager';
+import { formatCurrencyNumber } from '../../../../utils/NumberPrecisionFormatter';
 
 interface PayoutContentOptions {
     defaultOuterBorderStyle: BorderOpts;
@@ -79,10 +80,7 @@ const symbolPayoutPayoutTextOpts: TextOpts = {
  * Formats a payout value to a string with 2 decimal places.
  */
 function formatPayout(value: number): string {
-    return value.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
+    return formatCurrencyNumber(value);
 }
 
 /**

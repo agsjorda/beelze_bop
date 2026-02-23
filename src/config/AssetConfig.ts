@@ -471,7 +471,7 @@ export class AssetConfig {
 		return {
 			audio: {
 				// Menu/UI clicks
-				'click_bz': 'assets/sounds/click_sw.ogg',
+				'click_bz': 'assets/sounds/SFX/click_1.ogg',
 				//BG sounds
 				'mainbg_bz': 'assets/sounds/BG/mainbg_BB.ogg',
 				'bonusbg_bz': 'assets/sounds/BG/bonusbg_BB.ogg',

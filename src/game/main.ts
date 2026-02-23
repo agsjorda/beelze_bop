@@ -1,6 +1,6 @@
 import { Boot } from './scenes/Boot';
 import { Game as MainGame } from './scenes/Game';
-import { AUTO, Game } from 'phaser';
+import { Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
 import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
 
@@ -53,28 +53,24 @@ function installAudioContextGuards(): void {
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 
 const config: Phaser.Types.Core.GameConfig = {
-    type: Phaser.WEBGL,
-    width: 428,
-    height: 926,
-    parent: 'game-container',
-    backgroundColor: 'transparent',
-		scale: {
-			mode: Phaser.Scale.FIT,
-			autoCenter: Phaser.Scale.CENTER_BOTH
-		},
-    physics: {
-        default: 'arcade',
-        arcade: {
-            gravity: { x: 0, y: 1000 },
-            debug: false
-        }
-    },
-    scene: [
-        Boot,
-        Preloader,
-        MainGame,
-    ],
-    plugins: {
+	type: Phaser.WEBGL,
+	width: 428,
+	height: 926,
+	parent: 'game-container',
+	backgroundColor: 'transparent',
+	scale: {
+		mode: Phaser.Scale.FIT,
+		autoCenter: Phaser.Scale.CENTER_BOTH
+	},
+	physics: {
+		default: 'arcade',
+		arcade: {
+			gravity: { x: 0, y: 1000 },
+			debug: false
+		}
+	},
+	scene: [Boot, Preloader, MainGame],
+	plugins: {
 		scene: [
 			{
 				key: 'spine.SpinePlugin',
@@ -83,17 +79,20 @@ const config: Phaser.Types.Core.GameConfig = {
 			}
 		]
 	},
-    render: {
+	render: {
 		antialias: true,
-		clearBeforeRender: false,
-	},
-    
+		clearBeforeRender: false
+	}
 };
 
 const StartGame = (parent: string) => {
 	installAudioContextGuards();
+
 	// Visibility-aware audio muting without suspending AudioContext
 	const installAudioVisibilityPolicy = (game: Phaser.Game) => {
+		let windowHasFocus =
+			typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+
 		const applyMuteToAllScenes = (muted: boolean) => {
 			try {
 				const gameSound = (game as any).sound;
@@ -102,7 +101,7 @@ const StartGame = (parent: string) => {
 				}
 			} catch {}
 			try {
-				const scenes = (game.scene as any).getScenes(false) as Phaser.Scene[] || [];
+				const scenes = ((game.scene as any).getScenes(false) as Phaser.Scene[]) || [];
 				for (const s of scenes) {
 					if ((s as any).sound) {
 						((s as any).sound as any).mute = !!muted;
@@ -110,6 +109,7 @@ const StartGame = (parent: string) => {
 				}
 			} catch {}
 		};
+
 		const applyPauseToGameLoop = (paused: boolean) => {
 			try {
 				if (paused) {
@@ -119,6 +119,7 @@ const StartGame = (parent: string) => {
 				}
 			} catch {}
 		};
+
 		const shouldUnmute = (): boolean => {
 			try {
 				const am: any = (window as any).audioManager;
@@ -129,174 +130,233 @@ const StartGame = (parent: string) => {
 			} catch {}
 			return true;
 		};
+
 		const onHidden = () => {
 			applyMuteToAllScenes(true);
 			applyPauseToGameLoop(true);
 		};
-		const onVisible = () => {
-			applyPauseToGameLoop(false);
-			if (shouldUnmute()) {
-				applyMuteToAllScenes(false);
-			}
-		};
-		const shouldPauseFromPageState = (): boolean => {
+
+		const isPageHidden = (): boolean => {
 			try {
-				// Pause only when the page is actually backgrounded/hidden.
-				// Do not pause on focus shifts like opening/using DevTools in the same tab.
 				return document.visibilityState === 'hidden' || (document as any).hidden;
 			} catch {
 				return false;
 			}
 		};
+
 		const handleActivityState = () => {
-			if (shouldPauseFromPageState()) {
+			if (isPageHidden()) {
 				onHidden();
 			} else {
-				onVisible();
+				// Keep gameplay running when page is visible.
+				// Blur-visible state mutes audio only; hidden state pauses the game loop.
+				applyPauseToGameLoop(false);
+				if (!windowHasFocus) {
+					applyMuteToAllScenes(true);
+					return;
+				}
+				applyMuteToAllScenes(!shouldUnmute());
 			}
 		};
+
+		const handleWindowBlur = () => {
+			windowHasFocus = false;
+			handleActivityState();
+		};
+
+		const handleWindowFocus = () => {
+			windowHasFocus =
+				typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+			handleActivityState();
+		};
+
+		const handlePageShow = () => {
+			windowHasFocus =
+				typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+			handleActivityState();
+		};
+
+		// Keep focus status in sync even if some browsers don't reliably emit blur/focus
+		// during DevTools interaction.
+		const focusPoll = window.setInterval(() => {
+			try {
+				if (typeof document.hasFocus !== 'function') return;
+				const hasFocus = document.hasFocus();
+				if (hasFocus !== windowHasFocus) {
+					windowHasFocus = hasFocus;
+					handleActivityState();
+				}
+			} catch {}
+		}, 100);
+		try {
+			const coreEvents: any = (Phaser as any).Core?.Events;
+			if (coreEvents?.DESTROY) {
+				game.events.once(coreEvents.DESTROY, () => {
+					window.clearInterval(focusPoll);
+				});
+			}
+		} catch {}
+
 		document.addEventListener('visibilitychange', handleActivityState);
-		window.addEventListener('blur', handleActivityState);
-		window.addEventListener('focus', handleActivityState);
+		window.addEventListener('blur', handleWindowBlur);
+		window.addEventListener('focus', handleWindowFocus);
 		window.addEventListener('pagehide', onHidden);
-		window.addEventListener('pageshow', handleActivityState);
+		window.addEventListener('pageshow', handlePageShow);
 		// Initial application
 		handleActivityState();
 	};
-    // Helper to detect mobile devices (coarse heuristic)
-    const isMobile = (): boolean => {
-        try {
-            const ua = navigator.userAgent || (navigator as any).vendor || (window as any).opera;
-            return /android|iphone|ipad|ipod|iemobile|blackberry|mobile/i.test(ua);
-        } catch (_e) {
-            return false;
-        }
-    };
 
-    const game = new Game({ ...config, parent });
+	// Helper to detect mobile devices (coarse heuristic)
+	const isMobile = (): boolean => {
+		try {
+			const ua = navigator.userAgent || (navigator as any).vendor || (window as any).opera;
+			return /android|iphone|ipad|ipod|iemobile|blackberry|mobile/i.test(ua);
+		} catch (_e) {
+			return false;
+		}
+	};
+
+	const game = new Game({ ...config, parent });
 	installAudioVisibilityPolicy(game);
 
-    if (isMobile()) {
-        try {
-            const appElement = document.getElementById('root');
-            const container = document.getElementById(parent) || appElement;
-            const getViewportSize = () => {
-                const vv = (window as any).visualViewport;
-                const width = vv && vv.width ? Math.round(vv.width) : window.innerWidth;
-                const height = vv && vv.height ? Math.round(vv.height) : window.innerHeight;
-                return { width, height };
-            };
-            const applyContainerSize = () => {
-                const { height } = getViewportSize();
-                if (appElement) {
-                    (appElement as HTMLElement).style.width = '100vw';
-                    (appElement as HTMLElement).style.height = `${height}px`;
-                }
-                if (container) {
-                    (container as HTMLElement).style.width = '100vw';
-                    (container as HTMLElement).style.height = `${height}px`;
-                }
-            };
-            const scheduleScaleRefresh = () => {
-                try { game.scale.refresh(); } catch (_e) { /* no-op */ }
-                [60, 180, 360, 720].forEach((ms) => {
-                    window.setTimeout(() => {
-                        applyContainerSize();
-                        try { game.scale.refresh(); } catch (_e) { /* no-op */ }
-                    }, ms);
-                });
-            };
-            applyContainerSize();
-            if (appElement) {
-                (appElement.style as any).display = appElement.style.display || 'flex';
-                (appElement.style as any).justifyContent = appElement.style.justifyContent || 'center';
-                (appElement.style as any).alignItems = appElement.style.alignItems || 'center';
-            }
-            if (container) {
-                (container.style as any).aspectRatio = '';
-                container.style.maxWidth = '100vw';
-                container.style.maxHeight = '100vh';
-            }
-            const onViewportChange = () => {
-                applyContainerSize();
-                scheduleScaleRefresh();
-            };
-            onViewportChange();
-            window.addEventListener('resize', onViewportChange);
-            window.addEventListener('orientationchange', onViewportChange as any);
-            const vv = (window as any).visualViewport;
-            if (vv && vv.addEventListener) {
-                vv.addEventListener('resize', onViewportChange);
-            }
-        } catch (_err) { /* no-op */ }
-        try {
-            const appElement = document.getElementById('root');
-            const container = document.getElementById(parent) || appElement;
-            const canvas = game.canvas as HTMLCanvasElement | null;
-            if (canvas) {
-                const noopPrevent = (e: Event) => { e.preventDefault(); };
-                canvas.addEventListener('touchstart', noopPrevent, { passive: false });
-                canvas.addEventListener('touchmove', noopPrevent, { passive: false });
-                canvas.addEventListener('touchend', noopPrevent, { passive: false });
-                canvas.addEventListener('touchcancel', noopPrevent, { passive: false });
-            }
-            const applyTouchSafeStyles = (el: HTMLElement | null | undefined) => {
-                if (!el) return;
-                el.style.touchAction = 'none';
-                (el.style as any).msTouchAction = 'none';
-                el.style.userSelect = 'none';
-                (el.style as any).webkitUserSelect = 'none';
-                (el.style as any).webkitTapHighlightColor = 'transparent';
-                (el.style as any).overscrollBehavior = 'contain';
-            };
-            applyTouchSafeStyles(appElement as HTMLElement);
-            applyTouchSafeStyles(container as HTMLElement);
-            applyTouchSafeStyles(canvas as unknown as HTMLElement);
-        } catch (_e) { /* no-op */ }
-        if (game.canvas && !game.canvas.hasAttribute('tabindex')) {
-            game.canvas.setAttribute('tabindex', '0');
-        }
-    }
+	if (isMobile()) {
+		try {
+			const appElement = document.getElementById('root');
+			const container = document.getElementById(parent) || appElement;
+			const getViewportSize = () => {
+				const vv = (window as any).visualViewport;
+				const width = vv && vv.width ? Math.round(vv.width) : window.innerWidth;
+				const height = vv && vv.height ? Math.round(vv.height) : window.innerHeight;
+				return { width, height };
+			};
+			const applyContainerSize = () => {
+				const { height } = getViewportSize();
+				if (appElement) {
+					(appElement as HTMLElement).style.width = '100vw';
+					(appElement as HTMLElement).style.height = `${height}px`;
+				}
+				if (container) {
+					(container as HTMLElement).style.width = '100vw';
+					(container as HTMLElement).style.height = `${height}px`;
+				}
+			};
+			const scheduleScaleRefresh = () => {
+				try {
+					game.scale.refresh();
+				} catch (_e) {
+					/* no-op */
+				}
+				[60, 180, 360, 720].forEach((ms) => {
+					window.setTimeout(() => {
+						applyContainerSize();
+						try {
+							game.scale.refresh();
+						} catch (_e) {
+							/* no-op */
+						}
+					}, ms);
+				});
+			};
+			applyContainerSize();
+			if (appElement) {
+				(appElement.style as any).display = appElement.style.display || 'flex';
+				(appElement.style as any).justifyContent = appElement.style.justifyContent || 'center';
+				(appElement.style as any).alignItems = appElement.style.alignItems || 'center';
+			}
+			if (container) {
+				(container.style as any).aspectRatio = '';
+				container.style.maxWidth = '100vw';
+				container.style.maxHeight = '100vh';
+			}
+			const onViewportChange = () => {
+				applyContainerSize();
+				scheduleScaleRefresh();
+			};
+			onViewportChange();
+			window.addEventListener('resize', onViewportChange);
+			window.addEventListener('orientationchange', onViewportChange as any);
+			const vv = (window as any).visualViewport;
+			if (vv && vv.addEventListener) {
+				vv.addEventListener('resize', onViewportChange);
+			}
+		} catch (_err) {
+			/* no-op */
+		}
+		try {
+			const appElement = document.getElementById('root');
+			const container = document.getElementById(parent) || appElement;
+			const canvas = game.canvas as HTMLCanvasElement | null;
+			if (canvas) {
+				const noopPrevent = (e: Event) => {
+					e.preventDefault();
+				};
+				canvas.addEventListener('touchstart', noopPrevent, { passive: false });
+				canvas.addEventListener('touchmove', noopPrevent, { passive: false });
+				canvas.addEventListener('touchend', noopPrevent, { passive: false });
+				canvas.addEventListener('touchcancel', noopPrevent, { passive: false });
+			}
+			const applyTouchSafeStyles = (el: HTMLElement | null | undefined) => {
+				if (!el) return;
+				el.style.touchAction = 'none';
+				(el.style as any).msTouchAction = 'none';
+				el.style.userSelect = 'none';
+				(el.style as any).webkitUserSelect = 'none';
+				(el.style as any).webkitTapHighlightColor = 'transparent';
+				(el.style as any).overscrollBehavior = 'contain';
+			};
+			applyTouchSafeStyles(appElement as HTMLElement);
+			applyTouchSafeStyles(container as HTMLElement);
+			applyTouchSafeStyles(canvas as unknown as HTMLElement);
+		} catch (_e) {
+			/* no-op */
+		}
+		if (game.canvas && !game.canvas.hasAttribute('tabindex')) {
+			game.canvas.setAttribute('tabindex', '0');
+		}
+	}
 
-    (window as any).phaserGame = game;
-    const appElement = document.getElementById('root');
-    if (appElement) {
-        (game.scale as any).fullscreenTarget = appElement as unknown as HTMLElement;
-    }
-    game.scale.on('leavefullscreen', () => {
-        game.canvas?.focus();
-    });
-    const onFsChange = () => {
-        if (!game.scale.isFullscreen) {
-            game.canvas?.focus();
-        }
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    // @ts-ignore - Safari legacy prefix
-    document.addEventListener('webkitfullscreenchange', onFsChange);
-    const lockPortraitIfPossible = async () => {
-        try {
-            // @ts-ignore - not universally typed
-            if ((screen as any) && (screen as any).orientation && (screen as any).orientation.lock) {
-                // @ts-ignore
-                await (screen as any).orientation.lock('portrait');
-            }
-        } catch (_e) { /* no-op */ }
-    };
-    game.scale.on('enterfullscreen', lockPortraitIfPossible);
-    game.scale.on('resize', () => {
-        try {
-            const root = document.getElementById('root');
-            if (root) {
-                const vv = (window as any).visualViewport;
-                const height = vv && vv.height ? Math.round(vv.height) : window.innerHeight;
-                (root as HTMLElement).style.height = `${height}px`;
-            }
-        } catch (_e) { /* no-op */ }
-    });
+	(window as any).phaserGame = game;
+	const appElement = document.getElementById('root');
+	if (appElement) {
+		(game.scale as any).fullscreenTarget = appElement as unknown as HTMLElement;
+	}
+	game.scale.on('leavefullscreen', () => {
+		game.canvas?.focus();
+	});
+	const onFsChange = () => {
+		if (!game.scale.isFullscreen) {
+			game.canvas?.focus();
+		}
+	};
+	document.addEventListener('fullscreenchange', onFsChange);
+	// @ts-ignore - Safari legacy prefix
+	document.addEventListener('webkitfullscreenchange', onFsChange);
+	const lockPortraitIfPossible = async () => {
+		try {
+			// @ts-ignore - not universally typed
+			if ((screen as any) && (screen as any).orientation && (screen as any).orientation.lock) {
+				// @ts-ignore
+				await (screen as any).orientation.lock('portrait');
+			}
+		} catch (_e) {
+			/* no-op */
+		}
+	};
+	game.scale.on('enterfullscreen', lockPortraitIfPossible);
+	game.scale.on('resize', () => {
+		try {
+			const root = document.getElementById('root');
+			if (root) {
+				const vv = (window as any).visualViewport;
+				const height = vv && vv.height ? Math.round(vv.height) : window.innerHeight;
+				(root as HTMLElement).style.height = `${height}px`;
+			}
+		} catch (_e) {
+			/* no-op */
+		}
+	});
 
-    return game;
-
-}
+	return game;
+};
 
 export default StartGame;

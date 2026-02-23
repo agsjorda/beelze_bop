@@ -46,6 +46,7 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { Character } from '../components/Character';
 import { CurrencyManager } from '../components/CurrencyManager';
 import { IdleManager } from '../components/IdleManager';
+import { setDecimalPlaces } from '../../utils/NumberPrecisionFormatter';
 
 export class Game extends Scene {
 	private networkManager!: NetworkManager;
@@ -75,10 +76,13 @@ export class Game extends Scene {
 
 	private idleManager: IdleManager | null = null;
 	private onPointerDownResetIdle?: () => void;
+	private onPointerDownGlobalClick?: (pointer: Phaser.Input.Pointer) => void;
 
 	// Queue for wins that occur while a dialog is already showing
 	private winQueue: Array<{ payout: number; bet: number }> = [];
 	private suppressWinDialogsUntilNextSpin: boolean = false;
+	private pendingHistorySpinData: any | null = null;
+	private historyRefreshDeferredUntilBonusEnd: boolean = false;
 
 	public gameData: GameData;
 	private symbols: Symbols;
@@ -186,6 +190,52 @@ export class Game extends Scene {
 	public getBaseBetAmount(): number {
 		const base = this.slotController?.getBaseBetAmount?.();
 		return typeof base === 'number' && base > 0 ? base : 1;
+	}
+
+	private hasFreeSpinAwardFromSpinData(spinData: any): boolean {
+		try {
+			const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+			const items = Array.isArray(fs?.items) ? fs.items : [];
+			const count = Number(fs?.count || 0);
+			const spinsLeft = Number(items?.[0]?.spinsLeft ?? fs?.spinsLeft ?? 0);
+			return items.length > 0 || count > 0 || spinsLeft > 0;
+		} catch {
+			return false;
+		}
+	}
+
+	private queueHistoryUpdateFromSpinData(spinData: any): void {
+		if (!spinData) return;
+		this.pendingHistorySpinData = spinData;
+		const shouldWaitForBonusCompletion =
+			this.gameStateManager.isBonus || this.hasFreeSpinAwardFromSpinData(spinData);
+		if (shouldWaitForBonusCompletion) {
+			this.historyRefreshDeferredUntilBonusEnd = true;
+			this.menu?.setHistoryRefreshBlocked?.(true);
+		}
+	}
+
+	private flushHistoryUpdateAfterTumbleSequence(): void {
+		if (!this.pendingHistorySpinData) return;
+		if (this.historyRefreshDeferredUntilBonusEnd) return;
+		const spinData = this.pendingHistorySpinData;
+		this.pendingHistorySpinData = null;
+		try {
+			this.menu?.appendLiveHistoryEntryFromSpinData?.(this, spinData);
+			this.time.delayedCall(350, () => {
+				this.menu?.requestHistoryRefresh?.(this, 'post-tumble', { silent: true });
+			});
+		} catch {}
+	}
+
+	private flushHistoryUpdateAfterBonusCompletion(): void {
+		if (!this.historyRefreshDeferredUntilBonusEnd) return;
+		this.historyRefreshDeferredUntilBonusEnd = false;
+		this.pendingHistorySpinData = null;
+		this.menu?.setHistoryRefreshBlocked?.(false);
+		this.time.delayedCall(600, () => {
+			this.menu?.requestHistoryRefresh?.(this, 'post-bonus', { silent: true });
+		});
 	}
 
 	preload() {
@@ -394,6 +444,8 @@ export class Game extends Scene {
 			const initData = this.gameAPI.getInitializationData();
 			const initFsRemaining = this.gameAPI.getRemainingInitFreeSpins();
 			const initFsBet = this.gameAPI.getInitFreeSpinBet();
+			const initCurrencyPlaces = Number((initData as any)?.currencyDecimalPlaces);
+			setDecimalPlaces(Number.isFinite(initCurrencyPlaces) ? initCurrencyPlaces : 2);
 			CurrencyManager.initializeFromInitData(initData);
 			this.slotController?.refreshCurrencySymbols?.();
 
@@ -538,6 +590,9 @@ export class Game extends Scene {
 			this.menu.toggleMenu(this);
 		});
 
+		// Add global click handler for non-interactive areas
+		this.setupGlobalClickHandler();
+
 		EventBus.on('show-bet-options', () => {
 			console.log('[Game] Showing bet options with fade-in effect');
 
@@ -578,8 +633,10 @@ export class Game extends Scene {
 		EventBus.on('autoplay', () => {
 			console.log('[Game] Autoplay button clicked - showing options');
 
-			const currentBetText = this.slotController.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+			// Use base bet as source of truth; display value is derived via isEnhancedBet.
+			const currentBaseBet = this.slotController.getBaseBetAmount() || 0.20;
+			const currentDisplayText = this.slotController.getBetAmountText();
+			const currentDisplayBet = currentDisplayText ? parseFloat(currentDisplayText) : currentBaseBet;
 
 			// Get the most current balance as a numeric value from the SlotController
 			const currentBalance = this.slotController.getBalanceAmount();
@@ -588,7 +645,8 @@ export class Game extends Scene {
 
 			this.autoplayOptions.show({
 				currentAutoplayCount: 10,
-				currentBet: currentBet,
+				currentBet: currentBaseBet,
+				currentBetDisplay: currentDisplayBet,
 				currentBalance: currentBalance,
 				isEnhancedBet: this.gameData?.isEnhancedBet,
 				onClose: () => {
@@ -599,12 +657,13 @@ export class Game extends Scene {
 					// Read the bet selected within the autoplay panel
 					const selectedBet = this.autoplayOptions.getCurrentBet();
 					// If bet changed, update UI and backend
-					if (Math.abs(selectedBet - currentBet) > 0.0001) {
+					if (Math.abs(selectedBet - currentBaseBet) > 0.0001) {
 						// Use a dedicated API so amplify/enhance bet is preserved when active
 						this.slotController.updateBetAmountFromAutoplay(selectedBet);
-						gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: selectedBet, previousBet: currentBet });
+						gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: selectedBet, previousBet: currentBaseBet });
 					}
-					console.log(`[Game] Total cost: $${(selectedBet * autoplayCount).toFixed(2)}`);
+					const spinCost = (this.gameData?.isEnhancedBet ? selectedBet * 1.25 : selectedBet);
+					console.log(`[Game] Total cost: $${(spinCost * autoplayCount).toFixed(2)}`);
 
 					// Start autoplay using the new SlotController method
 					this.slotController.startAutoplay(autoplayCount);
@@ -690,6 +749,9 @@ export class Game extends Scene {
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');
 			}
+
+			// History should update only after the tumble sequence has completed for non-bonus spins.
+			this.flushHistoryUpdateAfterTumbleSequence();
 		});
 
 		// Play character win animations whenever a win sequence starts
@@ -709,6 +771,16 @@ export class Game extends Scene {
 		// Listen for reel completion to handle balance updates only
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[Game] REELS_STOP event received');
+		});
+
+		// Queue history updates and flush them on round-complete boundaries.
+		// Non-scatter: flushed on WIN_STOP (after tumbles).
+		// Scatter/bonus: flushed when setBonusMode(false) fires (after free spins complete).
+		gameEventManager.on(GameEventType.SPIN_DATA_RESPONSE, (data: any) => {
+			try {
+				const spinData = data?.spinData ?? data;
+				this.queueHistoryUpdateFromSpinData(spinData);
+			} catch {}
 		});
 
 		// Ensure WinTracker is cleared (with a fade-out) as soon as reels actually start for a new spin
@@ -925,6 +997,68 @@ export class Game extends Scene {
 		});
 
 		this.idleManager.start();
+	}
+
+	/**
+	 * Setup global click handler for non-interactive areas
+	 * Plays click SFX when clicking on areas that don't have interactive elements
+	 * Only plays if no other SFX was triggered by the click
+	 */
+	private setupGlobalClickHandler(): void {
+		this.onPointerDownGlobalClick = (pointer: Phaser.Input.Pointer) => {
+			// Use a small delay to allow interactive objects to process their events first
+			// This ensures we only play the click sound if no interactive object handled the click
+			// and no other SFX was triggered
+			this.time.delayedCall(50, () => {
+				// Check if any SFX was played recently (indicating a button or interactive element handled the click)
+				if (this.audioManager && this.audioManager.wasSfxPlayedRecently(100)) {
+					console.log('[Game] SFX was already played for this click - skipping MENU_CLICK');
+					return;
+				}
+
+				// Check if any game objects at the pointer position are interactive
+				// We iterate through the scene's children to find interactive objects
+				let hasInteractiveObject = false;
+
+				// Check all game objects in the scene
+				this.children.list.forEach((child: any) => {
+					if (hasInteractiveObject) return;
+
+					// Check if the object has input and is interactive
+					if (child.input && child.input.enabled) {
+						// Check if the pointer is within the object's bounds
+						const bounds = child.getBounds ? child.getBounds() : null;
+						if (bounds) {
+							const worldX = pointer.worldX;
+							const worldY = pointer.worldY;
+							if (bounds.contains(worldX, worldY)) {
+								hasInteractiveObject = true;
+							}
+						}
+					}
+				});
+
+				// Only play click sound if no interactive objects were hit and no SFX was already played
+				if (!hasInteractiveObject && this.audioManager) {
+					// Suppress fallback click SFX on help/info content body taps.
+					// Tabs/buttons have their own handlers and keep their click sounds.
+					if (this.menu?.shouldSuppressGlobalClickSfxAt(pointer.worldX, pointer.worldY)) {
+						return;
+					}
+					this.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
+					console.log('[Game] Clicked on non-interactive area - playing click SFX');
+				}
+			});
+		};
+
+		this.input.on('pointerdown', this.onPointerDownGlobalClick);
+		this.events.once('shutdown', () => {
+			try {
+				if (this.onPointerDownGlobalClick) {
+					this.input.off('pointerdown', this.onPointerDownGlobalClick);
+				}
+			} catch {}
+		});
 	}
 
 	/**
@@ -1205,6 +1339,7 @@ export class Game extends Scene {
 
 			// Ensure winnings display stays visible and transfers to bonus header on bonus start
 			if (isBonus) {
+				this.menu?.setHistoryRefreshBlocked?.(true);
 				// Only transfer winnings if we're NOT already in bonus mode (i.e., this is the initial bonus activation)
 				// During retriggers, we're already in bonus mode, so we should preserve the accumulated total
 				const wasAlreadyInBonus = this.gameStateManager.isBonus;
@@ -1278,6 +1413,7 @@ export class Game extends Scene {
 					this.audioManager.playBackgroundMusic(MusicType.MAIN);
 					console.log('[Game] Switched to main background music');
 				}
+				this.flushHistoryUpdateAfterBonusCompletion();
 			}
 
 			// TODO: Update backend data isBonus flag if needed

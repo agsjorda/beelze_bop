@@ -52,6 +52,7 @@ export class AudioManager {
 	private savedAmbientVolume: number | null = null;
 	private duckFadeTimer: any = null;
 	private restoreFadeTimer: any = null;
+	private lastSfxPlayTime: number = 0; // Track when SFX was last played
 
 	constructor(scene: Phaser.Scene) {
 		this.scene = scene;
@@ -78,7 +79,7 @@ export class AudioManager {
 		
 		// Sound effects
 		this.scene.load.audio('spinb_bz', 'assets/sounds/SFX/spin_BB.ogg');
-		this.scene.load.audio('click_bz', 'assets/sounds/click_sw.ogg');
+		this.scene.load.audio('click_bz', 'assets/sounds/SFX/click_1.ogg');
 		this.scene.load.audio('reelroll_bz', 'assets/sounds/SFX/reelroll_BB.ogg');
 		this.scene.load.audio('reeldrop_bz', 'assets/sounds/SFX/reeldrop_BB.ogg');
 		this.scene.load.audio('scatterdrop1_bz', 'assets/sounds/SFX/symbol_win/scatter_drop_1.ogg');
@@ -767,6 +768,8 @@ export class AudioManager {
 					}
 				}
 				sfx.play();
+				// Track when SFX was played (used by global click handler)
+				this.lastSfxPlayTime = Date.now();
 				// Track current win SFX so we can fade it out on dialog close
 				if (
 					sfxType === SoundEffectType.WIN_BIG ||
@@ -915,6 +918,15 @@ export class AudioManager {
 	 */
 	getSfxVolume(): number {
 		return this.sfxVolume;
+	}
+
+	/**
+	 * Check if SFX was played recently (within the specified time window)
+	 * Used to prevent duplicate SFX from playing for the same user action
+	 */
+	wasSfxPlayedRecently(timeWindowMs: number = 100): boolean {
+		const timeSinceLastSfx = Date.now() - this.lastSfxPlayTime;
+		return timeSinceLastSfx < timeWindowMs;
 	}
 
 	/**
