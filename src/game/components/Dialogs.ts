@@ -341,8 +341,8 @@ export class Dialogs {
 			const audioManager = (window as any).audioManager;
 			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
 				const type = (this.currentDialogType || '').toLowerCase();
-				if (type === 'freespin_bz') {
-					// Use congrats_bz for the FreeSpin dialog per request
+				if (type === 'freespin_bz' || type === 'freespinretri_bz') {
+					// Use congrats_bz for the FreeSpin dialog (and retrigger) per request
 					audioManager.playSoundEffect('dialog_congrats');
 					// Duck background music similar to win dialogs
 					if (typeof audioManager.duckBackground === 'function') {
