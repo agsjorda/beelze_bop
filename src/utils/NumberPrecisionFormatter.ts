@@ -11,28 +11,24 @@ export function setDecimalPlaces(places: number): void {
 	currentDecimalPlaces = normalized;
 }
 
-export function formatCurrencyNumber(value: number, trimZeroValueDecimals = false): string {
-	const safe = Number.isFinite(value) ? value : 0;
-	const normalizedSafe = Math.abs(safe) < Number.EPSILON ? 0 : safe;
-	const effectiveDecimalPlaces = Math.max(currentDecimalPlaces, MIN_DISPLAY_DECIMAL_PLACES);
-	const fixedValue = normalizedSafe.toFixed(effectiveDecimalPlaces);
+export function formatCurrencyNumber(
+	value: number,
+	trimZeroValueDecimals: boolean = false,
+  ): string {
+	const fixedValue = value.toFixed(currentDecimalPlaces);
 	const roundedValue = Number(fixedValue);
 	const decimalPart = fixedValue.split(".")[1] ?? "";
-
 	const hasNonZeroTenths = decimalPart.length > 0 && decimalPart[0] !== "0";
-	const hasOnlyZeroesAfterTenths =
-		decimalPart.length <= 1 || /^0+$/.test(decimalPart.slice(1));
-	const enforceTwoDecimalsWhenTrimmed =
-		trimZeroValueDecimals && hasNonZeroTenths && hasOnlyZeroesAfterTenths;
-
-	const baseMinDecimals = trimZeroValueDecimals ? 0 : effectiveDecimalPlaces;
+	const ruleBasedMinDecimals = hasNonZeroTenths ? MIN_DISPLAY_DECIMAL_PLACES : 0;
+	const baseMinDecimals = trimZeroValueDecimals ? 0 : MIN_DISPLAY_DECIMAL_PLACES;
 	const minimumFractionDigits = Math.min(
-		enforceTwoDecimalsWhenTrimmed ? MIN_DISPLAY_DECIMAL_PLACES : baseMinDecimals,
-		effectiveDecimalPlaces
+	  Math.max(baseMinDecimals, ruleBasedMinDecimals),
+	  currentDecimalPlaces,
 	);
-
-	return roundedValue.toLocaleString("en-US", {
-		minimumFractionDigits,
-		maximumFractionDigits: effectiveDecimalPlaces,
+  
+	const formattedWithComma = roundedValue.toLocaleString("en-US", {
+	  minimumFractionDigits,
+	  maximumFractionDigits: currentDecimalPlaces,
 	});
+	return formattedWithComma;
 }

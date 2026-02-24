@@ -629,7 +629,7 @@ export class Menu {
         const mappedRows = (result?.data || []).map((v: any) => {
             const createdAt = typeof v?.createdAt === 'string' ? v.createdAt : new Date().toISOString();
             const spinDate = this.formatISOToDMYHM(createdAt);
-            const currency = (v?.currency || 'usd').toString().toLowerCase();
+            const currency = v.currency == '' ? 'usd' : v.currency;
             const betNum = Number(v?.bet);
             const winNum = Number(v?.win);
             const bet = Number.isFinite(betNum) ? formatCurrencyNumber(betNum) : String(v?.bet ?? '0.00');
