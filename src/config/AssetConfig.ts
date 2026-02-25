@@ -269,7 +269,6 @@ export class AssetConfig {
 
 		return {
 			fonts: {
-				'poppins-thin': 'assets/fonts/poppins/Poppins-Thin.ttf',
 				'poppins-bold': 'assets/fonts/poppins/Poppins-Bold.ttf',
 				'poppins-regular': 'assets/fonts/poppins/Poppins-Regular.ttf'
 
