@@ -2221,6 +2221,9 @@ export class SlotController {
 				this.fitHudTextToWidth(this.betAmountText, this.betAmountMaxWidth);
 				// Amount text is already centered, no need to reposition
 			}
+			// Also update the underlying base bet so future openings of the
+			// autoplay popup (and API/base-bet consumers) use this value.
+			this.baseBetAmount = betAmount;
 		} finally {
 			this.isInternalBetChange = false;
 		}

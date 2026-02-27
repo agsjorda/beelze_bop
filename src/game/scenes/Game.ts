@@ -652,6 +652,10 @@ export class Game extends Scene {
 				onClose: () => {
 					console.log('[Game] Autoplay options closed');
 				},
+				onBetChange: (betAmount: number) => {
+					// Sync SlotController/base bet + controller label live as user adjusts bet in autoplay
+					this.slotController.updateBetAmountFromAutoplay(betAmount);
+				},
 				onConfirm: (autoplayCount: number) => {
 					console.log(`[Game] Autoplay confirmed: ${autoplayCount} spins`);
 					// Read the bet selected within the autoplay panel

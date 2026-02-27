@@ -11,6 +11,7 @@ export interface AutoplayOptionsConfig {
 	scale?: number;
 	onClose?: () => void;
 	onConfirm?: (autoplayCount: number) => void;
+	onBetChange?: (betAmount: number) => void;
 	currentAutoplayCount?: number;
 	/**
 	 * Current base bet (without enhanced multiplier).
@@ -69,6 +70,7 @@ export class AutoplayOptions {
 	private enhanceBetIdleAnimation: any = null;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (autoplayCount: number) => void;
+	private onBetChangeCallback?: (betAmount: number) => void;
 
 	private getAutoplaySpinCost(): number {
 		const baseBet = this.currentBet || 0;
@@ -631,6 +633,12 @@ export class AutoplayOptions {
 		this.updateAutoplayDisplay();
 		this.updateStartAutoplayButtonState();
 		this.updateBetLimitButtons();
+		// Keep external bet (controller) in sync while adjusting inside autoplay
+		if (this.onBetChangeCallback) {
+			try {
+				this.onBetChangeCallback(this.currentBet);
+			} catch { /* ignore callback errors */ }
+		}
 	}
 
 	private selectPreviousBet(): void {
@@ -671,6 +679,7 @@ export class AutoplayOptions {
 			}
 			this.onCloseCallback = config.onClose;
 			this.onConfirmCallback = config.onConfirm;
+			this.onBetChangeCallback = config.onBetChange;
 		}
 		
 		// Update the balance display with current balance
