@@ -594,6 +594,24 @@ export class Game extends Scene {
 		this.setupGlobalClickHandler();
 
 		EventBus.on('show-bet-options', () => {
+			// Secondary safety gate: bet options should never be openable during spins or autoplay,
+			// including while tumbles are still processing.
+			const gsm: any = this.gameStateManager;
+			if (
+				gsm?.isProcessingSpin ||
+				gsm?.isReelSpinning ||
+				gsm?.isAutoPlaying ||
+				!!this.gameData?.isAutoPlaying
+			) {
+				console.log('[Game] show-bet-options blocked by game state', {
+					isProcessingSpin: gsm?.isProcessingSpin,
+					isReelSpinning: gsm?.isReelSpinning,
+					isAutoPlaying: gsm?.isAutoPlaying,
+					gameDataIsAutoPlaying: !!this.gameData?.isAutoPlaying,
+				});
+				return;
+			}
+
 			console.log('[Game] Showing bet options with fade-in effect');
 
 			// Use base bet for selection; use display bet for enhanced multiplier if active
