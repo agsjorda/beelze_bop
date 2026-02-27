@@ -91,13 +91,20 @@ export class CurrencyManager {
 		const currencyCode = CurrencyManager.getCurrencyCode();
 		const space = currencyCode ? ' ' : '';
 		const normalizedDecimals = Number.isFinite(decimals) ? Math.max(0, Math.floor(decimals)) : 2;
-		const formatted =
-			normalizedDecimals === 2
-				? formatCurrencyNumber(safe)
-				: safe.toLocaleString("en-US", {
-					minimumFractionDigits: normalizedDecimals,
-					maximumFractionDigits: normalizedDecimals,
-				});
+		let formatted: string;
+		if (normalizedDecimals === 2) {
+			formatted = formatCurrencyNumber(safe);
+		} else {
+			// Shuten-style: trim trailing zeros (e.g. 3.300 → 3.30, not 3.300)
+			const fixedValue = safe.toFixed(normalizedDecimals);
+			const decimalPart = fixedValue.split(".")[1] ?? "";
+			const hasNonZeroTenths = decimalPart.length > 0 && decimalPart[0] !== "0";
+			const minimumFractionDigits = hasNonZeroTenths ? Math.min(2, normalizedDecimals) : 0;
+			formatted = safe.toLocaleString("en-US", {
+				minimumFractionDigits,
+				maximumFractionDigits: normalizedDecimals,
+			});
+		}
 		return currencyCode ? `${currencyCode}${space}${formatted}` : formatted;
 	}
 
