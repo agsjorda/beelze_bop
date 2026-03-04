@@ -218,14 +218,7 @@ export class Game extends Scene {
 	private flushHistoryUpdateAfterTumbleSequence(): void {
 		if (!this.pendingHistorySpinData) return;
 		if (this.historyRefreshDeferredUntilBonusEnd) return;
-		const spinData = this.pendingHistorySpinData;
 		this.pendingHistorySpinData = null;
-		try {
-			this.menu?.appendLiveHistoryEntryFromSpinData?.(this, spinData);
-			this.time.delayedCall(350, () => {
-				this.menu?.requestHistoryRefresh?.(this, 'post-tumble', { silent: true });
-			});
-		} catch {}
 	}
 
 	private flushHistoryUpdateAfterBonusCompletion(): void {
@@ -233,9 +226,11 @@ export class Game extends Scene {
 		this.historyRefreshDeferredUntilBonusEnd = false;
 		this.pendingHistorySpinData = null;
 		this.menu?.setHistoryRefreshBlocked?.(false);
-		this.time.delayedCall(600, () => {
-			this.menu?.requestHistoryRefresh?.(this, 'post-bonus', { silent: true });
-		});
+		// After bonus/free-round completion, refresh history once using the same
+		// event-driven helper used for regular spins.
+		try {
+			(this.menu as any)?.refreshHistoryAfterSpin?.(this);
+		} catch {}
 	}
 
 	preload() {
@@ -774,6 +769,11 @@ export class Game extends Scene {
 
 			// History should update only after the tumble sequence has completed for non-bonus spins.
 			this.flushHistoryUpdateAfterTumbleSequence();
+
+			// If the menu History tab is open, refresh the history list once per spin.
+			try {
+				(this.menu as any)?.refreshHistoryAfterSpin?.(this);
+			} catch { /* avoid surfacing menu/history issues in core win flow */ }
 		});
 
 		// Play character win animations whenever a win sequence starts

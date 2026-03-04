@@ -67,6 +67,8 @@ export class Menu {
     private historyRefreshQueued: boolean = false;
     private historyLiveRefreshTimer: number | null = null;
     private historyRowsData: Array<{ spinDate: string; currency: string; bet: string; win: string }> = [];
+    /** Signature of the current top row; used so we only tween when a new spin reaches history. */
+    private lastHistoryTopRowSignature: string | null = null;
     private historyRefreshBlocked: boolean = false;
     private historyHeaderContainer?: GameObjects.Container;
     private historyRowsContainer?: GameObjects.Container;
@@ -465,6 +467,14 @@ export class Menu {
     }
 
     /**
+     * Public helper for Game scene to request a history refresh after each spin.
+     * This will only trigger a request when the menu + History tab are visible.
+     */
+    public refreshHistoryAfterSpin(scene: GameScene): void {
+        this.requestHistoryRefresh(scene, 'live-timer', { silent: true });
+    }
+
+    /**
      * Refresh history when History tab is open. If a fetch is in progress,
      * queue one follow-up refresh to keep data current during autoplay.
      */
@@ -654,11 +664,51 @@ export class Menu {
 
         let contentY = 100;
         const columnCenters = this.getHistoryColumnCenters(scene);
-        rows.forEach((row) => {
+        let firstRowTexts: ButtonText[] = [];
+        let firstRowSignature: string | null = null;
+
+        rows.forEach((row, index) => {
             contentY += 30;
-            this.createHistoryEntry(contentY, scene, rowsContainer, row.spinDate, row.currency, row.bet, row.win, columnCenters);
+            const rowTexts = this.createHistoryEntry(
+                contentY,
+                scene,
+                rowsContainer,
+                row.spinDate,
+                row.currency,
+                row.bet,
+                row.win,
+                columnCenters
+            );
+            if (index === 0) {
+                firstRowTexts = rowTexts;
+                firstRowSignature = `${row.spinDate}|${row.currency}|${row.bet}|${row.win}`;
+            }
             this.addDividerHistory(scene, rowsContainer, contentY);
             contentY += 20;
+        });
+
+        // Subtle scale tween on the topmost row only when a new spin entry appears.
+        if (firstRowTexts.length > 0 && firstRowSignature) {
+            if (this.lastHistoryTopRowSignature !== null && this.lastHistoryTopRowSignature !== firstRowSignature) {
+                this.applyHistoryRowUpdateTween(scene, firstRowTexts);
+            }
+            this.lastHistoryTopRowSignature = firstRowSignature;
+        }
+    }
+
+    private applyHistoryRowUpdateTween(scene: GameScene, texts: ButtonText[]): void {
+        if (!texts.length) return;
+
+        // Reset scales before applying tween
+        texts.forEach((t) => t.setScale(1));
+
+        scene.tweens.add({
+            targets: texts,
+            scaleX: 1.1,
+            scaleY: 1.1,
+            duration: 140,
+            yoyo: true,
+            ease: 'Power2'
         });
     }
 
@@ -727,8 +777,18 @@ export class Menu {
       }
       
 
-    private createHistoryEntry(y: number, scene: GameScene, contentArea: GameObjects.Container, spinDate: string, currency: string, bet: string, win: string, columnCenters: number[]): void {
+    private createHistoryEntry(
+        y: number,
+        scene: GameScene,
+        contentArea: GameObjects.Container,
+        spinDate: string,
+        currency: string,
+        bet: string,
+        win: string,
+        columnCenters: number[]
+    ): ButtonText[] {
         // Create separate text fields and center them per column
+        const texts: ButtonText[] = [];
         const values: string[] = [spinDate, currency, bet, win];
         values.forEach((value, idx) => {
             const text = scene.add.text(columnCenters[idx], y, value, {
@@ -738,7 +798,9 @@ export class Menu {
             }) as ButtonText;
             text.setOrigin(0.5, 0);
             contentArea.add(text);
+            texts.push(text);
         });
+        return texts;
     }
 
     // Compute four column centers within the content area bounds
