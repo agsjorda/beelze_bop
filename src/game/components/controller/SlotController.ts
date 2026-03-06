@@ -95,6 +95,8 @@ export class SlotController {
 	// For free spin autoplay UI sync: subtract 1 from server value for current spin
 	private shouldSubtractOneFromServerFsDisplay: boolean = false;
 	private uiFsDecrementApplied: boolean = false;
+	// Guard to ensure balance API is called only once per spin (REELS_STOP can fire twice: from Symbols + WinLineDrawer)
+	private balanceApiCalledThisSpin: boolean = false;
 	
 	// Flag to track if we're in buy feature free spins and waiting for TotalW_BZ dialog
 	private isBuyFeatureFreeSpinsActive: boolean = false;
@@ -2594,6 +2596,7 @@ export class SlotController {
 		// Listen for reels start to disable amplify button
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[SlotController] Reels started - disabling amplify button');
+			this.balanceApiCalledThisSpin = false; // Reset guard for new spin
 			// During normal-mode autoplay, do NOT disable/grey the spin button (match felice_in_space: allow stopping autoplay)
 			if (!gameStateManager.isAutoPlaying || gameStateManager.isBonus) {
 				this.disableSpinButton();
@@ -2652,14 +2655,17 @@ export class SlotController {
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[SlotController] Reels stopped event received - updating spin button state');
 			
-			// Update balance from server every time reels stop (skip during scatter/bonus)
+			// Update balance from server once per spin (REELS_STOP can fire twice: Symbols + WinLineDrawer)
 			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
 				if (this.shouldDeferBalanceSyncToTotalWinDialog()) {
 					console.log('[SlotController] Skipping REELS_STOP balance sync (buy feature/TotalW_BZ flow active)');
 				} else if (this.balanceController?.hasPendingBalanceUpdate()) {
 					console.log('[SlotController] Deferring REELS_STOP balance update (pending winnings will apply on WIN_STOP)');
-				} else {
+				} else if (!this.balanceApiCalledThisSpin) {
+					this.balanceApiCalledThisSpin = true;
 					this.updateBalanceFromServer();
+				} else {
+					console.log('[SlotController] Skipping duplicate balance API call (already called this spin)');
 				}
 			} else {
 				console.log('[SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)');
@@ -3005,12 +3011,28 @@ export class SlotController {
 				if (this.shouldDeferBalanceSyncToTotalWinDialog()) {
 					console.log('[SlotController] Skipping WIN_STOP base balance finalization (buy feature/TotalW_BZ flow active)');
 				} else if (this.balanceController?.hasPendingBalanceUpdate()) {
+					// Apply the queued local balance update first so UI reflects the win immediately.
 					this.balanceController.applyPendingBalanceUpdateIfAny();
+					
+					// Then, for spins that actually had a win (including tumble wins), perform a
+					// single server balance sync, guarded so we only call the API once per spin.
+					try {
+						const spinData = this.gameAPI?.getCurrentSpinData() || (this.scene as any)?.symbols?.currentSpinData;
+						if (this.spinDataHasWins(spinData) && !this.balanceApiCalledThisSpin) {
+							this.balanceApiCalledThisSpin = true;
+							this.updateBalanceFromServer();
+						}
+					} catch (e) {
+						console.warn('[SlotController] Failed WIN_STOP balance sync after applying pending update:', e);
+					}
 				} else {
+					// Fallback: if there was no queued pending update but the spin had a base win,
+					// trigger a one-time server balance refresh.
 					try {
 						const spinData = this.gameAPI?.getCurrentSpinData() || (this.scene as any)?.symbols?.currentSpinData;
 						const baseWin = spinData ? this.getBaseSpinWinForBalance(spinData as SpinData) : 0;
-						if (baseWin > 0) {
+						if (baseWin > 0 && !this.balanceApiCalledThisSpin) {
+							this.balanceApiCalledThisSpin = true;
 							this.updateBalanceFromServer();
 						}
 					} catch (e) {
