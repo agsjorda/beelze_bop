@@ -15,11 +15,26 @@ const phasermsg = () => {
             process.stdout.write(`✨ Done ✨\n`);
         }
     }
-}   
+}
+
+// Inject console suppression script before any modules load
+const suppressConsole = () => {
+    return {
+        name: 'suppress-console',
+        transformIndexHtml(html) {
+            const script = `<script>(function(){var e=function(){};var c=console;c.log=e;c.info=e;c.warn=e;c.error=e;c.debug=e;c.trace=e;c.group=e;c.groupCollapsed=e;c.groupEnd=e;c.time=e;c.timeEnd=e;c.timeLog=e;c.table=e;c.dir=e;c.dirxml=e;c.count=e;c.countReset=e;c.assert=e;c.profile=e;c.profileEnd=e;c.clear=e;})();</script>`;
+            return html.replace('<head>', '<head>' + script);
+        }
+    };
+};   
 
 export default defineConfig({
     base: './',
     logLevel: 'warning',
+    define: {
+        'import.meta.env.PROD': true,
+        'import.meta.env.DEV': false
+    },
     resolve: {
         dedupe: ['phaser']
     },
@@ -49,6 +64,7 @@ export default defineConfig({
     },
     plugins: [
         phasermsg(),
+        suppressConsole(),
         // Precompress text assets to Brotli
         viteCompression({
             algorithm: 'brotliCompress',
