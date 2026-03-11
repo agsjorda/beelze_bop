@@ -3,6 +3,8 @@ import type { GameAPI } from '../../../backend/GameAPI';
 import type { GameData } from '../GameData';
 import { CurrencyManager } from '../CurrencyManager';
 import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
+import { localizationManager } from '../../../managers/LocalizationManager';
+import { COMMON_BALANCE, LOCALIZATION_DEFAULTS } from '../../../backend/LocalizationData';
 
 export interface BalanceControllerCallbacks {
   getScene: () => Scene | null;
@@ -53,7 +55,7 @@ export class BalanceController {
     this.balanceLabelContainer = scene.add.container(balanceX, balanceY - 8);
     this.balanceLabelContainer.setDepth(9);
 
-    const balanceText = 'BALANCE';
+    const balanceText = (localizationManager.getTextByKey(COMMON_BALANCE) ?? LOCALIZATION_DEFAULTS[COMMON_BALANCE] ?? COMMON_BALANCE).toUpperCase();
     const currencyCode = isDemoBalance ? '' : CurrencyManager.getCurrencyCode();
 
     let currentX = 0;
@@ -195,7 +197,7 @@ export class BalanceController {
     // Rebuild the label container with updated currency
     this.balanceLabelContainer.removeAll(true);
     
-    const balanceText = 'BALANCE';
+    const balanceText = (localizationManager.getTextByKey(COMMON_BALANCE) ?? LOCALIZATION_DEFAULTS[COMMON_BALANCE] ?? COMMON_BALANCE).toUpperCase();
     const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
     let currentX = 0;

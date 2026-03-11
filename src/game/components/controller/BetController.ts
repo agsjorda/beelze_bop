@@ -6,6 +6,8 @@
  */
 
 import type { Scene } from 'phaser';
+import { localizationManager } from '../../../managers/LocalizationManager';
+import { COMMON_BET, LOCALIZATION_DEFAULTS } from '../../../backend/LocalizationData';
 import { gameEventManager, GameEventType } from '../../../event/EventManager';
 import { ensureSpineFactory } from '../../../utils/SpineGuard';
 import { Logger } from '../../../utils/Logger';
@@ -116,7 +118,8 @@ export class BetController {
     this.container.add(betBackground);
 
     // Bet label
-    const betLabel = this.scene.add.text(betX, betY - 15, 'BET', {
+    const betLabelText = (localizationManager.getTextByKey(COMMON_BET) ?? LOCALIZATION_DEFAULTS[COMMON_BET] ?? COMMON_BET).toUpperCase();
+    const betLabel = this.scene.add.text(betX, betY - 15, betLabelText, {
       fontSize: '12px',
       color: '#ffffff',
       fontFamily: 'poppins-regular'

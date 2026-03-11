@@ -1,5 +1,7 @@
 import type { Scene } from 'phaser';
 import { EventBus } from '../../EventBus';
+import { localizationManager } from '../../../managers/LocalizationManager';
+import { CONTROLLER_MENU, LOCALIZATION_DEFAULTS } from '../../../backend/LocalizationData';
 
 export class MenuButtonController {
   private scene: Scene;
@@ -39,10 +41,11 @@ export class MenuButtonController {
     this.buttons.set('menu', menuButton);
     this.primaryControllers.add(menuButton);
 
+    const menuLabelText = localizationManager.getTextByKey(CONTROLLER_MENU) ?? LOCALIZATION_DEFAULTS[CONTROLLER_MENU] ?? 'Menu';
     const menuText = this.scene.add.text(
       x,
       y + (menuButton.displayHeight * 0.5) + 15,
-      'Menu',
+      menuLabelText,
       textStyle
     ).setOrigin(0.5, 0.5).setDepth(10);
     this.controllerContainer.add(menuText);

@@ -40,6 +40,8 @@ export enum GameEventType {
   BACKEND_BUSY = 'BACKEND_BUSY',
   // Free round manager events
   FREEROUND_COUNT_UPDATE = 'FREEROUND_COUNT_UPDATE', // payload: number (fsCount from backend)
+  // Localization loaded (Preloader calls setTranslations then emits this)
+  LOCALIZATION_READY = 'LOCALIZATION_READY',
   // Additional events used by the backend
   RESPONSE = 'RESPONSE',
 }

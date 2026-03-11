@@ -1,4 +1,13 @@
 import type { ContentSection } from '../ContentSection';
+import {
+    COMMON_SETTINGS,
+    HELP_GENERAL_CONTROLS_TITLE,
+    HELP_INFO_DESC,
+    HELP_INFO_LABEL,
+    HELP_SETTINGS_DESC,
+    HELP_SOUNDS_DESC,
+    HELP_SOUNDS_LABEL,
+} from '../../../../backend/LocalizationData';
 
 /** Shared border opts for General Controls item boxes (sounds, settings, info). */
 const generalControlsBorderOpts = {
@@ -36,8 +45,10 @@ const soundsContent: ContentSection = {
                     },
                     {
                         Text: {
-                            key: 'help_sounds-label',
+                            key: HELP_SOUNDS_LABEL,
                             value: 'Sounds',
+                            fitToSingleLine: true,
+                            minFontSize: 16,
                             style: {
                                 fontSize: '24px',
                             }
@@ -48,7 +59,7 @@ const soundsContent: ContentSection = {
         },
         {
             Text: {
-                key: 'help_sounds-desc',
+                key: HELP_SOUNDS_DESC,
                 value: 'Toggle game sounds on or off.',
             }
         },
@@ -76,8 +87,10 @@ const settingsContent: ContentSection = {
                     },
                     {
                         Text: {
-                            key: 'help_settings-label',
+                            key: COMMON_SETTINGS,
                             value: 'Settings',
+                            fitToSingleLine: true,
+                            minFontSize: 16,
                             style: {
                                 fontSize: '24px',
                             },
@@ -88,7 +101,7 @@ const settingsContent: ContentSection = {
         },
         {
             Text: {
-                key: 'help_settings-desc',
+                key: HELP_SETTINGS_DESC,
                 value: 'Access gameplay preferences and systems options.',
                 opts: {
                     padding: { top: -6 },
@@ -116,8 +129,10 @@ const infoContent: ContentSection = {
                     },
                     {
                         Text: {
-                            key: 'help_info-label',
+                            key: HELP_INFO_LABEL,
                             value: 'Info',
+                            fitToSingleLine: true,
+                            minFontSize: 16,
                             style: {
                                 fontSize: '24px',
                             },
@@ -128,7 +143,7 @@ const infoContent: ContentSection = {
         },
         {
             Text: {
-                key: 'help_info-desc',
+                key: HELP_INFO_DESC,
                 value: 'View game rules, features, and paytable.',
                 opts: {
                     padding: { top: 12 },
@@ -143,7 +158,7 @@ export const generalControlsSection: ContentSection = {
     Content: [
         {
             Header: {
-                key: 'help_general-controls-title',
+                key: HELP_GENERAL_CONTROLS_TITLE,
                 value: 'General Controls',
                 opts: {
                     padding: { top: 36, bottom: 12 },

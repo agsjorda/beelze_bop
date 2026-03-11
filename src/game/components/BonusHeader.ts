@@ -5,6 +5,8 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { CurrencyManager } from './CurrencyManager';
 import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
+import { localizationManager } from '../../managers/LocalizationManager';
+import { LOCALIZATION_DEFAULTS, WINBAR_TOTAL_WIN, WINBAR_YOU_WON } from '../../backend/LocalizationData';
 
 export class BonusHeader {
 	private bonusHeaderContainer!: Phaser.GameObjects.Container;
@@ -121,9 +123,13 @@ export class BonusHeader {
 	// Depth above RadialLightTransition overlay (20000) so Total win stays visible during candy/radial light
 	private static readonly WIN_BAR_DEPTH = 20001;
 
+	private getWinBarText(key: string): string {
+		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
+	}
+
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 7, 'YOU WON', {
+		this.youWonText = scene.add.text(x, y - 7, this.getWinBarText(WINBAR_YOU_WON), {
 			fontSize: '18px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
@@ -457,7 +463,7 @@ export class BonusHeader {
 			this.hasStartedBonusTracking = true;
 			this.showingTotalWin = true;
 
-			if (this.youWonText) this.youWonText.setText('TOTAL WIN');
+			if (this.youWonText) this.youWonText.setText(this.getWinBarText(WINBAR_TOTAL_WIN));
 			this.showWinningsDisplay(displayTotal);
 			console.log(`[BonusHeader] showTotalWinBeforeCongrats: TOTAL WIN $${displayTotal}`);
 		} catch (e) {
@@ -471,7 +477,7 @@ export class BonusHeader {
 	 */
 	public showCumulativeTotalIfReady(): void {
 		if (this.cumulativeBonusWin > 0 && this.youWonText && this.amountText) {
-			this.youWonText.setText('TOTAL WIN');
+			this.youWonText.setText(this.getWinBarText(WINBAR_TOTAL_WIN));
 			this.showWinningsDisplay(this.cumulativeBonusWin);
 			this.showingTotalWin = true;
 			console.log(`[BonusHeader] Showing cumulative total immediately: $${this.cumulativeBonusWin}`);
@@ -721,7 +727,7 @@ export class BonusHeader {
 					// Never show "TOTAL WIN" on tumble updates; that label is reserved for the
 					// end-of-spin cumulative summary (handled on WIN_STOP).
 					if (this.youWonText) {
-						this.youWonText.setText('YOU WON');
+						this.youWonText.setText(this.getWinBarText(WINBAR_YOU_WON));
 					}
 					// Clear any scatter seeding guard once real tumble wins begin
 					if (this.justSeededWin) {
@@ -826,7 +832,7 @@ export class BonusHeader {
 				console.log(`[BonusHeader] MULTIPLIERS_TRIGGERED: expecting ${this.expectedMultiplierCount} multipliers`);
 
 				// Immediately set text to "YOU WON" to prevent it from changing to "TOTAL WIN"
-				if (this.youWonText) this.youWonText.setText('YOU WON');
+				if (this.youWonText) this.youWonText.setText(this.getWinBarText(WINBAR_YOU_WON));
 				// Show the current spin total (not cumulative) when multipliers start
 				if (spinTotal > 0) {
 					this.showWinningsDisplay(spinTotal);
@@ -904,7 +910,7 @@ export class BonusHeader {
 						return;
 					}
 
-					if (this.youWonText) this.youWonText.setText('YOU WON');
+					if (this.youWonText) this.youWonText.setText(this.getWinBarText(WINBAR_YOU_WON));
 					const formatted = this.formatCurrency(spinTotal);
 					const total = spinTotal * this.multiplierCumulative;
 					const formattedTotal = this.formatCurrency(total);
@@ -1028,13 +1034,13 @@ export class BonusHeader {
 				// During the spin, per-tumble updates will switch the label to "YOU WON".
 				if (totalWinSoFar > 0) {
 					if (this.youWonText) {
-						this.youWonText.setText('TOTAL WIN');
+						this.youWonText.setText(this.getWinBarText(WINBAR_TOTAL_WIN));
 					}
 					this.showWinningsDisplay(totalWinSoFar);
 				} else {
 					this.hideWinningsDisplay();
 					if (this.youWonText) {
-						this.youWonText.setText('YOU WON');
+						this.youWonText.setText(this.getWinBarText(WINBAR_YOU_WON));
 					}
 				}
 			} else {
@@ -1096,7 +1102,7 @@ export class BonusHeader {
 			
 			// Always change to "YOU WIN" or "YOU WON" when wins start (unless in initial scatter phase)
 			if (!this.justSeededWin && this.youWonText) {
-				this.youWonText.setText('YOU WIN');
+				this.youWonText.setText(this.getWinBarText(WINBAR_YOU_WON));
 			}
 			
 			if (spinWin > 0) {
@@ -1226,7 +1232,7 @@ export class BonusHeader {
 
 						// Set text to TOTAL WIN
 						if (this.youWonText) {
-							this.youWonText.setText('TOTAL WIN');
+							this.youWonText.setText(this.getWinBarText(WINBAR_TOTAL_WIN));
 							this.youWonText.setVisible(true);
 							console.log('[BonusHeader] Set youWonText to "TOTAL WIN" and visible');
 						}

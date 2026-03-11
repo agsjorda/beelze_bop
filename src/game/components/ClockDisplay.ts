@@ -154,6 +154,16 @@ export class ClockDisplay {
         });
     }
 
+    /** Update the suffix text (e.g. after localization loads) and refresh the display. */
+    public setSuffixText(suffix: string): void {
+        this.suffixText = suffix;
+        if (this.timeText) {
+            const currentTime = getMilitaryTime();
+            const displayText = this.suffixText ? `${currentTime}${this.suffixText}` : currentTime;
+            this.timeText.setText(displayText);
+        }
+    }
+
     public destroy(): void {
         // Stop time update timer
         try {

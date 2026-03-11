@@ -301,8 +301,8 @@ export class AssetConfig {
 		return {
 			images: {
 				// Payline visuals
-				'paylineMobileWin': `${prefix}/help_screen/game_settings_content/paylineMobileWin.webp`,
-				'paylineMobileNoWin': `${prefix}/help_screen/game_settings_content/paylineMobileNoWin.webp`,
+				'help_tumbles_win': `${prefix}/help_screen/game_settings_content/help_tumbles_win.webp`,
+				'help_tumbles_no-win': `${prefix}/help_screen/game_settings_content/help_tumbles_no-win.webp`,
 
 				// Scatter / Tumble / Multiplier visuals
 				'scatterGame': `${prefix}/help_screen/bonus_game_content/scatter_game.webp`,

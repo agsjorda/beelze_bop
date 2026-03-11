@@ -1,6 +1,14 @@
 import type { BorderOpts } from '../ContentSection';
 import type { ContentSection } from '../ContentSection';
-import { CurrencyManager } from '../../CurrencyManager';
+import {
+    COMMON_BALANCE,
+    COMMON_BET,
+    COMMON_TOTAL_WIN,
+    HELP_BALANCE_DESC,
+    HELP_BET_DESC,
+    HELP_DISPLAY_STATS_TITLE,
+    HELP_TOTALWIN_DESC,
+} from '../../../../backend/LocalizationData';
 
 const sectionBorderOpts: BorderOpts = {
     margin: 28,
@@ -20,7 +28,7 @@ const balanceTextSection: ContentSection = {
     Content: [
         {
             Text: {
-                key: 'help_balance-desc',
+                key: HELP_BALANCE_DESC,
                 value: 'Shows your current available credits.',
             }
         }
@@ -34,7 +42,7 @@ const balanceSection: ContentSection = {
     Content: [
         {
             Text: {
-                key: 'help_balance-label',
+                key: COMMON_BALANCE,
                 value: 'BALANCE',
                 opts: {
                     style: {
@@ -70,7 +78,7 @@ const totalWinTextSection: ContentSection = {
     Content: [
         {
             Text: {
-                key: 'help_totalwin-desc',
+                key: HELP_TOTALWIN_DESC,
                 value: 'Displays your total winnings from the current round.',
             }
         }
@@ -84,7 +92,7 @@ const totalWinSection: ContentSection = {
     Content: [
         {
             Text: {
-                key: 'help_totalwin-label',
+                key: COMMON_TOTAL_WIN,
                 value: 'TOTAL WIN',
                 opts: {
                     style: {
@@ -120,7 +128,7 @@ const betTextSection: ContentSection = {
     Content: [
         {
             Text: {
-                key: 'help_bet-desc',
+                key: HELP_BET_DESC,
                 value: 'Adjust your wager using the – and + buttons.'
             }
         }
@@ -134,7 +142,7 @@ const betSection: ContentSection = {
     Content: [
         {
             Text: {
-                key: 'help_bet-label',
+                key: COMMON_BET,
                 value: 'BET',
                 opts: {
                     style: {
@@ -190,7 +198,7 @@ export const displayStatsSection: ContentSection = {
     Content: [
         {
             Header: {
-                key: 'help_display-stats-title',
+                key: HELP_DISPLAY_STATS_TITLE,
                 value: 'Display & Stats',
                 opts: {
                     padding: { top: 30 },

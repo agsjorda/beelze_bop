@@ -1,8 +1,9 @@
 import type { ContentSection } from '../ContentSection';
+import { HELP_BET_CONTROLS_DESC, HELP_BET_CONTROLS_TITLE, HELP_BUTTONS_LABEL } from '../../../../backend/LocalizationData';
 
 export const betControlsSection: ContentSection = {
     Header: {
-        key: 'help_bet-controls-title',
+        key: HELP_BET_CONTROLS_TITLE,
         value: 'Bet Controls',
     },
     Border: {
@@ -37,8 +38,10 @@ export const betControlsSection: ContentSection = {
                         },
                         {
                             Text: {
-                                key: 'help_buttons-label',
+                                key: HELP_BUTTONS_LABEL,
                                 value: 'Buttons',
+                                fitToSingleLine: true,
+                                minFontSize: 16,
                                 style: {
                                     fontSize: '26px',
                                 },
@@ -49,7 +52,7 @@ export const betControlsSection: ContentSection = {
         },
         {
             Text: {
-                key: 'help_bet-controls-desc',
+                key: HELP_BET_CONTROLS_DESC,
                 value: 'Adjust your total bet',
             }
         }

@@ -7,7 +7,8 @@ import { gameStateManager } from '../../managers/GameStateManager';
 import { PaylineData } from '../../backend/SpinData';
 import { CurrencyManager } from './CurrencyManager';
 import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
-
+import { localizationManager } from '../../managers/LocalizationManager';
+import { LOCALIZATION_DEFAULTS, WINBAR_TOTAL_WIN, WINBAR_YOU_WON } from '../../backend/LocalizationData';
 
 export class Header {
 	private headerContainer: Phaser.GameObjects.Container;
@@ -65,9 +66,13 @@ export class Header {
 
 	// private createCharacterSpineAnimation(scene: Scene, assetScale: number): void {}
 
+	private getWinBarText(key: string): string {
+		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
+	}
+
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 7, 'YOU WON', {
+		this.youWonText = scene.add.text(x, y - 7, this.getWinBarText(WINBAR_YOU_WON), {
 			fontSize: '18px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
@@ -122,7 +127,7 @@ export class Header {
 				const amount = Number((data as any)?.cumulativeWin ?? 0);
 				if (amount > 0) {
 					// Ensure label shows YOU WON while accumulating
-					if (this.youWonText) this.youWonText.setText('YOU WON');
+					if (this.youWonText) this.youWonText.setText(this.getWinBarText(WINBAR_YOU_WON));
 					this.showWinningsDisplay(amount);
 				}
 			} catch {}
@@ -138,7 +143,7 @@ export class Header {
 				}
 				const amount = Number((data as any)?.totalWin ?? 0);
 				if (amount > 0) {
-					if (this.youWonText) this.youWonText.setText('TOTAL WIN');
+					if (this.youWonText) this.youWonText.setText(this.getWinBarText(WINBAR_TOTAL_WIN));
 					// Force an animation even if the numeric value hasn't changed from the
 					// last tumble update, so the transition to "TOTAL WIN" feels responsive.
 					// By resetting currentWinnings, showWinningsDisplay will detect a change
@@ -226,7 +231,7 @@ export class Header {
 					console.log(`[Header] Total winnings calculated from paylines: ${totalWin}`);
 					
 					if (totalWin > 0) {
-						if (this.youWonText) this.youWonText.setText('YOU WON');
+						if (this.youWonText) this.youWonText.setText(this.getWinBarText(WINBAR_YOU_WON));
 						this.showWinningsDisplay(totalWin);
 					} else {
 						// If scatter is active, keep the winnings shown (it may have been set by scatter logic)

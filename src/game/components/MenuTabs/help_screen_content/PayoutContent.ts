@@ -1,5 +1,6 @@
 import type { BorderOpts, ContentItem, ContentSection, GridCell, TextOpts } from '../ContentSection';
 import { CurrencyManager } from '../../CurrencyManager';
+import { HELP_PAYOUT_TITLE, HELP_SCATTER_DESC, HELP_SCATTER_TITLE } from '../../../../backend/LocalizationData';
 import { formatCurrencyNumber } from '../../../../utils/NumberPrecisionFormatter';
 
 interface PayoutContentOptions {
@@ -242,7 +243,7 @@ function getSymbolPayoutContent(
     return {
         Header: {
             opts: { padding: { top: 12, bottom: 12 }, align: 0, anchor: { x: 0, y: 0 }, style: { fontSize: 24, fontFamily: 'Poppins-Regular' } },
-            key: 'help_payout-title',
+            key: HELP_PAYOUT_TITLE,
             value: 'Payout',
         },
         Content: contentItems,
@@ -262,7 +263,7 @@ function getScatterPayoutContent(
             {
                 Header: {
                     opts: {},
-                    key: 'help_scatter-title',
+                    key: HELP_SCATTER_TITLE,
                     value: 'Scatter',
                 },
             },
@@ -295,7 +296,7 @@ function getScatterPayoutContent(
             {
                 Text: {
                     opts: { padding: 2 },
-                    key: 'help_scatter-desc',
+                    key: HELP_SCATTER_DESC,
                     value: 'This is the SCATTER symbol.\nSCATTER symbol is present on all reels.\nSCATTER pays on any position.',
                 },
             },

@@ -1,8 +1,9 @@
 import type { ContentSection } from '../ContentSection';
+import { HELP_TUMBLE_DESC, HELP_TUMBLE_TITLE } from '../../../../backend/LocalizationData';
 
 export const tumbleWinContent: ContentSection = {
     Header: {
-        key: 'help_tumble-title',
+        key: HELP_TUMBLE_TITLE,
         value: 'Tumble Win',
     },
     Border: {
@@ -27,7 +28,7 @@ export const tumbleWinContent: ContentSection = {
                 opts: {
                     padding: { top: 40, bottom: 10 },
                 },
-                key: 'help_tumble-desc',
+                key: HELP_TUMBLE_DESC,
                 value: 'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\nTumbles continue as long as new winning combinations appear — there is no limit to the number of tumbles per spin.\n\nAll wins are credited to the player\'s balance after all tumbles from a base spin are completed.',
             }
         }

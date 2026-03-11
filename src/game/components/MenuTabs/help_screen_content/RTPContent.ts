@@ -1,9 +1,10 @@
 import type { ContentSection } from '../ContentSection';
+import { HELP_RTP_TITLE } from '../../../../backend/LocalizationData';
 
 export const rtpContent: ContentSection = {
     Header: {
         opts: { padding: { top: 12, bottom: 12 } },
-        key: 'help_rtp-title',
+        key: HELP_RTP_TITLE,
         value: 'RTP',
     },
     Content: [

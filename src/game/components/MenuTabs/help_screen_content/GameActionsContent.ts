@@ -1,5 +1,17 @@
 import type { ContentSection } from '../ContentSection';
-import { CurrencyManager } from '../../CurrencyManager';
+import {
+    COMMON_SPIN,
+    COMMON_TURBO,
+    HELP_AMPLIFY_DESC,
+    HELP_AMPLIFY_LABEL,
+    HELP_AUTOPLAY_DESC,
+    HELP_AUTOPLAY_LABEL,
+    HELP_BUY_DESC,
+    HELP_BUY_LABEL,
+    HELP_GAME_ACTIONS_TITLE,
+    HELP_SPIN_DESC,
+    HELP_TURBO_DESC,
+} from '../../../../backend/LocalizationData';
 
 /** Shared border opts for Game Actions item boxes (spin, amplify bet, autoplay, turbo). */
 const gameActionsBorderOpts = {
@@ -29,8 +41,10 @@ const spinSection: ContentSection = {
                     },
                     {
                         Text: {
-                            key: 'help_spin-label',
+                            key: COMMON_SPIN,
                             value: 'Spin',
+                            fitToSingleLine: true,
+                            minFontSize: 16,
                             style: {
                                 fontSize: '24px',
                             },
@@ -41,7 +55,7 @@ const spinSection: ContentSection = {
         },
         {
             Text: {
-                key: 'help_spin-desc',
+                key: HELP_SPIN_DESC,
                 value: 'Starts the game round.',
             }
         }
@@ -74,8 +88,10 @@ const buyFeatureSection: ContentSection = {
                     },
                     {
                         Text: {
-                            key: 'help_buy-label',
+                            key: HELP_BUY_LABEL,
                             value: 'Buy Feature',
+                            fitToSingleLine: true,
+                            minFontSize: 16,
                             style: {
                                 fontSize: '24px',
                             },
@@ -86,7 +102,7 @@ const buyFeatureSection: ContentSection = {
         },
         {
             Text: {
-                key: 'help_buy-desc',
+                key: HELP_BUY_DESC,
                 value: 'Lets you buy the free spins round for 100x your total bet.',
             }
         }
@@ -114,8 +130,10 @@ const amplifyBetSection: ContentSection = {
                     },
                     {
                         Text: {
-                            key: 'help_amplify-label',
+                            key: HELP_AMPLIFY_LABEL,
                             value: 'Amplify Bet',
+                            fitToSingleLine: true,
+                            minFontSize: 16,
                             style: {
                                 fontSize: '24px',
                             },
@@ -126,7 +144,7 @@ const amplifyBetSection: ContentSection = {
         },
         {
             Text: {
-                key: 'help_amplify-desc',
+                key: HELP_AMPLIFY_DESC,
                 value: 'You\'re wagering 25% more per spin, but you also have better chances at hitting big features.',
             }
         }
@@ -154,8 +172,10 @@ const autoplaySection: ContentSection = {
                     },
                     {
                         Text: {
-                            key: 'help_autoplay-label',
+                            key: HELP_AUTOPLAY_LABEL,
                             value: 'Auto Play',
+                            fitToSingleLine: true,
+                            minFontSize: 16,
                             style: {
                                 fontSize: '24px',
                             },
@@ -166,7 +186,7 @@ const autoplaySection: ContentSection = {
         },
         {
             Text: {
-                key: 'help_autoplay-desc',
+                key: HELP_AUTOPLAY_DESC,
                 value: 'Opens the autoplay menu. Tap again to stop autoplay.',
             }
         }
@@ -194,8 +214,10 @@ const turboSection: ContentSection = {
                     },
                     {
                         Text: {
-                            key: 'help_turbo-label',
+                            key: COMMON_TURBO,
                             value: 'Turbo',
+                            fitToSingleLine: true,
+                            minFontSize: 16,
                             style: {
                                 fontSize: '24px',
                             },
@@ -206,7 +228,7 @@ const turboSection: ContentSection = {
         },
         {
             Text: {
-                key: 'help_turbo-desc',
+                key: HELP_TURBO_DESC,
                 value: 'Speeds up the game.',
             }
         }
@@ -215,7 +237,7 @@ const turboSection: ContentSection = {
 
 export const gameActionsSection: ContentSection = {
     Header: {
-        key: 'help_game-actions-title',
+        key: HELP_GAME_ACTIONS_TITLE,
         value: 'Game Actions',
         opts: {
             padding: { top: 24 },

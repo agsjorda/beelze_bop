@@ -6,6 +6,27 @@ import { GameAPI } from '../../backend/GameAPI';
 import { HelpScreen } from './MenuTabs/HelpScreen';
 import { CurrencyManager } from './CurrencyManager';
 import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
+import { localizationManager } from '../../managers/LocalizationManager';
+import {
+	BUY_FEATURE_BUY_BUTTON,
+	COMMON_BET,
+	COMMON_SETTINGS,
+	COMMON_SPIN,
+	HELP_BUY_DESC,
+	HELP_GAME_RULES_TITLE,
+	HELP_PAYOUT_TITLE,
+	HELP_RTP_TITLE,
+	LOCALIZATION_DEFAULTS,
+	MENU_BACKGROUND_MUSIC,
+	MENU_DEMO_UNAVAILABLE,
+	MENU_HISTORY,
+	MENU_HISTORY_CURRENCY,
+	MENU_HISTORY_PAGE,
+	MENU_HISTORY_WIN,
+	MENU_RULES,
+	MENU_SKIP_INTRO,
+	MENU_SOUND_FX,
+} from '../../backend/LocalizationData';
 
 interface ButtonBase {
     isButton: boolean;
@@ -14,6 +35,13 @@ interface ButtonBase {
 type ButtonContainer = GameObjects.Container & ButtonBase;
 type ButtonImage = GameObjects.Image & ButtonBase;
 type ButtonText = GameObjects.Text & ButtonBase;
+
+interface TabConfig {
+    text: string;
+    width: number;
+    x: number;
+    icon: string;
+}
 
 interface GameScene extends Scene {
     gameData: GameData;
@@ -74,6 +102,131 @@ export class Menu {
     private historyRowsContainer?: GameObjects.Container;
     private historyPaginationContainer?: GameObjects.Container;
 
+    private readonly tabIconTargetHeight: number = 18;
+    private readonly tabTextGapFromIcon: number = 8;
+    private readonly tabTextDesiredFontSize: number = 16;
+    private readonly tabTextMinFontSize: number = 1;
+    private readonly tabDesiredPadding: number = 20;
+    private readonly tabMinPadding: number = 12;
+
+    private fitTextToWidth(
+        text: GameObjects.Text,
+        maxWidth: number,
+        desiredFontSize: number,
+        minFontSize: number = 1
+    ): void {
+        const targetWidth = Math.max(0, maxWidth);
+        const maxSize = Math.max(1, Math.floor(desiredFontSize));
+        const minSize = Math.max(1, Math.floor(minFontSize));
+        let currentSize = Math.max(minSize, maxSize);
+
+        text.setFontSize(currentSize);
+        while (text.width > targetWidth && currentSize > minSize) {
+            currentSize -= 1;
+            text.setFontSize(currentSize);
+        }
+    }
+
+    private getTabIconKey(icon: string): string {
+        const tabIconMap: Record<string, string> = {
+            info: 'menu_info',
+            history: 'menu_history',
+            settings: 'menu_settings',
+            close: 'menu_close'
+        };
+        return tabIconMap[icon] ?? '';
+    }
+
+    private createTabIcon(
+        scene: GameScene,
+        tabContainer: ButtonContainer,
+        tabConfig: TabConfig,
+        tabHeight: number
+    ): ButtonImage | undefined {
+        const iconKey = this.getTabIconKey(tabConfig.icon);
+        if (!iconKey) {
+            return undefined;
+        }
+
+        const icon = scene.add.image(0, tabHeight / 2, iconKey) as ButtonImage;
+        icon.setOrigin(0, 0.5);
+        const scale = this.tabIconTargetHeight / icon.height;
+        icon.setScale(scale);
+
+        if (tabConfig.icon === 'close') {
+            icon.setOrigin(0.5, 0.5);
+            icon.setPosition(tabConfig.width / 2, tabHeight / 2);
+            icon.clearTint();
+        } else {
+            icon.setPosition(this.tabMinPadding, tabHeight / 2);
+            icon.setTint(0x379557);
+        }
+
+        tabContainer.add(icon);
+        return icon;
+    }
+
+    private createAndLayoutTabLabel(
+        scene: GameScene,
+        tabContainer: ButtonContainer,
+        tabConfig: TabConfig,
+        tabIcon: ButtonImage | undefined,
+        tabHeight: number,
+        isNormalTab: boolean
+    ): void {
+        const initialTextAreaLeft = isNormalTab
+            ? (tabIcon ? tabIcon.x + tabIcon.displayWidth + this.tabTextGapFromIcon : this.tabDesiredPadding)
+            : tabConfig.width / 2;
+        const initialTextAreaWidth = isNormalTab
+            ? Math.max(0, tabConfig.width - initialTextAreaLeft - this.tabDesiredPadding)
+            : tabConfig.width;
+        const textCenterX = isNormalTab
+            ? initialTextAreaLeft + initialTextAreaWidth / 2
+            : tabConfig.width / 2;
+
+        const text = scene.add.text(textCenterX, tabHeight / 2, tabConfig.text, {
+            fontSize: `${this.tabTextDesiredFontSize}px`,
+            color: '#FFFFFF',
+            fontFamily: 'Poppins-Regular',
+            align: 'center'
+        }) as ButtonText;
+
+        if (tabConfig.icon === 'close') {
+            text.setVisible(false);
+        }
+        text.setOrigin(0.5, 0.5);
+
+        if (tabConfig.icon !== 'close') {
+            text.setFontSize(this.tabTextDesiredFontSize);
+            let resolvedPadding = this.tabDesiredPadding;
+            let resolvedTextAreaLeft = initialTextAreaLeft;
+            let resolvedTextAreaWidth = initialTextAreaWidth;
+
+            for (let currentPadding = this.tabDesiredPadding; currentPadding >= this.tabMinPadding; currentPadding--) {
+                if (tabIcon) {
+                    tabIcon.setPosition(currentPadding, tabHeight / 2);
+                    resolvedTextAreaLeft = tabIcon.x + tabIcon.displayWidth + this.tabTextGapFromIcon;
+                } else {
+                    resolvedTextAreaLeft = currentPadding;
+                }
+
+                const maxTextWidthAtPadding = Math.max(0, tabConfig.width - resolvedTextAreaLeft - currentPadding);
+                resolvedPadding = currentPadding;
+                resolvedTextAreaWidth = maxTextWidthAtPadding;
+                text.setPosition(resolvedTextAreaLeft + maxTextWidthAtPadding / 2, tabHeight / 2);
+                if (text.width <= maxTextWidthAtPadding) {
+                    break;
+                }
+            }
+
+            const maxTextWidth = Math.max(0, tabConfig.width - resolvedTextAreaLeft - resolvedPadding);
+            this.fitTextToWidth(text, maxTextWidth, this.tabTextDesiredFontSize, this.tabTextMinFontSize);
+            text.setPosition(resolvedTextAreaLeft + resolvedTextAreaWidth / 2, tabHeight / 2);
+        }
+
+        tabContainer.add(text);
+    }
+
     protected titleStyle = {
         fontSize: '24px',
         color: '#379557',
@@ -120,6 +273,10 @@ export class Menu {
 
     constructor(settingsOnly: boolean = false) {
         this.settingsOnly = settingsOnly;
+    }
+
+    private getMenuText(key: string): string {
+        return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
     }
 
     preload(scene: Scene){
@@ -184,9 +341,9 @@ export class Menu {
 
         const getLabel = (icon: string) => {
             switch (icon) {
-                case 'info': return 'Rules';
-                case 'history': return 'History';
-                case 'settings': return 'Settings';
+                case 'info': return this.getMenuText(MENU_RULES);
+                case 'history': return this.getMenuText(MENU_HISTORY);
+                case 'settings': return this.getMenuText(COMMON_SETTINGS);
                 case 'close': return 'X';
                 default: return '';
             }
@@ -199,7 +356,7 @@ export class Menu {
         const closeWidth = panelWidth - normalTabWidth * normalTabCount;
 
         // Original spacing: no inter-tab gaps; close tab is smaller on the right
-        const tabConfigs: { text: string; width: number; x: number; icon: string }[] = [
+        const tabConfigs: TabConfig[] = [
             ...baseIcons.map((icon, i) => ({ text: getLabel(icon), width: normalTabWidth, x: normalTabWidth * i, icon })),
             { text: getLabel('close'), width: closeWidth, x: normalTabWidth * normalTabCount, icon: 'close' }
         ];
@@ -225,58 +382,8 @@ export class Menu {
             activeIndicator.setVisible(index === 0);
             tabContainer.add(activeIndicator);
 
-            // Tab icon for all (including close)
-            let iconKey = '';
-            switch (tabConfig.icon) {
-                case 'info':
-                    iconKey = 'menu_info';
-                    break;
-                case 'history':
-                    iconKey = 'menu_history';
-                    break;
-                case 'settings':
-                    iconKey = 'menu_settings';
-                    break;
-                case 'close':
-                    iconKey = 'menu_close';
-                    break;
-            }
-
-            if (iconKey) {
-                const icon = scene.add.image(0, tabHeight / 2, iconKey) as ButtonImage;
-                icon.setOrigin(-0.5, 0.5);
-                // Scale to a consistent height (mobile-only)
-                const targetHeight = 18;
-                const scale = targetHeight / icon.height;
-                icon.setScale(scale);
-                if (tabConfig.icon === 'close') {
-                    // Center the close icon on its dark background
-                    icon.setOrigin(0, 0.5);
-                    icon.setPosition(tabConfig.width / 3, tabHeight / 2);
-                    icon.clearTint();
-                } else {
-                    // Left align icon with padding and tint green
-                    icon.setPosition(12, tabHeight / 2);
-                    icon.setTint(0x379557);
-                }
-                tabContainer.add(icon);
-            }
-
-            // Tab text
-            const textX = index < normalTabCount ? 45 : tabConfig.width / 2; // Offset for icon on normal tabs
-            const textAlign = index < normalTabCount ? 'left' : 'center';
-            
-            const text = scene.add.text(textX, tabHeight / 2, tabConfig.text, {
-                fontSize: '16px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins-Regular',
-                align: textAlign
-            }) as ButtonText;
-            if(tabConfig.icon === 'close'){
-                text.setVisible(false);
-            }
-            text.setOrigin(index < normalTabCount ? 0 : 0.5, 0.5);
-            tabContainer.add(text);
+            const tabIcon = this.createTabIcon(scene, tabContainer, tabConfig, tabHeight);
+            this.createAndLayoutTabLabel(scene, tabContainer, tabConfig, tabIcon, tabHeight, index < normalTabCount);
 
             // Make tab interactive
             tabContainer.setInteractive(
@@ -388,7 +495,7 @@ export class Menu {
         this.settingsContent.setVisible(false);
     }
 
-    private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: any[]): void {
+    private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: TabConfig[]): void {
         // Check if demo mode is active and prevent switching to history tab
         const isDemo = scene.gameAPI?.getDemoState();
         const tabKey: string = tabConfigs[activeIndex].icon;
@@ -522,14 +629,20 @@ export class Menu {
         options?: { silent?: boolean }
     ): Promise<void> {
         const contentArea = this.historyContent;
-        const historyHeaders: string[] = ['Spin', 'Currency', 'Bet', 'Win'];
+        const historyHeaders: string[] = [
+            this.getMenuText(COMMON_SPIN),
+            this.getMenuText(MENU_HISTORY_CURRENCY),
+            this.getMenuText(COMMON_BET),
+            this.getMenuText(MENU_HISTORY_WIN),
+        ];
         const isDemo = scene.gameAPI?.getDemoState();
         const silent = !!options?.silent;
 
         // Ensure containers exist and are parented correctly.
         if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {
             this.historyHeaderContainer = scene.add.container(0, 0);
-            const historyText = scene.add.text(15, 15, 'History', this.titleStyle) as ButtonText;
+            const historyTitle = this.getMenuText(MENU_HISTORY);
+            const historyText = scene.add.text(15, 15, historyTitle, this.titleStyle) as ButtonText;
             historyText.setOrigin(0, 0);
             this.historyHeaderContainer.add(historyText);
         }
@@ -576,7 +689,7 @@ export class Menu {
             const emptyMessage = scene.add.text(
                 scene.scale.width / 2,
                 scene.scale.height * 0.3,
-                'History is not available in demo mode',
+                this.getMenuText(MENU_DEMO_UNAVAILABLE),
                 {
                     fontSize: '16px',
                     color: '#888888',
@@ -901,10 +1014,12 @@ export class Menu {
         });
 
         // Page number display: "Page 1 of 10"
+        const pageTemplate = this.getMenuText(MENU_HISTORY_PAGE);
+        const pageLabel = pageTemplate.replace('{page}', String(page)).replace('{total}', String(totalPages));
         const pageNumberText = scene.add.text(
             areaWidth / 2,
             y + 40, // place below the pagination buttons
-            `Page ${page} of ${totalPages}`,
+            pageLabel,
             {
                 fontSize: '20px',
                 color: '#FFFFFF',
@@ -923,7 +1038,8 @@ export class Menu {
         const widthSlider = 340;
 
         // Title - Settings in green color #379557
-        const title = scene.add.text(15, 15, 'Settings', this.titleStyle) as ButtonText;
+        const settingsTitle = this.getMenuText(COMMON_SETTINGS);
+        const title = scene.add.text(15, 15, settingsTitle, this.titleStyle) as ButtonText;
         title.setOrigin(0, 0);
         contentArea.add(title);
 
@@ -935,7 +1051,8 @@ export class Menu {
         const sfxSliderY = startY + 230;
 
         // Music section (no icon)
-        const musicLabel = scene.add.text(startX + 0, startY + 70, 'Background Music', {
+        const musicLabelText = this.getMenuText(MENU_BACKGROUND_MUSIC);
+        const musicLabel = scene.add.text(startX + 0, startY + 70, musicLabelText, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Regular'
@@ -943,7 +1060,8 @@ export class Menu {
         contentArea.add(musicLabel);
 
         // SFX section (no icon)
-        const sfxLabel = scene.add.text(startX + 0, startY + 170, 'Sound FX', {
+        const sfxLabelText = this.getMenuText(MENU_SOUND_FX);
+        const sfxLabel = scene.add.text(startX + 0, startY + 170, sfxLabelText, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Regular'
@@ -952,7 +1070,8 @@ export class Menu {
 
         // Skip Intro section (UI only)
         const skipLabelY = startY + 270;
-        const skipLabel = scene.add.text(startX + 0, skipLabelY, 'Skip Intro', {
+        const skipIntroText = this.getMenuText(MENU_SKIP_INTRO);
+        const skipLabel = scene.add.text(startX + 0, skipLabelY, skipIntroText, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Regular'
@@ -1324,410 +1443,6 @@ export class Menu {
         }
     }
 
-
-    private createHelpScreenContent(scene: GameScene, contentArea: GameObjects.Container): void {
-            this.padding = 10;
-            this.textHorizontalPadding = -2;
-            this.contentWidth = scene.scale.width - this.padding * 6;
-            this.yPosition = this.padding + 10;
-    
-            this.addTextBlock(scene, 'header1', 'Game Rules', { spacingAfter: 15 });
-    
-            this.addTextBlock(scene, 'content1', 'All symbols pay left to right on adjacent reels, starting from the leftmost reel.', { wordWrapWidth: this.contentWidth, spacingAfter: 24 });
-    
-            this.addTextBlock(scene, 'header2', 'RTP');
-            this.addContent(scene, '96.49% - 96.6%', 'text');
-    
-            this.yPosition += this.padding * 5;
-    
-            this.addTextBlock(scene, 'header2', 'Payout');
-            
-            this.yPosition += this.padding * 8;
-    
-            // Create 11 symbol grids with payouts (Symbols 1-11)
-            const symbolSize = 153;
-            const symbolScale = 0.5;
-            const scaledSymbolSize = symbolSize * symbolScale;
-            for (let symbolIndex = 1; symbolIndex <= 11; symbolIndex++) {
-                const cellX = this.padding;
-                const cellY = this.yPosition;
-    
-                // Create symbol container with white border
-                const symbolContainer = scene.add.container(cellX, cellY);
-    
-                this.createBorder(scene, symbolContainer, 
-                    -this.padding / 2, 
-                    -scaledSymbolSize, 
-                    this.contentWidth + this.padding * 3,
-                    scaledSymbolSize * 1.5
-                );
-    
-                // Add symbol
-                const symbol = scene.add.image(0, 0, `symbol_${symbolIndex}`);
-                symbol.setScale(symbolScale);
-                symbol.setOrigin(-0.2, 0.7);
-                symbolContainer.add(symbol);
-    
-                // Add payout table next to symbol
-                this.createPayoutTable(scene,
-                    scaledSymbolSize + symbolSize/5,
-                    0,
-                    symbolContainer,
-                    symbolIndex
-                );
-    
-                this.contentContainer.add(symbolContainer);
-                symbolContainer.setPosition(0, symbolContainer.y);
-                this.yPosition += scaledSymbolSize + this.padding * 5;  // Move to next row
-            }
-            this.yPosition -=  scaledSymbolSize;
-
-            // Increase top spacing before Scatter label
-            this.yPosition += this.padding * 1.5;
-
-            // Temporarily increase left padding for Scatter label only
-            const prevTextPad = this.textHorizontalPadding;
-            this.textHorizontalPadding = (this.padding * 1.5);
-            this.addContent(scene, 'Scatter', 'contentHeader1');
-            this.textHorizontalPadding = prevTextPad;
-    
-            this.yPosition += this.padding * 3;
-            { // scatter payouts
-                const cellX = -this.padding / 2;
-                const cellY = this.yPosition;
-    
-                // Create symbol container with white border
-                const symbolContainer = scene.add.container(cellX, cellY );
-                
-                // Provide extra top padding inside the grey container for the Scatter header
-                const extraScatterTopPad = this.padding / 1.5;
-                // Increase vertical size for Scatter payout only
-                const extraScatterBottomPad = this.padding * 16;
-                const scatterContainerHeight = scaledSymbolSize * 5.5 + extraScatterTopPad + extraScatterBottomPad;
-                this.createBorder(scene, symbolContainer, 
-                    0, 
-                    -scaledSymbolSize - extraScatterTopPad, 
-                    this.contentWidth + this.padding * 3 ,
-                    scatterContainerHeight
-                );
-    
-                // Add symbol
-                const symbol = scene.add.sprite(0, 0, 'ScatterLabel');
-                symbol.setScale(1);
-                symbol.setOrigin(0.3, 0.4);
-                symbolContainer.add(symbol);
-                symbol.setPosition(scene.scale.width * 0.4, this.padding *5);
-    
-                // Add payout table next to symbol
-                this.createPayoutTable(scene, 
-                    symbol.x / 3,  // Position table right of symbol
-                    symbol.height * 3 / 10 + this.padding * 20,  // Move table further down
-                    symbolContainer,
-                    0       
-                );
-    
-                this.contentContainer.add(symbolContainer);
-                this.contentContainer.sendToBack(symbolContainer);
-                this.yPosition += scatterContainerHeight - 15;  // Move to next row based on actual container height
-            }
-
-            // Thin green divider between Scatter info and Tumble Win
-            this.addDivider(scene, 0x379557);
-
-            this.yPosition += 50;
-
-            // Enhanced Bet
-            this.addTextBlock(scene, 'header2', 'Enhanced Bet');
-            const enhancedContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
-            this.yPosition += this.createBorder(scene, enhancedContainer,
-                this.padding,
-                0,
-                this.contentWidth + this.padding * 3,
-                scaledSymbolSize * 3.1
-            );
-            this.contentContainer.add(enhancedContainer);
-
-            // Use SlotController's amplify icon and center it in the section
-            const pillY = 40;
-            const pillH = 56;
-            const sectionAreaWidth1 = this.contentWidth + this.padding * 3;
-            const sectionCenterX1 = this.padding + sectionAreaWidth1 / 2;
-            const amplifyIcon = scene.add.image(sectionCenterX1, pillY + pillH / 2, 'amplify') as ButtonImage;
-            amplifyIcon.setOrigin(0.5, 0.5);
-            const amplifyScale = 1.5;
-            amplifyIcon.setScale(amplifyScale);
-            enhancedContainer.add(amplifyIcon);
-
-            // Description
-            const enhanceDesc = scene.add.text(30, pillY + pillH + 40,
-                "You’re wagering 25% more per spin, but you also have better\nchances at hitting big features.",
-                {
-                    ...this.textStyle,
-                    wordWrap: { width: this.contentWidth - this.padding * 2 }
-                }
-            ) as ButtonText;
-            enhanceDesc.setOrigin(0, 0);
-            enhancedContainer.add(enhanceDesc);
-
-            // Spacing before next section
-            this.yPosition += this.padding * 4;
-
-            // Buy Feature
-            this.addTextBlock(scene, 'header2', 'Buy Feature');
-            const buyFeatContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
-            this.yPosition += this.createBorder(scene, buyFeatContainer,
-                this.padding,
-                0,
-                this.contentWidth + this.padding * 3,
-                scaledSymbolSize * 2.8
-            );
-            this.contentContainer.add(buyFeatContainer);
-
-            // Use controller feature button BG as the main visual button (centered)
-            const btnY = 70;
-            const sectionAreaWidth2 = this.contentWidth + this.padding * 3;
-            const btnCenterX = this.padding + sectionAreaWidth2 / 2;
-            const featureBg = scene.add.image(btnCenterX, btnY, 'feature') as ButtonImage;
-            featureBg.setOrigin(0.5, 0.5);
-            const featureBgScale = Math.min(
-                sectionAreaWidth2 / featureBg.width,
-                (scaledSymbolSize * 2.8) / featureBg.height
-            );
-            featureBg.setScale(featureBgScale);
-            featureBg.setSize(featureBg.displayWidth, featureBg.displayHeight);
-            buyFeatContainer.add(featureBg);
-
-            const btnCenterY = featureBg.y;
-
-            const buyLabel = scene.add.text(btnCenterX, btnCenterY - 8, 'BUY FEATURE', {
-                fontSize: '18px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins-Bold'
-            }) as ButtonText;
-            buyLabel.setOrigin(0.5, 0.5);
-            buyFeatContainer.add(buyLabel);
-
-            // Static price text centered on the button (hide currency in demo)
-            const isDemoBuyPrice = scene.gameAPI?.getDemoState();
-            const currencyPrefixBuyPrice = isDemoBuyPrice ? '' : CurrencyManager.getCurrencyCode();
-            const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencyPrefixBuyPrice}${currencyPrefixBuyPrice ? ' ' : ''}10,000`, {
-                fontSize: '18px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins-Bold'
-            }) as ButtonText;
-            buyPrice.setOrigin(0.5, 0.5);
-            buyFeatContainer.add(buyPrice);
-
-            // Description for Buy Feature
-            const buyDesc = scene.add.text(30, btnY + (featureBg.displayHeight) / 2 + 5,
-                'Lets you buy the free spins round for 100x your total bet.',
-                {
-                    ...this.textStyle,
-                    wordWrap: { width: this.contentWidth - this.padding * 2 }
-                }
-            ) as ButtonText;
-            buyDesc.setOrigin(0, 0);
-            buyFeatContainer.add(buyDesc);
-
-            // Removed Tumble Win section
-            this.yPosition += this.padding * 7.5;
-            this.addTextBlock(scene, 'header2', 'Free Spins Rules');
-            this.yPosition += scaledSymbolSize * 0.25;
-            //this.yPosition -= scaledSymbolSize * 4.5;
-    
-            const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-scaledSymbolSize * 0.2);
-            this.yPosition += this.createBorder(scene, freeSpinContainer, 
-                this.padding, 
-                0, 
-                this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 43
-                
-            );
-            this.contentContainer.add(freeSpinContainer);
-            this.contentContainer.sendToBack(freeSpinContainer);
-
-            this.yPosition -= scaledSymbolSize * 1.25;
-
-            // Use a common template for Bonus Trigger and Free Spins Start
-            const freeSpinsTitleOffset = this.padding * 15; // distance from image → title
-            const freeSpinsDescOffset = this.padding * 5;  // distance from title → description
-            const bonusDesc = 'Land 3             SCATTER \non reel 1, 3, and 5 on the screen to \ntrigger the FREE SPINS feature.';
-            const bonusImageTop = this.padding * 31.5; // explicit image Y inside the bordered area
-            // Compute center X of the bordered container for image placement
-            // @ts-ignore
-            const frameW0 = (freeSpinContainer.getData && freeSpinContainer.getData('frameW')) || (this.contentWidth + this.padding * 3);
-            // @ts-ignore
-            const frameX0 = (freeSpinContainer.getData && freeSpinContainer.getData('frameX')) || this.padding;
-            const centerX0 = frameX0 + frameW0 / 2;
-            const bonusBottomY = this.addSubSectionInstruction(
-                scene,
-                freeSpinContainer,
-                {
-                    title: 'Bonus Trigger',
-                    imageKey: 'scatterGame',
-                    imageX: centerX0,
-                    imageY: bonusImageTop,
-                    imageOrigin: { x: 0.5, y: 0.33 },
-                    imageScale: 1.1,
-                    titleOffsetY: freeSpinsTitleOffset,
-                    titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
-                    desc: bonusDesc,
-                    descOffsetY: freeSpinsDescOffset,
-                    descX: this.padding * 3,
-                    wordWrapWidth: this.contentWidth + this.padding * 3
-                }
-            );
-
-            // Horizontal divider under Bonus Trigger
-            // @ts-ignore
-            const frameW2 = (freeSpinContainer.getData && freeSpinContainer.getData('frameW')) || (this.contentWidth + this.padding * 3);
-            // @ts-ignore
-            const frameX2 = (freeSpinContainer.getData && freeSpinContainer.getData('frameX')) || this.padding;
-            const dividerY = bonusBottomY + this.padding * 6;
-            const inset = this.padding * 2;
-            const lineWidth = Math.max(0, frameW2 - inset * 2);
-            const lineLeft = frameX2 + inset;
-            const dividerG = scene.add.graphics();
-            dividerG.fillStyle(0x379557, 1);
-            dividerG.fillRect(lineLeft, dividerY, lineWidth, 1);
-            freeSpinContainer.add(dividerG);
-
-            const fsDesc = 'Before the round begins, a random number of free spins is awarded.\nA Spin Wheel appears to reveal the number of free spins.\nOnce the wheel stops, the total number of spins is granted.';
-            const fsImageTop = dividerY + this.padding * 30;
-            const fsStartBottom = this.addSubSectionInstruction(
-                scene,
-                freeSpinContainer,
-                {
-                    title: 'Free Spins Start',
-                    imageKey: 'wheelSpin_helper',
-                    imageX: frameX2 + frameW2 / 2,
-                    imageY: fsImageTop,
-                    imageOrigin: { x: 0.5, y: 0.33 },
-                    imageScale: 1.1,
-                    titleOffsetY: freeSpinsTitleOffset,
-                    titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
-                    desc: fsDesc,
-                    descOffsetY: freeSpinsDescOffset,
-                    descX: this.padding * 3,
-                    wordWrapWidth: this.contentWidth + this.padding * 3
-                }
-            );
-
-            // Divider after Free Spins Start
-            const dividerY2 = fsStartBottom + this.padding * 6;
-            const inset2 = this.padding * 2;
-            const lineWidth2 = Math.max(0, frameW2 - inset2 * 2);
-            const lineLeft2 = frameX2 + inset2;
-            const dividerG2 = scene.add.graphics();
-            dividerG2.fillStyle(0x379557, 1);
-            dividerG2.fillRect(lineLeft2, dividerY2, lineWidth2, 1);
-            freeSpinContainer.add(dividerG2);
-
-            // New section: Free Spins Round (mirror Free Spins Start spacing)
-            const fsRoundDesc = 'During Free Spins, all WILDs that \nland on reels 2, 3, and 4 stay on \nthe screen for the entire round.\n\nThese Sticky WILDs come with a \nrandom multiplier revealed when \nthey appear, which remains fixed \nuntil the end of the feature.\n\nSpecial reels are active during \nFree Spins. \nBONUS symbols do not appear, \nand the feature cannot be \nretriggered.';
-            const fsRoundImageTop = dividerY2 + this.padding * 42;
-            this.addSubSectionInstruction(
-                scene,
-                freeSpinContainer,
-                {
-                    title: 'Free Spins Round',
-                    imageKey: 'freeSpin_round',
-                    imageX: frameX2 + frameW2 / 2,
-                    imageY: fsRoundImageTop,
-                    imageOrigin: { x: 0.5, y: 0.5 },
-                    imageScale: 1.1,
-                    titleOffsetY: freeSpinsTitleOffset - 111,
-                    titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
-                    desc: fsRoundDesc,
-                    descOffsetY: freeSpinsDescOffset,
-                    descX: this.padding * 3,
-                    wordWrapWidth: this.contentWidth + this.padding * 3
-                }
-            );
-    
-            const scatterSymbolImage2 = scene.add.image(0, 0, 'ScatterLabel');
-            scatterSymbolImage2.setScale(0.2);
-            scatterSymbolImage2.setOrigin(0.5, 0.5);
-            scatterSymbolImage2.setPosition(130, 870);
-            freeSpinContainer.add(scatterSymbolImage2);
-    
-            const scatterSymbolImage = scene.add.image(0, 0, 'ScatterLabel');
-            scatterSymbolImage.setScale(0.5);
-            scatterSymbolImage.setOrigin(0.5, 0.5);
-            scatterSymbolImage.setPosition(70, 75);
-            freeSpinContainer.add(scatterSymbolImage);
-            
-            const scatterWinImage = scene.add.image(0, 0, 'scatterWin');
-            scatterWinImage.setScale(1);
-            scatterWinImage.setOrigin(0.5, 0.5);
-            scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 9.1, scatterSymbolImage.y * 3/4 - scatterWinImage.height/ 4 + 20);
-            freeSpinContainer.add(scatterWinImage);
-            
-            this.yPosition -= scaledSymbolSize * 5.3;
-
-            
-            // this.addDivider(scene, 0x379557);
-            const gameSettingsTitleOffset = this.padding * 15; // distance from image → title
-            const gameSettingsDescOffset = this.padding * 5;  
-
-            // Removed Multiplier section
-            this.yPosition += this.padding * 55;
-            this.addTextBlock(scene, 'header2', 'Game Settings');
-    
-            const gamesettingsContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
-            this.yPosition += this.createBorder(scene, gamesettingsContainer, 
-                this.padding, 
-                0, 
-                this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 10.8
-            );
-            this.contentContainer.add(gamesettingsContainer);
-    
-            //this.yPosition -= scaledSymbolSize * 9.75;
-            this.yPosition -= scaledSymbolSize * 10.3;
-            
-    
-            //this.yPosition += this.padding;
-            this.addTextBlock(scene, 'header2', 'Paylines', {
-                y: this.yPosition + this.padding * 0.1,
-                x: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 1.8
-            });
-
-            
-            
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 1, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
-
-            // Add payline notes text (as shown in the reference)
-            const paylineNotes = [
-                'All symbols pay left to right on \nselected paylines.',
-                'Free Spins wins are added to \npayline wins.',
-                'All wins are multiplied by the bet \nper line.',
-                'All values shown are actual wins \nin coins.',
-                'Only the highest win is paid per \nline.',
-                'Wins on multiple paylines are \nadded together.'
-            ].join('\n');
-            const notesX = this.padding * 3;
-            const notesY = scaledSymbolSize * 1 + this.padding * 8;
-            const notesText = scene.add.text(notesX, notesY, paylineNotes, {
-                ...this.textStyle,
-                wordWrap: { width: this.contentWidth + this.padding * 3 }
-            }) as ButtonText;
-            gamesettingsContainer.add(notesText);
-
-            // Immediately continue with text after the notes block (examples removed)
-            const textStartY = notesText.y + notesText.displayHeight + this.padding * 6;
-            // Removed extra bullet texts per request
-
-            // Compute actual bottom of Game Settings content and place How To Play after it
-            const contentBottomLocal = Math.max(gridBottom, notesText.y + notesText.displayHeight);
-            const gameSettingsBottom = gamesettingsContainer.y + contentBottomLocal + this.padding * 12;
-            this.yPosition = gameSettingsBottom;
-
-            this.commonRules(scene, this.contentWidth, 153);
-    
-            contentArea.add(this.contentContainer);
-    }
-    
     private commonRules(scene: GameScene, genericTableWidth: number, scaledSymbolSize: number): void {
         
         this.addContent(scene, 'How to Play', 'title');

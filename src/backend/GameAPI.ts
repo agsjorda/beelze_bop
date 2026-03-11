@@ -106,6 +106,13 @@ export interface RefreshTokenResponse {
     token?: string;
 }
 
+export interface LocalizationData {
+    sessionId: string;
+    gameId: string;
+    lang: string;
+    locale: string | null;
+}
+
 export class GameAPI {  
     private static readonly GAME_ID: string = '00120925';
     private static DEMO_BALANCE: number = 10000;
@@ -118,6 +125,7 @@ export class GameAPI {
     private initializationData: SlotInitializeData | null = null; // Cached initialization response
     private remainingInitFreeSpins: number = 0; // Free spin rounds from initialization still available
     private initFreeSpinBet: number | null = null; // Bet size associated with initialization free spins
+    private localizationData: LocalizationData | null = null; // Cached localization response
 
     // One-shot debug helper: force the first MANUAL spin to contain 3 scatters (symbol id 0)
     // in the first 3 columns. Enable via:
@@ -655,6 +663,73 @@ export class GameAPI {
      */
     public getInitializationData(): SlotInitializeData | null {
         return this.initializationData;
+    }
+
+    /**
+     * Fetch locale JSON from the backend and cache it for getLocalizationData().
+     */
+    public async fetchLocalizationData(): Promise<void> {
+        const apiUrl = `${getApiBaseUrl()}/api/v1/slots/locale`;
+        const requestBody = this.createLocaleAPIResponseBody();
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+
+        const raw = await response.json();
+        const data = raw?.data ?? raw;
+        const locale =
+            typeof data?.locale === 'string'
+                ? data.locale
+                : data?.locale && typeof data.locale === 'object'
+                    ? JSON.stringify(data.locale)
+                    : null;
+
+        const payload: LocalizationData = {
+            sessionId: data?.sessionId ?? requestBody.sessionId,
+            gameId: data?.gameId ?? requestBody.gameId,
+            lang: data?.lang ?? requestBody.lang,
+            locale: locale ?? '',
+        };
+
+        this.localizationData = payload;
+        console.log('[GameAPI] Localization data:', this.localizationData);
+    }
+
+    private createLocaleAPIResponseBody(): Pick<LocalizationData, 'sessionId' | 'gameId' | 'lang'> {
+        const isDemo = this.getDemoState();
+        if (isDemo) {
+            const language = getUrlParameter('lang');
+            return {
+                sessionId: '',
+                gameId: GameAPI.GAME_ID,
+                lang: language !== '' ? language : 'en',
+            };
+        }
+
+        const initData = this.initializationData;
+
+        return {
+            sessionId: initData?.sessionId ?? '',
+            gameId: initData?.gameId ?? GameAPI.GAME_ID,
+            lang: initData?.lang ?? 'en',
+        };
+    }
+
+    /**
+     * Get the cached localization data, if available.
+     */
+    public getLocalizationData(): LocalizationData | null {
+        return this.localizationData;
     }
 
     /**

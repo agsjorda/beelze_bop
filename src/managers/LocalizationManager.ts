@@ -8,21 +8,38 @@ export class LocalizationManager {
 	/** key → localized string (for the current language) */
 	private translations: Record<string, string> = {};
 
+	/** When true, getTextByKey returns the key itself (for debugging missing/incorrect translations). */
+	private debug_mode = false;
+
 	private constructor() {}
 
 	public static getInstance(): LocalizationManager {
 		if (!LocalizationManager.instance) {
 			LocalizationManager.instance = new LocalizationManager();
+			LocalizationManager.instance.readDebugModeFromUrl();
 		}
 		return LocalizationManager.instance;
 	}
 
+	/** Reads URL search params; if lang=debug_mode, enables debug mode. */
+	private readDebugModeFromUrl(): void {
+		if (typeof window === 'undefined') return;
+		const params = new URLSearchParams(window.location.search);
+		if (params.get('lang') === 'debug_mode') {
+			this.debug_mode = true;
+		}
+	}
+
 	/**
 	 * Looks up a localized string by key.
+	 * When debug_mode is true, returns the key as-is for debugging.
 	 * @param key - The localization key to resolve
-	 * @returns The localized string, or null if not found
+	 * @returns The localized string, or null if not found (or the key when debug_mode is true)
 	 */
 	public getTextByKey(key: string): string | null {
+		if (this.debug_mode) {
+			return key;
+		}
 		const value = this.translations[key];
 		return value !== undefined ? value : null;
 	}

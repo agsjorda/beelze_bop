@@ -81,6 +81,16 @@ export interface TextOpts extends LayoutOpts {
      * container dimensions, padding, and opts). Prevents overlap when values vary in length.
      */
     fitToBounds?: boolean;
+    /**
+     * When true, this text scales its font size down so the full string fits on a single line
+     * within the available width (no word wrapping). If it still does not fit at minFontSize,
+     * the text is rendered at minFontSize and may overflow/clip horizontally.
+     */
+    fitToSingleLine?: boolean;
+    /**
+     * Minimum font size in pixels used by fitToSingleLine. Defaults to 12.
+     */
+    minFontSize?: number;
 }
 
 export interface LineBreakOpts {
@@ -113,7 +123,21 @@ export interface TextImageRun {
  * Styled text run inside rich text. Allows applying custom styles to specific text segments.
  */
 export interface TextRun {
-    Text: { value: string; style?: Record<string, unknown>; /** Localization key; when set, displayed text is resolved via HelpScreen.getHelpText. */ key?: string };
+    Text: {
+        value: string;
+        style?: Record<string, unknown>;
+        /** Localization key; when set, displayed text is resolved via HelpScreen.getHelpText. */
+        key?: string;
+        /**
+         * When true, this run shrinks font size down to fit on one line without wrapping.
+         * Applies only to pure text runs (no inline placeholder images).
+         */
+        fitToSingleLine?: boolean;
+        /**
+         * Minimum font size in pixels used by fitToSingleLine. Defaults to 12.
+         */
+        minFontSize?: number;
+    };
 }
 
 /** One segment of rich text: either a string, a styled TextRun, or an inline TextImage. */

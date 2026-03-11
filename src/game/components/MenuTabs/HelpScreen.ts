@@ -9,6 +9,7 @@ import { gameSettingsContent } from './help_screen_content/GameSettingsContent';
 import { howToPlayContent } from './help_screen_content/HowToPlayContent';
 import { tumbleWinContent } from './help_screen_content/TumbleWinContent';
 import { localizationManager } from '../../../managers/LocalizationManager';
+import { LOCALIZATION_DEFAULTS } from '../../../backend/LocalizationData';
 import { CurrencyManager } from '../CurrencyManager';
 import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
 
@@ -95,74 +96,9 @@ export class HelpScreen {
     /** When true, draw element wireframes (green). */
     private showElementWireframe: boolean = false;
 
-    /** Default (fallback) text for help content when localization is missing. Ordered by display order (top to bottom). */
-    private static readonly helpDefaultText: Record<string, string> = {
-        // --- Game Rules (first section) ---
-        'help_game-rules-title': 'Game Rules',
-        'help_game-rules-desc': 'Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.',
-        // --- RTP ---
-        'help_rtp-title': 'RTP',
-        // --- Max Win ---
-        'help_max-win-title': 'Max Win',
-        // --- Payout (symbol + scatter) ---
-        'help_payout-title': 'Payout',
-        'help_scatter-title': 'Scatter',
-        'help_scatter-desc': 'This is the SCATTER symbol.\nSCATTER symbol is present on all reels.\nSCATTER pays on any position.',
-        // --- Tumble Win ---
-        'help_tumble-title': 'Tumble Win',
-        'help_tumble-desc': 'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\nTumbles continue as long as new winning combinations appear — there is no limit to the number of tumbles per spin.\n\nAll wins are credited to the player\'s balance after all tumbles from a base spin are completed.',
-        // --- Free Spin Rules ---
-        'help_freespin-rules-title': 'Free Spin Rules',
-        'help_bonus-trigger-title': 'Bonus Trigger',
-        'help_bonus-trigger-desc': 'Land 4 or more {image} SCATTER symbols anywhere on the screen to trigger the FREE SPINS feature.\nYou\'ll start with 10 free spins.\nDuring the bonus round, hitting 3 or more SCATTER symbols awards 5 extra free spins.',
-        'help_retrigger-title': 'In-Bonus Freespin Retrigger',
-        'help_retrigger-desc': 'Land 3 {image} SCATTER and win 5 more spins',
-        'help_multiplier-title': 'Multiplier',
-        'help_multiplier-desc': 'The {image} Multiplier symbol appears only during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\nEach time a {image} lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\nOnce all tumbles are finished, the total of all {image} multipliers is added and applied to the total win of that sequence.\n\nSpecial reels are used during the FREE SPINS round.',
-        // --- Game Settings ---
-        'help_game-settings-title': 'Game Settings',
-        'help_paylines-title': 'Paylines',
-        'help_paylines-desc0': 'Symbols can land anywhere on the screen.',
-        'help_paylines-desc1': 'All wins are multiplied by the base bet.\nWhen multiple symbol wins occur, all values are combined into the total win.\nFree spins rewards are granted after the round ends.',
-        // --- How to Play (container) ---
-        'help_how-play-title': 'How to Play',
-        // --- Bet Controls (under How to Play) ---
-        'help_bet-controls-title': 'Bet Controls',
-        'help_buttons-label': 'Buttons',
-        'help_bet-controls-desc': 'Adjust your total bet',
-        // --- Game Actions (under How to Play) ---
-        'help_game-actions-title': 'Game Actions',
-        'help_spin-label': 'Spin',
-        'help_spin-desc': 'Starts the game round.',
-        'help_buy-label': 'Buy Feature',
-        'help_buy-desc': 'Lets you buy the free spins round for 100x your total bet.',
-        'help_amplify-label': 'Amplify Bet',
-        'help_amplify-desc': "You're wagering 25% more per spin, but you also have better chances at hitting big features.",
-        'help_autoplay-label': 'Auto Play',
-        'help_autoplay-desc': 'Opens the autoplay menu. Tap again to stop autoplay.',
-        'help_turbo-label': 'Turbo',
-        'help_turbo-desc': 'Speeds up the game.',
-        // --- Display & Stats (under How to Play) ---
-        'help_display-stats-title': 'Display & Stats',
-        'help_balance-desc': 'Shows your current available credits.',
-        'help_balance-label': 'BALANCE',
-        'help_totalwin-desc': 'Displays your total winnings from the current round.',
-        'help_totalwin-label': 'TOTAL WIN',
-        'help_bet-desc': 'Adjust your wager using the – and + buttons.',
-        'help_bet-label': 'BET',
-        // --- General Controls (under How to Play) ---
-        'help_general-controls-title': 'General Controls',
-        'help_sounds-label': 'Sounds',
-        'help_sounds-desc': 'Toggle game sounds on or off.',
-        'help_settings-label': 'Settings',
-        'help_settings-desc': 'Access gameplay preferences and systems options.',
-        'help_info-label': 'Info',
-        'help_info-desc': 'View game rules, features, and paytable.',
-    };
-
-    /** Resolves help content text via localization, with fallback to default. */
+    /** Resolves help content text via localization, with fallback to LOCALIZATION_DEFAULTS. */
     private getHelpText(key: string): string {
-        return localizationManager.getTextByKey(key) ?? HelpScreen.helpDefaultText[key] ?? key;
+        return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
     }
 
     /** Returns display string for content that may have a localization key. */
@@ -764,6 +700,7 @@ export class HelpScreen {
 
     /**
      * Returns a text style with word wrap enabled at the given width.
+     * Uses useAdvancedWrap: true so CJK text (no spaces) wraps by character; space-separated languages unchanged.
      * Merges with the provided style so existing properties are preserved.
      */
     private getTextStyleWithWordWrap(style: TextStyle, wrapWidth: number): TextStyle {
@@ -771,8 +708,114 @@ export class HelpScreen {
             ...style,
             wordWrap: {
                 width: wrapWidth,
+                useAdvancedWrap: true,
                 ...(typeof style.wordWrap === 'object' && style.wordWrap != null ? style.wordWrap : {}),
             },
+        };
+    }
+
+    /** Parses a fontSize value from TextStyle into a numeric pixel size, or null if unavailable. */
+    private parseFontSize(fontSize: string | number | undefined): number | null {
+        if (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize > 0) {
+            return fontSize;
+        }
+        if (typeof fontSize === 'string') {
+            const parsed = parseFloat(fontSize);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+        return null;
+    }
+
+    /** Returns a new TextStyle with the provided font size (in pixels). */
+    private withFontSize(style: TextStyle, size: number): TextStyle {
+        return {
+            ...style,
+            fontSize: `${size}px`,
+        };
+    }
+
+    /**
+     * Creates a Phaser text object for a single-line string, shrinking font size down until it fits
+     * within maxWidth (no wrapping). If it cannot fit even at minFontSize, returns text at minFontSize
+     * and reports fitsWithinWidth: false (caller may still render it and allow overflow/clipping).
+     */
+    private createSingleLineFittedText(
+        displayText: string,
+        textStyle: TextStyle,
+        maxWidth: number,
+        minFontSizeInput?: number
+    ): { text: Phaser.GameObjects.Text; width: number; height: number; fitsWithinWidth: boolean } {
+        const styleWithoutWrap: TextStyle = { ...textStyle };
+        delete styleWithoutWrap.wordWrap;
+
+        const minFontSize =
+            typeof minFontSizeInput === 'number' && Number.isFinite(minFontSizeInput) && minFontSizeInput > 0
+                ? Math.floor(minFontSizeInput)
+                : 12;
+
+        const initialTextObj = this.scene.add.text(0, 0, displayText, styleWithoutWrap);
+        const initialFontSize = this.parseFontSize(styleWithoutWrap.fontSize as string | number | undefined);
+
+        if (maxWidth > 0 && initialTextObj.width <= maxWidth) {
+            return {
+                text: initialTextObj,
+                width: initialTextObj.width,
+                height: initialTextObj.height,
+                fitsWithinWidth: true,
+            };
+        }
+
+        if (initialFontSize == null || initialFontSize <= minFontSize) {
+            return {
+                text: initialTextObj,
+                width: initialTextObj.width,
+                height: initialTextObj.height,
+                fitsWithinWidth: maxWidth > 0 ? initialTextObj.width <= maxWidth : false,
+            };
+        }
+
+        initialTextObj.destroy();
+
+        const maxSize = Math.floor(initialFontSize);
+        const minSize = Math.min(minFontSize, maxSize);
+        let low = minSize;
+        let high = maxSize;
+        let bestFittingSize: number | null = null;
+
+        while (low <= high) {
+            const candidateSize = Math.floor((low + high) / 2);
+            const candidateObj = this.scene.add.text(
+                0,
+                0,
+                displayText,
+                this.withFontSize(styleWithoutWrap, candidateSize)
+            );
+            const candidateFits = maxWidth > 0 && candidateObj.width <= maxWidth;
+            candidateObj.destroy();
+
+            if (candidateFits) {
+                bestFittingSize = candidateSize;
+                low = candidateSize + 1;
+            } else {
+                high = candidateSize - 1;
+            }
+        }
+
+        const finalSize = bestFittingSize ?? minSize;
+        const finalObj = this.scene.add.text(
+            0,
+            0,
+            displayText,
+            this.withFontSize(styleWithoutWrap, finalSize)
+        );
+
+        return {
+            text: finalObj,
+            width: finalObj.width,
+            height: finalObj.height,
+            fitsWithinWidth: maxWidth > 0 ? finalObj.width <= maxWidth : false,
         };
     }
 
@@ -990,21 +1033,37 @@ export class HelpScreen {
         const baseStyle = this.mergeTextStyle(HelpScreen.defaultBodyTextStyle, opts.style as Record<string, unknown>);
         // For word wrap, use available width after accounting for left/right padding
         const availableWidth = containerWidth - paddingLeft - paddingRight;
-        const styleWithSpacing = this.applyLineSpacing(baseStyle, opts.lineSpacing);
-        const style = this.getTextStyleWithWordWrap(styleWithSpacing, availableWidth);
-        
-        const isRTL = opts.rtl === true;
-        if (isRTL) {
-            style.rtl = true;
-        }
-        
         const displayText = this.resolveHelpText(text.key, text.value);
-        const textObj = this.scene.add.text(0, 0, displayText, style);
-        
+
+        const isRTL = opts.rtl === true;
+        const useFitToSingleLine = opts.fitToSingleLine === true;
+
+        let textObj: Phaser.GameObjects.Text;
+
+        if (useFitToSingleLine) {
+            const styleWithSpacing = this.applyLineSpacing(baseStyle, opts.lineSpacing);
+            const { text: fittedText } = this.createSingleLineFittedText(
+                displayText,
+                styleWithSpacing,
+                availableWidth,
+                opts.minFontSize
+            );
+            textObj = fittedText;
+        } else {
+            const styleWithSpacing = this.applyLineSpacing(baseStyle, opts.lineSpacing);
+            const style = this.getTextStyleWithWordWrap(styleWithSpacing, availableWidth);
+
+            if (isRTL) {
+                (style as Record<string, unknown>).rtl = true;
+            }
+
+            textObj = this.scene.add.text(0, 0, displayText, style);
+        }
+
         if (isRTL) {
             textObj.setRTL(true);
         }
-        
+
         textObj.setOrigin(anchorX, anchorY);
         // Position text accounting for left padding and alignment
         const x = offsetX + paddingLeft + availableWidth * align + offsetXFromOpts;
@@ -1088,6 +1147,84 @@ export class HelpScreen {
             const textObj = this.scene.add.text(0, 0, token, textStyle);
             const tokenWidth = textObj.width;
             const tokenHeight = textObj.height;
+
+            // When a single token is wider than the line (e.g. long CJK text with no spaces),
+            // break it using Phaser's word wrap so it wraps by width instead of staying one line.
+            if (tokenWidth > availableWidth) {
+                textObj.destroy();
+                const getWrappedLines = (value: string, width: number): string[] => {
+                    const wrapStyle: TextStyle = {
+                        ...textStyle,
+                        wordWrap: { width, useAdvancedWrap: true },
+                    };
+                    const tempText = this.scene.add.text(0, 0, value, wrapStyle);
+                    const wrappedLines = tempText.getWrappedText(value);
+                    tempText.destroy();
+                    return wrappedLines;
+                };
+
+                if (currentLineWidth > 0) {
+                    const remainingWidth = availableWidth - currentLineWidth;
+                    const minRemainingWidthForInlineWrap = Math.max(80, availableWidth * 0.35);
+
+                    // If enough width remains, allow the first wrapped slice to continue on
+                    // the current line (important for inline placeholder images).
+                    if (remainingWidth >= minRemainingWidthForInlineWrap) {
+                        const firstPassLines = getWrappedLines(token, remainingWidth);
+                        const firstLine = firstPassLines[0] ?? '';
+                        if (firstLine.length > 0) {
+                            const firstLineObj = this.scene.add.text(0, 0, firstLine, textStyle);
+                            currentLine.push({
+                                obj: firstLineObj,
+                                width: firstLineObj.width,
+                                height: firstLineObj.height,
+                            });
+                            currentLineWidth += firstLineObj.width;
+
+                            const remainingToken = token.slice(firstLine.length);
+                            if (remainingToken.length === 0) {
+                                return;
+                            }
+
+                            flushLine();
+                            const remainingLines = getWrappedLines(remainingToken, availableWidth);
+                            for (let i = 0; i < remainingLines.length; i += 1) {
+                                if (i > 0) {
+                                    flushLine();
+                                }
+                                const lineText = remainingLines[i];
+                                const lineObj = this.scene.add.text(0, 0, lineText, textStyle);
+                                currentLine.push({
+                                    obj: lineObj,
+                                    width: lineObj.width,
+                                    height: lineObj.height,
+                                });
+                                currentLineWidth += lineObj.width;
+                            }
+                            return;
+                        }
+                    }
+
+                    // If little width remains, start on a fresh line to avoid tiny fragments.
+                    flushLine();
+                }
+
+                const wrappedLines = getWrappedLines(token, availableWidth);
+                for (let i = 0; i < wrappedLines.length; i += 1) {
+                    if (i > 0) {
+                        flushLine();
+                    }
+                    const lineText = wrappedLines[i];
+                    const lineObj = this.scene.add.text(0, 0, lineText, textStyle);
+                    currentLine.push({
+                        obj: lineObj,
+                        width: lineObj.width,
+                        height: lineObj.height,
+                    });
+                    currentLineWidth += lineObj.width;
+                }
+                return;
+            }
 
             if (currentLineWidth + tokenWidth > availableWidth && currentLineWidth > 0) {
                 flushLine();
@@ -1278,7 +1415,44 @@ export class HelpScreen {
                     ? this.mergeTextStyle(baseStyle, textRun.style)
                     : baseStyle;
                 const displayValue = this.resolveHelpText(textRun.key, textRun.value);
-                addTextWithInlineImagePlaceholders(displayValue, textStyle);
+                const hasPlaceholderToken = /\{[A-Za-z0-9_.-]+\}/.test(displayValue);
+
+                if (textRun.fitToSingleLine === true && !hasPlaceholderToken) {
+                    const remainingWidth = availableWidth - currentLineWidth;
+                    const firstPassMaxWidth = currentLineWidth > 0 ? remainingWidth : availableWidth;
+                    const firstPassResult = this.createSingleLineFittedText(
+                        displayValue,
+                        textStyle,
+                        firstPassMaxWidth,
+                        textRun.minFontSize
+                    );
+
+                    if (currentLineWidth > 0 && !firstPassResult.fitsWithinWidth) {
+                        firstPassResult.text.destroy();
+                        flushLine();
+                        const secondPassResult = this.createSingleLineFittedText(
+                            displayValue,
+                            textStyle,
+                            availableWidth,
+                            textRun.minFontSize
+                        );
+                        currentLine.push({
+                            obj: secondPassResult.text,
+                            width: secondPassResult.width,
+                            height: secondPassResult.height,
+                        });
+                        currentLineWidth += secondPassResult.width;
+                    } else {
+                        currentLine.push({
+                            obj: firstPassResult.text,
+                            width: firstPassResult.width,
+                            height: firstPassResult.height,
+                        });
+                        currentLineWidth += firstPassResult.width;
+                    }
+                } else {
+                    addTextWithInlineImagePlaceholders(displayValue, textStyle);
+                }
             } else if (part && 'TextImage' in part && part.TextImage != null) {
                 addImageSegment(part.TextImage.key, part.TextImage.opts ?? {}, part.TextImage.text);
             }

@@ -1,4 +1,5 @@
 import type { ContentSection } from '../ContentSection';
+import { HELP_HOW_PLAY_TITLE } from '../../../../backend/LocalizationData';
 import { betControlsSection } from './BetControlsContent';
 import { gameActionsSection } from './GameActionsContent';
 import { displayStatsSection } from './DisplayStatsContent';
@@ -6,7 +7,7 @@ import { generalControlsSection } from './GeneralControlsContent';
 
 export const howToPlayContent: ContentSection = {
     Header: {
-        key: 'help_how-play-title',
+        key: HELP_HOW_PLAY_TITLE,
         value: 'How to Play',
         opts: {
             padding: { top: 12, bottom: 12 },

@@ -1,4 +1,6 @@
 import { Scene, GameObjects } from 'phaser';
+import { localizationManager } from '../../managers/LocalizationManager';
+import { LOCALIZATION_DEFAULTS, POPUP_SESSION_EXPIRED } from '../../backend/LocalizationData';
 
 export class TokenExpiredPopup extends GameObjects.Container {
     private background: GameObjects.Graphics;
@@ -60,11 +62,12 @@ export class TokenExpiredPopup extends GameObjects.Container {
         this.drawBackground();
         
         // Create message text (centered vertically after removing button)
+        const messageTextStr = localizationManager.getTextByKey(POPUP_SESSION_EXPIRED) ?? LOCALIZATION_DEFAULTS[POPUP_SESSION_EXPIRED] ?? 'Your play session has expired. Please log in again to keep playing.';
         this.messageText = new GameObjects.Text(
             scene,
             0,
             0,
-            'Your play session has expired. Please log in again to keep playing. \n\nIf you were actively playing a game, your progress has been saved, and you can pick up right where you left off after relaunching the game.',
+            messageTextStr,
             {
                 fontFamily: 'Poppins-Regular',
                 fontSize: '21px',

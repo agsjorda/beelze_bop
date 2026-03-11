@@ -20,6 +20,13 @@ import { BuyFeatureController } from './BuyFeatureController';
 import { BalanceController } from './BalanceController';
 import { CurrencyManager } from '../CurrencyManager';
 import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
+import { localizationManager } from '../../../managers/LocalizationManager';
+import {
+	COMMON_BET,
+	CONTROLLER_AUTOPLAY,
+	CONTROLLER_BUY_FEATURE,
+	LOCALIZATION_DEFAULTS
+} from '../../../backend/LocalizationData';
 import { 
 	BetController, 
 	AutoplayController, 
@@ -187,6 +194,11 @@ export class SlotController {
 		
 		// Listen for autoplay state changes
 		this.setupAutoplayEventListeners();
+	}
+
+	/** Resolves controller label text via localization. */
+	private getControllerText(key: string): string {
+		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
 	}
 
 	/**
@@ -1615,7 +1627,7 @@ export class SlotController {
 		const autoplayText = scene.add.text(
 			scene.scale.width * 0.27,
 			middleRef + (autoplayButton.displayHeight * 0.5) + 15,
-			'Autoplay',
+			this.getControllerText(CONTROLLER_AUTOPLAY),
 			this.getTextStyle()
 		).setOrigin(0.5, 0.5).setDepth(10);
 		this.controllerContainer.add(autoplayText);
@@ -1710,7 +1722,7 @@ export class SlotController {
 		this.betLabelContainer = scene.add.container(betX, betY - 8);
 		this.betLabelContainer.setDepth(9);
 
-		const betText = 'BET';
+		const betText = this.getControllerText(COMMON_BET).toUpperCase();
 		const currencyCode = isDemoBet ? '' : CurrencyManager.getCurrencyCode();
 
 		let currentX = 0;
@@ -1942,7 +1954,7 @@ export class SlotController {
 		// If the game boots directly into initialization free rounds, keep this label hidden.
 		this.featureLabelContainer.setVisible((gameStateManager as any)?.isInFreeSpinRound !== true);
 
-		const featureText = 'BUY';
+		const featureText = this.getControllerText(CONTROLLER_BUY_FEATURE).toUpperCase();
 		const currencyCode = isDemoFeature ? '' : CurrencyManager.getCurrencyCode();
 
 		let currentX = 0;
@@ -2129,7 +2141,7 @@ export class SlotController {
 		const autoplayText = scene.add.text(
 			scene.scale.width * 0.5 + buttonSpacing,
 			middleRef + (autoplayButton.displayHeight * 0.5) + 15,
-			'Autoplay',
+			this.getControllerText(CONTROLLER_AUTOPLAY),
 			this.getTextStyle(),
 		).setOrigin(0.5, 0.5).setDepth(10);
 		this.controllerContainer.add(autoplayText);
@@ -2290,7 +2302,7 @@ export class SlotController {
 			
 			this.betLabelContainer.removeAll(true);
 			
-			const betText = 'BET';
+			const betText = this.getControllerText(COMMON_BET).toUpperCase();
 			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
 			let currentX = 0;
@@ -2359,7 +2371,7 @@ export class SlotController {
 			
 			this.featureLabelContainer.removeAll(true);
 			
-			const featureText = 'BUY';
+			const featureText = this.getControllerText(CONTROLLER_BUY_FEATURE).toUpperCase();
 			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
 			let currentX = 0;

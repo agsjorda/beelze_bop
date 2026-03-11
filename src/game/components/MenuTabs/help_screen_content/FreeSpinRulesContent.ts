@@ -1,5 +1,12 @@
 import type { ContentSection } from '../ContentSection';
 import { scatterSymbolKey } from './PayoutContent';
+import {
+    HELP_BONUS_TRIGGER_DESC,
+    HELP_BONUS_TRIGGER_TITLE,
+    HELP_FREESPIN_RULES_TITLE,
+    HELP_MULTIPLIER_DESC,
+    HELP_MULTIPLIER_TITLE,
+} from '../../../../backend/LocalizationData';
 
 const bonusTriggerContent: ContentSection = {
     Border: {
@@ -14,7 +21,7 @@ const bonusTriggerContent: ContentSection = {
     Content: [
         {
             Header: {
-                key: 'help_bonus-trigger-title',
+                key: HELP_BONUS_TRIGGER_TITLE,
                 value: 'Bonus Trigger',
                 opts: {
                     padding: { top: 12, bottom: 12 },
@@ -35,7 +42,7 @@ const bonusTriggerContent: ContentSection = {
                 parts: [
                     {
                         Text: {
-                            key: 'help_bonus-trigger-desc',
+                            key: HELP_BONUS_TRIGGER_DESC,
                             value: 'Land 4 or more {image} SCATTER symbols anywhere on the screen to trigger the FREE SPINS feature.\nYou\'ll start with 10 free spins.\nDuring the bonus round, hitting 3 or more SCATTER symbols awards 5 extra free spins.',
                         },
                     },
@@ -63,7 +70,7 @@ const multiplierGameContent: ContentSection = {
                 opts: {
                     padding: { top: 40, bottom: 20 },
                 },
-                key: 'help_multiplier-title',
+                key: HELP_MULTIPLIER_TITLE,
                 value: 'Multiplier',
             },
         },
@@ -81,7 +88,7 @@ const multiplierGameContent: ContentSection = {
                 parts: [
                     {
                         Text: {
-                            key: 'help_multiplier-desc',
+                            key: HELP_MULTIPLIER_DESC,
                             value: 'The {image} Multiplier symbol appears only during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\nEach time a {image} lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\n\nOnce all tumbles are finished, the total of all {image} multipliers is added and applied to the total win of that sequence.\nSpecial reels are used during the FREE SPINS round.',
                         },
                     },
@@ -93,7 +100,7 @@ const multiplierGameContent: ContentSection = {
 
 export const freeSpinContent: ContentSection = {
     Header: {
-        key: 'help_freespin-rules-title',
+        key: HELP_FREESPIN_RULES_TITLE,
         value: 'Free Spin Rules',
     },
     Border: {

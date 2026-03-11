@@ -1,4 +1,6 @@
 import { Scene, GameObjects } from 'phaser';
+import { localizationManager } from '../../managers/LocalizationManager';
+import { COMMON_OK, LOCALIZATION_DEFAULTS, POPUP_INSUFFICIENT_BALANCE } from '../../backend/LocalizationData';
 
 export class OutOfBalancePopup extends GameObjects.Container {
     private background: GameObjects.Graphics;
@@ -59,11 +61,12 @@ export class OutOfBalancePopup extends GameObjects.Container {
         this.background = new Phaser.GameObjects.Graphics(scene);
         this.drawBackground();
 
+        const messageTextStr = localizationManager.getTextByKey(POPUP_INSUFFICIENT_BALANCE) ?? LOCALIZATION_DEFAULTS[POPUP_INSUFFICIENT_BALANCE] ?? 'Insufficient balance.\nYour balance is too low to place this bet.\nPlease add funds or adjust your bet.';
         this.messageText = new GameObjects.Text(
             scene,
             0,
             -40,
-            'Insufficient balance.\nYour balance is too low to place this bet.\nPlease add funds or adjust your bet.',
+            messageTextStr,
             {
                 fontFamily: 'Poppins-Regular',
                 fontSize: '21px',
@@ -89,11 +92,12 @@ export class OutOfBalancePopup extends GameObjects.Container {
         this.buttonImage.setDisplaySize(scaledWidth, scaledHeight);
         this.buttonImage.setScale(this.buttonScale);
 
+        const okButtonText = localizationManager.getTextByKey(COMMON_OK) ?? LOCALIZATION_DEFAULTS[COMMON_OK] ?? 'OK';
         this.buttonText = new GameObjects.Text(
             scene,
             buttonX,
             buttonY,
-            'OK',
+            okButtonText,
             {
                 fontFamily: 'Poppins-Bold',
                 fontSize: '24px',

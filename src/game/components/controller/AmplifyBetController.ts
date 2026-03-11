@@ -3,7 +3,18 @@ import { EventBus } from '../../EventBus';
 import { gameStateManager } from '../../../managers/GameStateManager';
 import { NetworkManager } from '../../../managers/NetworkManager';
 import { ensureSpineFactory } from '../../../utils/SpineGuard';
+import { localizationManager } from '../../../managers/LocalizationManager';
+import {
+	CONTROLLER_AMPLIFY_BET,
+	CONTROLLER_DOUBLE_CHANCE,
+	CONTROLLER_FOR_FEATURE,
+	LOCALIZATION_DEFAULTS
+} from '../../../backend/LocalizationData';
 import type { GameData } from '../GameData';
+
+function getControllerText(key: string): string {
+	return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
+}
 
 export interface AmplifyBetCallbacks {
   getGameData: () => GameData | null;
@@ -64,7 +75,7 @@ export class AmplifyBetController {
     const amplifyText = this.scene.add.text(
       x,
       y + (amplifyButton.displayHeight * 0.5) + 15,
-      'Amplify Bet',
+      getControllerText(CONTROLLER_AMPLIFY_BET),
       textStyle
     ).setOrigin(0.5, 0.5).setDepth(10);
     this.controllerContainer.add(amplifyText);
@@ -107,7 +118,7 @@ export class AmplifyBetController {
     const descriptionLabel1 = scene.add.text(
       descriptionX,
       descriptionY - 5,
-      'Double Chance',
+      getControllerText(CONTROLLER_DOUBLE_CHANCE),
       {
         fontSize: '9px',
         color: '#ffffff',
@@ -119,7 +130,7 @@ export class AmplifyBetController {
     const descriptionLabel2 = scene.add.text(
       descriptionX,
       descriptionY + 6,
-      'For Feature',
+      getControllerText(CONTROLLER_FOR_FEATURE),
       {
         fontSize: '9px',
         color: '#ffffff',

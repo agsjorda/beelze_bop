@@ -1,9 +1,10 @@
 import type { ContentSection } from '../ContentSection';
+import { HELP_MAX_WIN_TITLE } from '../../../../backend/LocalizationData';
 
 export const maxWinContent: ContentSection = {
     Header: {
         opts: { padding: { top: 12, bottom: 12 } },
-        key: 'help_max-win-title',
+        key: HELP_MAX_WIN_TITLE,
         value: 'Max Win',
     },
     Content: [

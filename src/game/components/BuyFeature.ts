@@ -3,6 +3,14 @@ import { SlotController } from './controller/SlotController';
 import { CurrencyManager } from './CurrencyManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
+import { localizationManager } from '../../managers/LocalizationManager';
+import {
+	BUY_FEATURE_BUY_BUTTON,
+	BUY_FEATURE_FEATURE_NAME,
+	BUY_FEATURE_TITLE,
+	COMMON_BET,
+	LOCALIZATION_DEFAULTS,
+} from '../../backend/LocalizationData';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -45,6 +53,7 @@ export class BuyFeature {
 	private scatterRetryCount: number = 0;
 	private scatterShouldLoopWin: boolean = false;
 	private readonly SCATTER_MAX_RETRIES: number = 5;
+	private readonly HORIZONTAL_PADDING: number = 32;
 
 	/**
 	 * Sync bet ladder from GameData (single source of truth). Call at start of create().
@@ -103,6 +112,10 @@ export class BuyFeature {
 	 */
 	public getCurrentBetAmount(): number {
 		return this.currentBet;
+	}
+
+	private getBuyFeatureText(key: string): string {
+		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
 	}
 
 	/**
@@ -374,17 +387,17 @@ export class BuyFeature {
 	}
 
 	private createTitle(scene: Scene): void {
-		const screenWidth = scene.cameras.main.width;
 		const screenHeight = scene.cameras.main.height;
 		const backgroundTop = screenHeight - 736;
 		
-		const title = scene.add.text(screenWidth / 2 - 110, backgroundTop + 40, 'Buy Feature', {
+		const titleText = this.getBuyFeatureText(BUY_FEATURE_TITLE);
+		const title = scene.add.text(this.HORIZONTAL_PADDING, backgroundTop + 40, titleText, {
 			fontSize: '24px',
 			fontFamily: 'Poppins-Regular',
 			color: '#00ff00',
 			fontStyle: 'bold'
 		});
-		title.setOrigin(0.5);
+		title.setOrigin(0, 0.5);
 		this.container.add(title);
 	}
 
@@ -393,7 +406,8 @@ export class BuyFeature {
 		const screenHeight = scene.cameras.main.height;
 		const backgroundTop = screenHeight - 736;
 		
-		const featureName = scene.add.text(screenWidth / 2, backgroundTop + 100, "A Devilish Deal!", {
+		const featureNameText = this.getBuyFeatureText(BUY_FEATURE_FEATURE_NAME);
+		const featureName = scene.add.text(screenWidth / 2, backgroundTop + 100, featureNameText, {
 			fontSize: '24px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
@@ -435,15 +449,12 @@ export class BuyFeature {
 		// Use long_button image to match other confirm buttons
 		const buttonImage = scene.add.image(x, y, 'long_button');
 		buttonImage.setOrigin(0.5, 0.5);
-		const targetWidth = 364;
-		const targetHeight = 62;
-		const scale = Math.min(targetWidth / buttonImage.width, targetHeight / buttonImage.height);
-		buttonImage.setScale(scale);
-		buttonImage.setSize(buttonImage.displayWidth, buttonImage.displayHeight);
+		buttonImage.setDisplaySize(screenWidth - this.HORIZONTAL_PADDING * 2, 62);
 		this.container.add(buttonImage);
 		
 		// Button label
-		this.confirmButton = scene.add.text(x, y, 'BUY FEATURE', {
+		const confirmButtonText = this.getBuyFeatureText(BUY_FEATURE_BUY_BUTTON);
+		this.confirmButton = scene.add.text(x, y, confirmButtonText, {
 			fontSize: '24px',
 			fontFamily: 'Poppins-Bold',
 			color: '#000000'
@@ -542,7 +553,8 @@ export class BuyFeature {
 		const y = backgroundTop + 470;
 		
 		// "Bet" label
-		const betLabel = scene.add.text(x - 182, y - 70, 'Bet', {
+		const betLabelText = this.getBuyFeatureText(COMMON_BET);
+		const betLabel = scene.add.text(this.HORIZONTAL_PADDING, y - 70, betLabelText, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -552,10 +564,12 @@ export class BuyFeature {
 		
 		// Bet input background
 		const inputBg = scene.add.graphics();
+		const inputBgWidth = screenWidth - this.HORIZONTAL_PADDING * 2;
+		const inputBgHeight = 74;
 		inputBg.fillStyle(0x000000, 0.0); // Fully transparent for diagnostic
-		inputBg.fillRoundedRect(-182, -37, 364, 74, 15);
+		inputBg.fillRoundedRect(-inputBgWidth / 2, -inputBgHeight / 2, inputBgWidth, inputBgHeight, 15);
 		inputBg.lineStyle(0.5, 0xffffff, 1);
-		inputBg.strokeRoundedRect(-182, -37, 364, 74, 15);
+		inputBg.strokeRoundedRect(-inputBgWidth / 2, -inputBgHeight / 2, inputBgWidth, inputBgHeight, 15);
 		inputBg.setPosition(x, y);
 		this.container.add(inputBg);
 		

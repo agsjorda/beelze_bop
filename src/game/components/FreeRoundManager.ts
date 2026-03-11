@@ -5,6 +5,22 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SlotController } from './controller/SlotController';
 import { CurrencyManager } from './CurrencyManager';
 import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
+import { localizationManager } from '../../managers/LocalizationManager';
+import {
+	COMMON_OK,
+	FREEROUND_CLAIM_NOW_BUTTON,
+	FREEROUND_CREDITED_LINE1,
+	FREEROUND_CREDITED_LINE2,
+	FREEROUND_DONE_TITLE,
+	FREEROUND_GRANTED_SUBTITLE,
+	FREEROUND_REWARD_TITLE,
+	FREEROUND_SPIN_NOW_BUTTON,
+	FREEROUND_SPINS_LABEL,
+	FREEROUND_WITH_LABEL,
+	FREEROUND_PANEL_LABEL,
+	FREEROUND_YOU_WON,
+	LOCALIZATION_DEFAULTS,
+} from '../../backend/LocalizationData';
 
 export class FreeRoundManager {
 	private container: Phaser.GameObjects.Container | null = null;
@@ -233,7 +249,8 @@ export class FreeRoundManager {
 		this.container.add(infoBg);
 
 		// "Free\nSpin" label on the left side of the panel
-		this.labelText = scene.add.text(infoX - infoWidth / 2 + 25, infoY, 'Free\nSpin', {
+		const panelLabelStr = localizationManager.getTextByKey(FREEROUND_PANEL_LABEL) ?? LOCALIZATION_DEFAULTS[FREEROUND_PANEL_LABEL] ?? 'Free\nSpin';
+		this.labelText = scene.add.text(infoX - infoWidth / 2 + 25, infoY, panelLabelStr, {
 			fontSize: '12px',
 			color: '#ffffff', // base color; will be overridden by gradient
 			fontFamily: 'poppins-bold',
@@ -807,10 +824,11 @@ export class FreeRoundManager {
 		this.panelContainer.add(bg);
 
 		// Title: "Free Spin Reward"
+		const rewardTitleStr = localizationManager.getTextByKey(FREEROUND_REWARD_TITLE) ?? LOCALIZATION_DEFAULTS[FREEROUND_REWARD_TITLE] ?? 'Free Spin Reward';
 		const titleText = scene.add.text(
 			0,
 			-panelHeight / 2 + 60,
-			'Free Spin Reward',
+			rewardTitleStr,
 			{
 				fontSize: '24px',
 				color: '#00ff00',
@@ -821,10 +839,11 @@ export class FreeRoundManager {
 		this.panelContainer.add(titleText);
 
 		// Subtitle: "You have been Granted"
+		const grantedStr = localizationManager.getTextByKey(FREEROUND_GRANTED_SUBTITLE) ?? LOCALIZATION_DEFAULTS[FREEROUND_GRANTED_SUBTITLE] ?? 'You have been Granted';
 		const subtitleText = scene.add.text(
 			0,
 			-panelHeight / 2 + 110,
-			'You have been Granted',
+			grantedStr,
 			{
 				fontSize: '24px',
 				color: '#ffffff',
@@ -874,10 +893,11 @@ export class FreeRoundManager {
 		}
 
 		// "Spins" label
+		const spinsLabelStr = localizationManager.getTextByKey(FREEROUND_SPINS_LABEL) ?? LOCALIZATION_DEFAULTS[FREEROUND_SPINS_LABEL] ?? 'Spins';
 		const spinsLabel = scene.add.text(
 			0,
 			cardY + 15,
-			'Spins',
+			spinsLabelStr,
 			{
 				fontSize: '20px',
 				color: '#ffffff',
@@ -899,10 +919,11 @@ export class FreeRoundManager {
 		const betDisplay = formatCurrencyNumber(betValue);
 
 		// "With" (white) and bet value (green) as separate texts so styles can differ
+		const withLabelStr = localizationManager.getTextByKey(FREEROUND_WITH_LABEL) ?? LOCALIZATION_DEFAULTS[FREEROUND_WITH_LABEL] ?? 'With';
 		const withText = scene.add.text(
 			0,
 			0,
-			'With',
+			withLabelStr,
 			{
 				fontSize: '14px',
 				color: '#ffffff',
@@ -948,10 +969,11 @@ export class FreeRoundManager {
 		this.panelContainer.add(buttonImage);
 
 		// Overlay "SPIN NOW" text on top of the button image
+		const spinNowStr = localizationManager.getTextByKey(FREEROUND_SPIN_NOW_BUTTON) ?? LOCALIZATION_DEFAULTS[FREEROUND_SPIN_NOW_BUTTON] ?? 'SPIN NOW';
 		const buttonLabel = scene.add.text(
 			0,
 			buttonY,
-			'SPIN NOW',
+			spinNowStr,
 			{
 				fontSize: '24px',
 				color: '#000000',
@@ -1060,10 +1082,11 @@ export class FreeRoundManager {
 		this.panelContainer.add(bg);
 
 		// Title: "Free Spin Reward"
+		const rewardTitleStr2 = localizationManager.getTextByKey(FREEROUND_REWARD_TITLE) ?? LOCALIZATION_DEFAULTS[FREEROUND_REWARD_TITLE] ?? 'Free Spin Reward';
 		const titleText = scene.add.text(
 			0,
 			-panelHeight / 2 + 50,
-			'Free Spin Reward',
+			rewardTitleStr2,
 			{
 				fontSize: '24px',
 				color: '#00ff00',
@@ -1079,9 +1102,11 @@ export class FreeRoundManager {
 		const currencyPrefix = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
 		const line1Y = -40;
+		const youWonStr = localizationManager.getTextByKey(FREEROUND_YOU_WON) ?? LOCALIZATION_DEFAULTS[FREEROUND_YOU_WON] ?? 'You won ';
+		const withStr = (localizationManager.getTextByKey(FREEROUND_WITH_LABEL) ?? LOCALIZATION_DEFAULTS[FREEROUND_WITH_LABEL] ?? 'With').toLowerCase();
 		const line1Parts = [
 			{
-				text: 'You won ',
+				text: youWonStr,
 				style: { fontSize: '24px', color: '#ffffff', fontFamily: 'poppins-bold' }
 			},
 			{
@@ -1089,7 +1114,7 @@ export class FreeRoundManager {
 				style: { fontSize: '32px', color: '#00ff00', fontFamily: 'poppins-bold' }
 			},
 			{
-				text: ' with',
+				text: ` ${withStr}`,
 				style: { fontSize: '24px', color: '#ffffff', fontFamily: 'poppins-bold' }
 			}
 		];
@@ -1147,10 +1172,11 @@ export class FreeRoundManager {
 			spinsCountText.setFill(grad2 as any);
 		}
 
+		const spinsWithStr = ` ${localizationManager.getTextByKey(FREEROUND_SPINS_LABEL) ?? LOCALIZATION_DEFAULTS[FREEROUND_SPINS_LABEL] ?? 'Spins'} ${localizationManager.getTextByKey(FREEROUND_WITH_LABEL) ?? LOCALIZATION_DEFAULTS[FREEROUND_WITH_LABEL] ?? 'With'} `;
 		const line2Static1 = scene.add.text(
 			0,
 			0,
-			' spins with ',
+			spinsWithStr,
 			{
 				fontSize: '22px',
 				color: '#ffffff',
@@ -1203,10 +1229,11 @@ export class FreeRoundManager {
 			.setOrigin(0.5, 0.5);
 		this.panelContainer.add(buttonImage);
 
+		const claimNowStr = localizationManager.getTextByKey(FREEROUND_CLAIM_NOW_BUTTON) ?? LOCALIZATION_DEFAULTS[FREEROUND_CLAIM_NOW_BUTTON] ?? 'CLAIM NOW';
 		const buttonLabel = scene.add.text(
 			0,
 			buttonY,
-			'CLAIM NOW',
+			claimNowStr,
 			{
 				fontSize: '24px',
 				color: '#000000',
@@ -1300,10 +1327,11 @@ export class FreeRoundManager {
 		this.panelContainer.add(bg);
 
 		// Title: "Free Spin Done" with green gradient
+		const doneTitleStr = localizationManager.getTextByKey(FREEROUND_DONE_TITLE) ?? LOCALIZATION_DEFAULTS[FREEROUND_DONE_TITLE] ?? 'Free Spin Done';
 		const titleText = scene.add.text(
 			0,
 			-panelHeight / 2 + 50,
-			'Free Spin Done',
+			doneTitleStr,
 			{
 				fontSize: '24px',
 				color: '#00ff00',
@@ -1333,10 +1361,11 @@ export class FreeRoundManager {
 		this.panelContainer.add(winningsText);
 
 		// Line 2: "has been credited"
+		const creditedStr = localizationManager.getTextByKey(FREEROUND_CREDITED_LINE1) ?? LOCALIZATION_DEFAULTS[FREEROUND_CREDITED_LINE1] ?? 'has been credited';
 		const creditedStatic = scene.add.text(
 			0,
 			-15,
-			'has been credited',
+			creditedStr,
 			{
 				fontSize: '24px',
 				color: '#ffffff',
@@ -1346,10 +1375,11 @@ export class FreeRoundManager {
 		this.panelContainer.add(creditedStatic);
 
 		// Line 3: "to your balance"
+		const toBalanceStr = localizationManager.getTextByKey(FREEROUND_CREDITED_LINE2) ?? LOCALIZATION_DEFAULTS[FREEROUND_CREDITED_LINE2] ?? 'to your balance';
 		const line2 = scene.add.text(
 			0,
 			10,
-			'to your balance',
+			toBalanceStr,
 			{
 				fontSize: '22px',
 				color: '#ffffff',
@@ -1364,10 +1394,11 @@ export class FreeRoundManager {
 			.setOrigin(0.5, 0.5);
 		this.panelContainer.add(buttonImage);
 
+		const okButtonText = localizationManager.getTextByKey(COMMON_OK) ?? LOCALIZATION_DEFAULTS[COMMON_OK] ?? 'OK';
 		const buttonLabel = scene.add.text(
 			0,
 			buttonY,
-			'OK',
+			okButtonText,
 			{
 				fontSize: '24px',
 				color: '#000000',

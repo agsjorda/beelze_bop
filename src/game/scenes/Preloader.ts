@@ -14,6 +14,9 @@ import { VersionManager } from '../../managers/VersionManager';
 import { Character } from '../components/Character';
 import { playRadialDimmerTransition } from '../utils/playRadialDimmerTransition';
 import { CurrencyManager } from '../components/CurrencyManager';
+import { localizationManager } from '../../managers/LocalizationManager';
+import { CLOCK_DEMO, LOCALIZATION_DEFAULTS, PRELOADER_MAX_WIN } from '../../backend/LocalizationData';
+import { gameEventManager, GameEventType } from '../../event/EventManager';
 
 export class Preloader extends Scene
 {
@@ -29,6 +32,7 @@ export class Preloader extends Scene
 	private character2?: Character;
 	private preloaderVerticalOffsetModifier: number = 10;
 	private bootProgressHandler?: (progress: number) => void;
+	private unsubscribeLocalizationReady?: () => void;
 
 	// Loading bar graphics
 	private progressBarBg?: Phaser.GameObjects.Graphics;
@@ -107,6 +111,8 @@ export class Preloader extends Scene
 		console.log(`[Preloader] Background display size: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Background position: (${this.scale.width * 0.5}, ${this.scale.height * 0.5})`);
 
+		const localizedDemoLabel = localizationManager.getTextByKey(CLOCK_DEMO) ?? LOCALIZATION_DEFAULTS[CLOCK_DEMO] ?? 'DEMO';
+
 		// Persistent clock display in the top bar - clock on top-left, DiJoker on top-right
 		this.clockDisplay = new ClockDisplay(this, {
 			offsetX: 5,
@@ -117,7 +123,7 @@ export class Preloader extends Scene
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: ` | Beelze_Bop${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
+			suffixText: ` | Beelze_Bop${this.gameAPI.getDemoState() ? ` | ${localizedDemoLabel}` : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 5,
 			additionalTextOffsetY: 0,
@@ -127,6 +133,7 @@ export class Preloader extends Scene
 			additionalTextFontFamily: 'poppins-regular'
 		});
 		this.clockDisplay.create();
+		this.setupLocalizationReadyListener();
 
 		// Version display in bottom right (same formatting as ClockDisplay)
 		this.versionDisplay = new VersionManager(this, {
@@ -191,12 +198,14 @@ export class Preloader extends Scene
 		.setAlpha(1)
 		.setDepth(10);
 
+		const localizedMaxWinLabel = localizationManager.getTextByKey(PRELOADER_MAX_WIN) ?? LOCALIZATION_DEFAULTS[PRELOADER_MAX_WIN] ?? 'Win up to';
+
 		// "Win up to 21,000x" breathing text (reuses preloaded poppins fonts)
 		const winTextY = 145 + this.preloaderVerticalOffsetModifier;
 		this.maxWinText = this.add.text(
 			this.scale.width * 0.5,
 			this.scale.height * 0.5 + winTextY,
-			'Win up to 21,000x',
+			`${localizedMaxWinLabel} 21,000x`,
 			{
 				fontFamily: 'poppins-bold',
 				fontSize: '32px',
@@ -324,6 +333,28 @@ export class Preloader extends Scene
 		EventBus.emit('current-scene-ready', this);	
 	}
 
+	private setupLocalizationReadyListener(): void {
+		this.unsubscribeLocalizationReady = gameEventManager.on(GameEventType.LOCALIZATION_READY, () => {
+			this.refreshLocalizedPreloaderText();
+		});
+
+		this.events.once('shutdown', () => {
+			try {
+				this.unsubscribeLocalizationReady?.();
+			} catch {}
+			this.unsubscribeLocalizationReady = undefined;
+		});
+	}
+
+	private refreshLocalizedPreloaderText(): void {
+		const demoLabel = localizationManager.getTextByKey(CLOCK_DEMO) ?? LOCALIZATION_DEFAULTS[CLOCK_DEMO] ?? 'DEMO';
+		const suffixText = ` | Beelze_Bop${this.gameAPI.getDemoState() ? ` | ${demoLabel}` : ''}`;
+		this.clockDisplay?.setSuffixText(suffixText);
+
+		const maxWinLabel = localizationManager.getTextByKey(PRELOADER_MAX_WIN) ?? LOCALIZATION_DEFAULTS[PRELOADER_MAX_WIN] ?? 'Win up to';
+		this.maxWinText?.setText(`${maxWinLabel} 21,000x`);
+	}
+
 	preload ()
 	{
 		// Prefer more parallel requests on modern networks
@@ -424,6 +455,23 @@ export class Preloader extends Scene
         } catch (error) {
             console.error('[Preloader] Failed to initialize GameAPI or slot session:', error);
         }
+
+		// Fetch locale and set translations (isolated so API failure still allows defaults).
+		try {
+			console.log('[Preloader] Fetching localization data...');
+			await this.gameAPI.fetchLocalizationData();
+			const localizationData = this.gameAPI.getLocalizationData();
+			const locale: string | null = localizationData?.locale ?? null;
+			if (locale && locale.length > 0) {
+				localizationManager.setTranslations(locale);
+				gameEventManager.emit(GameEventType.LOCALIZATION_READY);
+			} else {
+				localizationManager.setTranslations(JSON.stringify(LOCALIZATION_DEFAULTS));
+			}
+		} catch (err) {
+			console.warn('[Preloader] Localization fetch failed, using defaults:', err);
+			localizationManager.setTranslations(JSON.stringify(LOCALIZATION_DEFAULTS));
+		}
 
 		// ========================================
 		// Add Character1 Spine Animation

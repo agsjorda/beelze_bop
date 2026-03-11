@@ -1,6 +1,8 @@
 import type { Scene } from 'phaser';
 import { EventBus } from '../../EventBus';
 import { gameEventManager, GameEventType } from '../../../event/EventManager';
+import { localizationManager } from '../../../managers/LocalizationManager';
+import { COMMON_TURBO, LOCALIZATION_DEFAULTS } from '../../../backend/LocalizationData';
 import { NetworkManager } from '../../../managers/NetworkManager';
 import { ensureSpineFactory } from '../../../utils/SpineGuard';
 import { gameStateManager } from '../../../managers/GameStateManager';
@@ -58,10 +60,11 @@ export class TurboButtonController {
     this.buttons.set('turbo', turboButton);
     this.primaryControllers.add(turboButton);
 
+    const turboLabelText = localizationManager.getTextByKey(COMMON_TURBO) ?? LOCALIZATION_DEFAULTS[COMMON_TURBO] ?? 'Turbo';
     const turboText = this.scene.add.text(
       x,
       y + (turboButton.displayHeight * 0.5) + 15,
-      'Turbo',
+      turboLabelText,
       textStyle
     ).setOrigin(0.5, 0.5).setDepth(10);
     this.controllerContainer.add(turboText);

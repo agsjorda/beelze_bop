@@ -47,6 +47,8 @@ import { Character } from '../components/Character';
 import { CurrencyManager } from '../components/CurrencyManager';
 import { IdleManager } from '../components/IdleManager';
 import { setDecimalPlaces } from '../../utils/NumberPrecisionFormatter';
+import { localizationManager } from '../../managers/LocalizationManager';
+import { CLOCK_DEMO, LOCALIZATION_DEFAULTS } from '../../backend/LocalizationData';
 
 export class Game extends Scene {
 	private networkManager!: NetworkManager;
@@ -311,6 +313,7 @@ export class Game extends Scene {
 
 		// Create persistent clock display (stays on screen)
 		// Clock on top-left, DiJoker on top-right
+		const localizedDemoLabel = localizationManager.getTextByKey(CLOCK_DEMO) ?? LOCALIZATION_DEFAULTS[CLOCK_DEMO] ?? 'DEMO';
 		this.clockDisplay = new ClockDisplay(this, {
 			offsetX: 5,
 			offsetY: 5,
@@ -320,7 +323,7 @@ export class Game extends Scene {
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: ` | Beelze_Bop${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
+			suffixText: ` | Beelze_Bop${this.gameAPI.getDemoState() ? ` | ${localizedDemoLabel}` : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 5,
 			additionalTextOffsetY: 0,

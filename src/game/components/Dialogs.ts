@@ -11,6 +11,8 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { UI_CONFIG, WIN_THRESHOLDS, TIMING_CONFIG } from '../../config/GameConfig';
 import { Logger } from '../../utils/Logger';
 import { CurrencyManager } from './CurrencyManager';
+import { localizationManager } from '../../managers/LocalizationManager';
+import { DIALOG_PRESS_CONTINUE, LOCALIZATION_DEFAULTS } from '../../backend/LocalizationData';
 
 export interface DialogConfig {
 	type: 'Congrats_BZ' | 'FreeSpin_BZ' | 'FreeSpinRetri_BZ' | 'BigW_BZ' | 'MegaW_BZ' | 'EpicW_BZ' | 'SuperW_BZ' | 'TotalW_BZ';
@@ -758,7 +760,8 @@ export class Dialogs {
 
 
 	/**
-	 * Create the "Press anywhere to continue" text
+	 * Create the "Press anywhere to continue" text.
+	 * Text wraps dynamically; origin is top-center so the top-most line stays fixed when it wraps.
 	 */
 	private createContinueText(scene: Scene): void {
 		console.log('[Dialogs] Creating continue text for dialog type:', this.currentDialogType);
@@ -769,28 +772,33 @@ export class Dialogs {
 			this.continueText = null;
 		}
 
-		// Create the text with your original styling
+		const wrapWidth = Math.max(200, scene.scale.width * 0.9);
+		const continueTextStr = localizationManager.getTextByKey(DIALOG_PRESS_CONTINUE) ?? LOCALIZATION_DEFAULTS[DIALOG_PRESS_CONTINUE] ?? 'Press anywhere to continue';
+		// Create the text with word wrap so long localized strings wrap downward
 		this.continueText = scene.add.text(
 			scene.scale.width / 2,
 			scene.scale.height / 2 + 300,
-			'Press anywhere to continue',
+			continueTextStr,
 			{
 				fontFamily: 'Poppins-Bold',
 				fontSize: '20px',
 				color: '#FFFFFF',
 				stroke: '#379557',
 				strokeThickness: 5,
+				align: 'center',
 				shadow: {
 					offsetX: 2,
 					offsetY: 2,
 					color: '#000000',
 					blur: 4,
 					fill: true
-				}
+				},
+				wordWrap: { width: wrapWidth, useAdvancedWrap: true }
 			}
 		);
 
-		this.continueText.setOrigin(0.5, 0.5);
+		// Top-center origin so when text wraps, the top line stays in the same position
+		this.continueText.setOrigin(0.5, 0);
 		this.continueText.setDepth(104);
 		this.continueText.setAlpha(0); // Start invisible
 
@@ -2074,6 +2082,13 @@ export class Dialogs {
 			this.blackOverlay.clear();
 			this.blackOverlay.fillStyle(0x000000, 0.7);
 			this.blackOverlay.fillRect(0, 0, scene.scale.width, scene.scale.height);
+		}
+
+		// Reposition continue text (if visible); update wrap width so it reflows on resize
+		if (this.continueText) {
+			const wrapWidth = Math.max(200, scene.scale.width * 0.9);
+			this.continueText.setStyle({ wordWrap: { width: wrapWidth, useAdvancedWrap: true } });
+			this.continueText.setPosition(scene.scale.width / 2, scene.scale.height / 2 + 300);
 		}
 	}
 

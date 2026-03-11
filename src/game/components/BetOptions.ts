@@ -1,4 +1,6 @@
 import { Scene } from 'phaser';
+import { localizationManager } from '../../managers/LocalizationManager';
+import { BET_OPTIONS_CONFIRM_BUTTON, BET_OPTIONS_SELECT_SIZE, COMMON_BET, LOCALIZATION_DEFAULTS } from '../../backend/LocalizationData';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { ensureSpineFactory } from "../../utils/SpineGuard";
@@ -60,6 +62,10 @@ export class BetOptions {
 		this.screenModeManager = screenModeManager;
 	}
 
+	private getBetOptionsText(key: string): string {
+		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
+	}
+
 	create(scene: Scene): void {
 		console.log("[BetOptions] Creating bet options component");
 
@@ -114,7 +120,8 @@ export class BetOptions {
 		const y = scene.scale.height * 0.5 - 200;
 		const betDisplayBorderWidth = scene.scale.width - (this.CONTAINER_PADDING * 2);
 		const betDisplayBorderHalfWidth = betDisplayBorderWidth * 0.5;
-		const betTitle = scene.add.text(x - betDisplayBorderHalfWidth, y - 150, 'BET', {
+		const betTitleText = this.getBetOptionsText(COMMON_BET).toUpperCase();
+		const betTitle = scene.add.text(x - betDisplayBorderHalfWidth, y - 150, betTitleText, {
 			fontSize: '24px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
@@ -158,7 +165,8 @@ export class BetOptions {
 		this.calculatedButtonHeight = this.BUTTON_HEIGHT;
 		const startX = scene.scale.width * 0.5 - (gridWidth * 0.5);
 		const startY = scene.scale.height * 0.5 - 250;
-		const selectSizeLabel = scene.add.text(startX, startY - 15, 'Select size', {
+		const selectSizeLabelText = this.getBetOptionsText(BET_OPTIONS_SELECT_SIZE);
+		const selectSizeLabel = scene.add.text(startX, startY - 15, selectSizeLabelText, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -217,7 +225,8 @@ export class BetOptions {
 		const y = scene.scale.height * 0.5 + 240;
 		const betDisplayBorderWidth = scene.scale.width - (this.CONTAINER_PADDING * 2);
 		const betDisplayBorderHalfWidth = betDisplayBorderWidth * 0.5;
-		const betLabel = scene.add.text(x - betDisplayBorderHalfWidth, y - 55, 'Bet', {
+		const betLabelText = this.getBetOptionsText(COMMON_BET);
+		const betLabel = scene.add.text(x - betDisplayBorderHalfWidth, y - 55, betLabelText, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -341,7 +350,8 @@ export class BetOptions {
 		this.container.add(buttonImage);
 		
 		// Button text
-		this.confirmButton = scene.add.text(x, y, 'CONFIRM', {
+		const confirmButtonText = this.getBetOptionsText(BET_OPTIONS_CONFIRM_BUTTON);
+		this.confirmButton = scene.add.text(x, y, confirmButtonText, {
 			fontSize: '24px',
 			color: '#000000',
 			fontFamily: 'Poppins-Bold'

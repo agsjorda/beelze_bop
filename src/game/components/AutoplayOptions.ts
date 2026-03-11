@@ -1,4 +1,13 @@
 import { Scene } from 'phaser';
+import { localizationManager } from '../../managers/LocalizationManager';
+import {
+	AUTOPLAY_NUMBER_OF_AUTOSPINS,
+	AUTOPLAY_SETTINGS_TITLE,
+	AUTOPLAY_START_BUTTON,
+	COMMON_BALANCE,
+	COMMON_BET,
+	LOCALIZATION_DEFAULTS,
+} from '../../backend/LocalizationData';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameStateManager } from "../../managers/GameStateManager";
@@ -71,6 +80,10 @@ export class AutoplayOptions {
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (autoplayCount: number) => void;
 	private onBetChangeCallback?: (betAmount: number) => void;
+
+	private getAutoplayText(key: string): string {
+		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
+	}
 
 	private getAutoplaySpinCost(): number {
 		const baseBet = this.currentBet || 0;
@@ -194,7 +207,8 @@ export class AutoplayOptions {
 		const headerY = backgroundTop + 40; // Position relative to background top
 		
 		// AUTOPLAY SETTINGS title
-		const autoplayTitle = scene.add.text(x - 180, headerY, 'AUTOPLAY SETTINGS', {
+		const autoplayTitleText = this.getAutoplayText(AUTOPLAY_SETTINGS_TITLE);
+		const autoplayTitle = scene.add.text(x - 180, headerY, autoplayTitleText, {
 			fontSize: '24px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
@@ -249,7 +263,8 @@ export class AutoplayOptions {
 		balanceContainer.add(balanceBg);
 		
 		// "Balance" label
-		const balanceLabel = scene.add.text(-150, 1, 'Balance', {
+		const balanceLabelText = this.getAutoplayText(COMMON_BALANCE);
+		const balanceLabel = scene.add.text(-150, 1, balanceLabelText, {
 			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -287,7 +302,8 @@ export class AutoplayOptions {
 		const spacing = 15;
 		
 		// "Number of autospins" label
-		const selectSizeLabel = scene.add.text(startX, startY - 30, 'Number of autospins', {
+		const selectSizeLabelText = this.getAutoplayText(AUTOPLAY_NUMBER_OF_AUTOSPINS);
+		const selectSizeLabel = scene.add.text(startX, startY - 30, selectSizeLabelText, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -352,7 +368,8 @@ export class AutoplayOptions {
 		const y = backgroundTop + 490; // Position relative to background top
 		
 		// "Autospins" label
-		const autoplayLabel = scene.add.text(x - 180, y - 70, 'Bet', {
+		const betLabelText = this.getAutoplayText(COMMON_BET);
+		const autoplayLabel = scene.add.text(x - 180, y - 70, betLabelText, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -485,7 +502,8 @@ export class AutoplayOptions {
 		this.confirmButtonImage = buttonImage;
 		
 		// Button label
-		this.confirmButton = scene.add.text(x, y, 'START AUTOPLAY', {
+		const startButtonText = this.getAutoplayText(AUTOPLAY_START_BUTTON);
+		this.confirmButton = scene.add.text(x, y, startButtonText, {
 			fontSize: '24px',
 			color: '#000000',
 			fontFamily: 'Poppins-Bold'
