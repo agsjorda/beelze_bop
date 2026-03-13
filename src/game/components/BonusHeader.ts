@@ -3,7 +3,6 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
-import { CurrencyManager } from './CurrencyManager';
 import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 import { localizationManager } from '../../managers/LocalizationManager';
 import { LOCALIZATION_DEFAULTS, WINBAR_TOTAL_WIN, WINBAR_YOU_WON } from '../../backend/LocalizationData';
@@ -139,10 +138,7 @@ export class BonusHeader {
 		// Don't add to container - add directly to scene so depth works correctly
 
 		// Line 2: amount value
-		// Check if demo mode is active - if so, use blank currency symbol
-		const isDemoInitial = (this.scene as any)?.gameAPI?.getDemoState();
-		const prefixInitial = isDemoInitial ? '' : CurrencyManager.getCurrencyCode();
-		this.amountText = scene.add.text(x, y + 18, `${prefixInitial}0.00`, {
+		this.amountText = scene.add.text(x, y + 18, '0.00', {
 			fontSize: '24px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold',
@@ -648,17 +644,8 @@ export class BonusHeader {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
-		const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
 		const formatted = formatCurrencyNumber(amount);
-
-		if (isDemo) {
-			return formatted;
-		}
-
-		// Get currency code with proper spacing (match sugar_wonderland)
-		const currencyCode = CurrencyManager.getCurrencyCode();
-		const space = currencyCode ? ' ' : '';
-		return currencyCode ? `${currencyCode}${space}${formatted}` : formatted;
+		return formatted;
 	}
 
 	/**

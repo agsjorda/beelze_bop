@@ -18,7 +18,6 @@ import {
   OVERLAY_FADE_OUT_DURATION_MS,
 } from './constants';
 import { MultiplierSymbols } from './MultiplierSymbols';
-import { CurrencyManager } from '../CurrencyManager';
 import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
 
 /**
@@ -238,24 +237,8 @@ export class SymbolOverlay {
     // Format the amount
     let textValue: string;
     try {
-      const isDemoMode = isDemo || 
-        (this.scene as any)?.gameAPI?.getDemoState?.() ||
-        localStorage.getItem('demo') === 'true' ||
-        sessionStorage.getItem('demo') === 'true';
-      
-      if (isDemoMode) {
-        // Demo mode: show amount without currency prefix
-        if (Number.isInteger(amount)) {
-          textValue = `${amount}`;
-        } else {
-          textValue = formatCurrencyNumber(Number(amount));
-        }
-      } else {
-        // Use currency code (prefer code over symbol, matching WinTracker pattern)
-        const formattedAmount = formatCurrencyNumber(amount);
-        const currencyCode = CurrencyManager.getCurrencyCode();
-        textValue = currencyCode ? `${currencyCode}\u00A0${formattedAmount}` : formattedAmount;
-      }
+      const formattedAmount = formatCurrencyNumber(amount);
+      textValue = formattedAmount;
     } catch {
       // Fallback to basic formatting if anything fails
       textValue = `${amount}`;

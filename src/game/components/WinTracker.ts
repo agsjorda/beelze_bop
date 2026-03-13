@@ -4,7 +4,6 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { MIN_CLUSTER_SIZE, UI_CONFIG } from '../../config/GameConfig';
 import { Logger } from '../../utils/Logger';
 import { getMultiplierValue, isMultiplierSymbol } from '../../types/SymbolTypes';
-import { CurrencyManager } from './CurrencyManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
@@ -386,11 +385,7 @@ export class WinTracker {
     const valueLabel = this.scene.add.text(
       0,
       0,
-      (() => {
-        const isDemo = (this.scene as any).gameAPI?.getDemoState();
-        const currencyPrefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
-        return `${currencyPrefix}${formatCurrencyNumber(data.totalWin)}`;
-      })(),
+      formatCurrencyNumber(data.totalWin),
       {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',

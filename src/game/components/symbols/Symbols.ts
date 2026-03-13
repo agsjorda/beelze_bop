@@ -4560,6 +4560,21 @@ export class Symbols {
               };
 
               const startRemoval = () => {
+                let completed = false;
+                const finalizeRemoval = () => {
+                  if (completed) return;
+                  completed = true;
+                  try { this.destroySymbolOverlays(obj); } catch { }
+                  try { obj.destroy(); } catch { }
+                  if (self.symbols[col]) {
+                    self.symbols[col][row] = null as any;
+                  }
+                  if (self.currentSymbolData && self.currentSymbolData[row]) {
+                    (self.currentSymbolData[row] as any)[col] = null;
+                  }
+                  resolve();
+                };
+                
                 try {
                   // Fire win notification before explosion so twin SFX leads the blast
                   notifyFirstWinIfNeeded();
@@ -4578,20 +4593,6 @@ export class Symbols {
                   if (shouldExplode) {
                     triggerRemovalVfx();
                   }
-                  let completed = false;
-                  const finalizeRemoval = () => {
-                    if (completed) return;
-                    completed = true;
-                    try { this.destroySymbolOverlays(obj); } catch { }
-                    try { obj.destroy(); } catch { }
-                    if (self.symbols[col]) {
-                      self.symbols[col][row] = null as any;
-                    }
-                    if (self.currentSymbolData && self.currentSymbolData[row]) {
-                      (self.currentSymbolData[row] as any)[col] = null;
-                    }
-                    resolve();
-                  };
 
                   if (shouldExplode) {
                     // Always remove at VFX midpoint, even if win animation can't play.
