@@ -1048,7 +1048,8 @@ export class Menu {
         const startY = 15;
         const sliderStartX = startX;
         const musicSliderY = startY + 115;
-        const sfxSliderY = startY + 230;
+        // Match Zero Law SFX layout
+        const sfxSliderY = startY + 240;
 
         // Music section (no icon)
         const musicLabelText = this.getMenuText(MENU_BACKGROUND_MUSIC);
@@ -1061,22 +1062,12 @@ export class Menu {
 
         // SFX section (no icon)
         const sfxLabelText = this.getMenuText(MENU_SOUND_FX);
-        const sfxLabel = scene.add.text(startX + 0, startY + 170, sfxLabelText, {
+        const sfxLabel = scene.add.text(startX + 0, startY + 190, sfxLabelText, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Regular'
         }) as ButtonText;
         contentArea.add(sfxLabel);
-
-        // Skip Intro section (UI only)
-        const skipLabelY = startY + 270;
-        const skipIntroText = this.getMenuText(MENU_SKIP_INTRO);
-        const skipLabel = scene.add.text(startX + 0, skipLabelY, skipIntroText, {
-            fontSize: '18px',
-            color: '#FFFFFF',
-            fontFamily: 'Poppins-Regular'
-        }) as ButtonText;
-        contentArea.add(skipLabel);
 
         // Toggle switches (right side)
         const toggleWidth = 64;
@@ -1137,8 +1128,8 @@ export class Menu {
         sfxToggleBg.setDepth(10);
         sfxToggleCircle.setDepth(11);
         let sfxOn = scene.audioManager.getSfxVolume() > 0;
-        drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
-        const sfxToggleArea = scene.add.zone(toggleX, startY + 170 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
+        drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 190, sfxOn);
+        const sfxToggleArea = scene.add.zone(toggleX, startY + 190 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         sfxToggleArea.setInteractive();
         sfxToggleArea.on('pointerdown', () => {
             sfxOn = !sfxOn;
@@ -1148,24 +1139,6 @@ export class Menu {
         });
         contentArea.add(sfxToggleArea);
         sfxToggleArea.setDepth(12);
-
-        // Skip Intro toggle (no functionality yet)
-        const skipToggleBg = scene.add.graphics();
-        const skipToggleCircle = scene.add.graphics();
-        contentArea.add(skipToggleBg);
-        contentArea.add(skipToggleCircle);
-        skipToggleBg.setDepth(10);
-        skipToggleCircle.setDepth(11);
-        let skipOn = false; // UI-only state
-        drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
-        const skipToggleArea = scene.add.zone(toggleX, skipLabelY + 2 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
-        skipToggleArea.setInteractive();
-        skipToggleArea.on('pointerdown', () => {
-            skipOn = !skipOn;
-            drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
-        });
-        contentArea.add(skipToggleArea);
-        skipToggleArea.setDepth(12);
 
                 // Music slider background
         const musicSliderBg = scene.add.graphics();
@@ -1202,7 +1175,7 @@ export class Menu {
         }) as ButtonText;
         contentArea.add(musicValue);
 
-        // SFX slider (hidden for now)
+        // SFX slider (mirrors music slider styling)
         const sfxSliderBg = scene.add.graphics();
         const sfxSliderBg2 = scene.add.graphics();
         const sfxSlider = scene.add.graphics();
@@ -1211,10 +1184,18 @@ export class Menu {
             color: '#FFFFFF',
             fontFamily: 'Poppins-Regular'
         }) as ButtonText;
-        sfxSliderBg.setVisible(false);
-        sfxSliderBg2.setVisible(false);
-        sfxSlider.setVisible(false);
-        sfxValue.setVisible(false);
+        // Background (filled portion) for SFX slider
+        sfxSliderBg.fillStyle(0x379557, 1);
+        sfxSliderBg.fillRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
+        // Full track background / border for SFX slider
+        sfxSliderBg2.fillStyle(0x333333, 1);
+        sfxSliderBg2.lineStyle(1, 0x666666);
+        sfxSliderBg2.fillRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
+        sfxSliderBg2.strokeRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
+        contentArea.add(sfxSliderBg2);
+        contentArea.add(sfxSliderBg);
+        contentArea.add(sfxSlider);
+        contentArea.add(sfxValue);
 
         // Helper to update slider positions and values
         const updateSliders = (musicX: number | null = null, sfxX: number | null = null) => {
@@ -1254,7 +1235,7 @@ export class Menu {
                 }
             }
             
-            // Update SFX slider (kept hidden)
+            // Update SFX slider
             const sfxSliderX = sliderStartX + (sfxVol * sliderWidth);
             sfxSlider.clear();
             sfxSlider.fillStyle(0xffffff, 1);
@@ -1274,8 +1255,10 @@ export class Menu {
                 new Geom.Circle(0, 0, 22 * scaleFactor),  
                 Geom.Circle.Contains
             );
-            // Keep SFX interactions disabled while hidden
-            sfxSlider.disableInteractive();
+            sfxSlider.setInteractive(
+                new Geom.Circle(0, 0, 22 * scaleFactor),
+                Geom.Circle.Contains
+            );
         };
 
         // Initial slider setup
@@ -1327,8 +1310,12 @@ export class Menu {
         const sfxSliderTrack = scene.add.graphics();
         sfxSliderTrack.setPosition(sliderStartX, sfxSliderY);
         sfxSliderTrack.fillStyle(0x000000, 0); // Transparent
-        // Keep SFX track hidden and non-interactive for now
-        sfxSliderTrack.setVisible(false);
+        // Draw and set hit area in local coords for reliable input inside a container
+        sfxSliderTrack.fillRect(0, -10, widthSlider * scaleFactor, 28);
+        sfxSliderTrack.setInteractive(
+            new Geom.Rectangle(0, -10, widthSlider * scaleFactor, 28),
+            Geom.Rectangle.Contains
+        );
         contentArea.add(sfxSliderTrack);
 
         // Music slider track click handler
@@ -1342,7 +1329,14 @@ export class Menu {
         });
 
         // SFX slider track click handler
-        // SFX track interaction disabled while hidden
+        sfxSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer, localX: number) => {
+            const sliderWidth = widthSlider * scaleFactor;
+            localX = Math.max(0, Math.min(sliderWidth, localX));
+            const newVolume = localX / sliderWidth;
+            scene.audioManager.setSfxVolume(newVolume);
+            this.isDraggingSFX = true;
+            updateSliders();
+        });
 
         // Music slider handle interaction
         musicSlider.on('pointerdown', () => {
