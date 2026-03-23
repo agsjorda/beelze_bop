@@ -2897,6 +2897,7 @@ export class Symbols {
       const numCols = this.symbols.length;
       const numRows = this.symbols[0].length;
       const rowMajor: (number | null)[][] = Array.from({ length: numRows }, () => Array<number | null>(numCols).fill(null));
+      let tumbleDropSoundPlayed = false;
       for (let col = 0; col < numCols; col++) {
         for (let row = 0; row < numRows; row++) {
           const obj = this.symbols[col]?.[row];
@@ -3798,6 +3799,20 @@ export class Symbols {
       this.spinDropSoundPlayedColumns.add(colIndex);
     } catch (e) {
       console.warn('[Symbols] Failed to play spin reel-drop sound:', e);
+    }
+  }
+
+  private playTumbleReelDropSound(): void {
+    try {
+      const sceneSound: any = this.scene?.sound;
+      if (!sceneSound || typeof sceneSound.play !== 'function') return;
+      const audioManager: any = (window as any).audioManager;
+      const volume = typeof audioManager?.getSfxVolume === 'function'
+        ? audioManager.getSfxVolume()
+        : 0.2;
+      sceneSound.play('reeldrop_bz', { volume, loop: false });
+    } catch (e) {
+      console.warn('[Symbols] Failed to play tumble reel-drop sound:', e);
     }
   }
 
@@ -4947,6 +4962,7 @@ export class Symbols {
       for (let col = 0; col < numCols; col++) {
         const incoming = Array.isArray(ins?.[col]) ? ins[col] : [];
         if (incoming.length === 0) continue;
+        let columnTumbleDropSoundPlayed = false;
 
         let emptyCount = 0;
         for (let row = 0; row < numRows; row++) {
@@ -4998,6 +5014,12 @@ export class Symbols {
                   y: targetY,
                   duration: (tumbleTimingSnapshot.dropDuration * 0.9),
                   ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    if (!tumbleTurboSnapshot && !columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
+                    }
+                  }
                 });
               } else {
                 tweensArr.push({
@@ -5005,6 +5027,12 @@ export class Symbols {
                   y: targetY,
                   duration: (tumbleTimingSnapshot.dropDuration * 0.9),
                   ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    if (!tumbleTurboSnapshot && !columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
+                    }
+                  }
                 });
               }
               if (!isTurbo) {
@@ -5019,14 +5047,7 @@ export class Symbols {
                     y: `-= ${10}`,
                     duration: tumbleTimingSnapshot.dropDuration * 0.05,
                     ease: Phaser.Math.Easing.Linear,
-                    onComplete: () => {
-                      try {
-                        if (!tumbleTurboSnapshot && (window as any).audioManager) {
-                          (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                        }
-                      } catch { }
-                      resolve();
-                    }
+                    onComplete: () => { resolve(); }
                   }
                 );
               } else {
@@ -5037,8 +5058,9 @@ export class Symbols {
                   try {
                     if (prevOnComplete) prevOnComplete();
                     // Play tumble sound for every symbol dropped after compression in turbo mode
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                    if (!columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
                     }
                   } catch (e) {
                     console.warn('[Symbols] Error playing reel drop sound in turbo mode:', e);
@@ -5098,6 +5120,7 @@ export class Symbols {
       for (let col = 0; col < numCols; col++) {
         const incoming = Array.isArray(ins?.[col]) ? ins[col] : [];
         if (incoming.length === 0) continue;
+        let columnTumbleDropSoundPlayed = false;
         let emptyCount = 0;
         for (let row = 0; row < numRows; row++) {
           if (!self.symbols[col][row]) emptyCount++;
@@ -5135,9 +5158,30 @@ export class Symbols {
               const tweensArr: any[] = [];
               if (!skipPreHop) {
                 tweensArr.push({ delay: computedStartDelay, y: `-= ${symbolHop}`, duration: tumbleTimingSnapshot.winUpDuration, ease: Phaser.Math.Easing.Circular.Out });
-                tweensArr.push({ y: targetY, duration: (tumbleTimingSnapshot.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
+                tweensArr.push({
+                  y: targetY,
+                  duration: (tumbleTimingSnapshot.dropDuration * 0.9),
+                  ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    if (!tumbleTurboSnapshot && !columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
+                    }
+                  }
+                });
               } else {
-                tweensArr.push({ delay: computedStartDelay, y: targetY, duration: (tumbleTimingSnapshot.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
+                tweensArr.push({
+                  delay: computedStartDelay,
+                  y: targetY,
+                  duration: (tumbleTimingSnapshot.dropDuration * 0.9),
+                  ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    if (!tumbleTurboSnapshot && !columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
+                    }
+                  }
+                });
               }
               if (!isTurbo) {
                 // Normal mode: include the small post-drop bounce and SFX
@@ -5147,14 +5191,7 @@ export class Symbols {
                     y: `-= ${10}`,
                     duration: tumbleTimingSnapshot.dropDuration * 0.05,
                     ease: Phaser.Math.Easing.Linear,
-                    onComplete: () => {
-                      try {
-                        if (!tumbleTurboSnapshot && (window as any).audioManager) {
-                          (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                        }
-                      } catch { }
-                      resolve();
-                    }
+                    onComplete: () => { resolve(); }
                   }
                 );
               } else {
@@ -5165,8 +5202,9 @@ export class Symbols {
                   try {
                     if (prevOnComplete) prevOnComplete();
                     // Play tumble sound for every symbol dropped after compression in turbo mode
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                    if (!columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
                     }
                   } catch (e) {
                     console.warn('[Symbols] Error playing reel drop sound in turbo mode:', e);
