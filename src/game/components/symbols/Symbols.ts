@@ -3700,12 +3700,26 @@ export class Symbols {
         }
 
         const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
+        const delayMs = isTurbo
+          ? 0
+          : (isSkip ? STAGGER_MS * 0.35 * col : STAGGER_MS * col);
+
+        if (delayMs > 0) {
+          this.scene.time.delayedCall(delayMs, () => {
+            try {
+              const current = this.symbols?.[col]?.[rowIndex];
+              if (current && !(current as any).destroyed) {
+                this.playDropAnimationIfAvailable(current);
+              }
+            } catch { }
+          });
+        } else {
+          try { this.playDropAnimationIfAvailable(baseObj); } catch { }
+        }
 
         const tweens: any[] = [
           {
-            delay: isTurbo
-              ? 0
-              : (isSkip ? STAGGER_MS * 0.35 * col : STAGGER_MS * col),
+            delay: delayMs,
             y: `-= ${symbolHop}`,
             duration: Math.max(1, winUpDuration * speed),
             ease: Phaser.Math.Easing.Circular.Out,
@@ -3829,6 +3843,9 @@ export class Symbols {
       for (let col = 0; col < this.newSymbols.length; col++) {
         let symbol = this.newSymbols[col][index];
         const targetY = this.getYPos(index);
+
+        // Trigger drop animation if available
+        try { this.playDropAnimationIfAvailable(symbol); } catch { }
 
         const baseObj: any = symbol as any;
         const overlayObj: any = (baseObj as any)?.__overlayImage;
