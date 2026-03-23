@@ -2,6 +2,7 @@ import type { Scene } from 'phaser';
 import { EventBus } from '../../EventBus';
 import { localizationManager } from '../../../managers/LocalizationManager';
 import { CONTROLLER_MENU, LOCALIZATION_DEFAULTS } from '../../../backend/LocalizationData';
+import { SoundEffectType } from '../../../managers/AudioManager';
 
 export class MenuButtonController {
   private scene: Scene;
@@ -36,6 +37,9 @@ export class MenuButtonController {
     menuButton.setInteractive();
     menuButton.on('pointerdown', () => {
       console.log('[SlotController] Menu button clicked');
+      try {
+        (window as any).audioManager?.playSoundEffect?.(SoundEffectType.MENU_CLICK);
+      } catch { }
       EventBus.emit('menu');
     });
     this.buttons.set('menu', menuButton);

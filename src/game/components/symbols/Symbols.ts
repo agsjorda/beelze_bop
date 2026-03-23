@@ -19,9 +19,9 @@
 
 import { Data } from '../../../tmp_backend/Data';
 import { Game } from '../../scenes/Game';
-import { GameData, setSpeed } from '../GameData';
+import { setSpeed } from '../GameData';
 import { ScatterAnimationManager } from '../../../managers/ScatterAnimationManager';
-import { SymbolDetector, Grid, Wins } from '../../../tmp_backend/SymbolDetector';
+import { SymbolDetector } from '../../../tmp_backend/SymbolDetector';
 import { gameEventManager, GameEventType } from '../../../event/EventManager';
 import { gameStateManager } from '../../../managers/GameStateManager';
 import { TurboConfig } from '../../../config/TurboConfig';
@@ -968,13 +968,6 @@ export class Symbols {
 
   public clearSkipTumbles(): void {
     this.skipTumblesActive = false;
-  }
-
-  public clearPreSpinDropState(): void {
-    this.preSpinDropInProgress = false;
-    this.preSpinDropPromise = null;
-    this.preSpinDropRowPromises.clear();
-    this.spinDataResponseReceivedForCurrentSpin = false;
   }
 
   public isSkipReelDropsActive(): boolean {
@@ -2917,33 +2910,6 @@ export class Symbols {
     } catch { }
   }
 
-  private updateSkipTweenTimeScale(): void {
-    // no-op; keep for compatibility if referenced elsewhere
-  }
-
-  private clearOldSymbolsForSkip(): void {
-    if (!this.symbols || this.symbols.length === 0) {
-      return;
-    }
-    for (let col = 0; col < this.symbols.length; col++) {
-      const column = this.symbols[col];
-      if (!column) continue;
-      for (let row = 0; row < column.length; row++) {
-        const symbol: any = column[row];
-        if (!symbol || symbol.destroyed) {
-          continue;
-        }
-        const overlayObj: any = (symbol as any)?.__overlayImage;
-        try { this.scene.tweens.killTweensOf(symbol); } catch { }
-        try { if (overlayObj) this.scene.tweens.killTweensOf(overlayObj); } catch { }
-        try { this.destroySymbolOverlays(symbol); } catch { }
-        try { if (!symbol.destroyed) symbol.destroy(); } catch { }
-        try { if (overlayObj && !overlayObj.destroyed) overlayObj.destroy(); } catch { }
-        column[row] = null as any;
-      }
-    }
-  }
-
   private delayOrSkip(ms: number): Promise<void> {
     return new Promise<void>((resolve) => {
       const total = Math.max(0, Number(ms) || 0);
@@ -3289,123 +3255,6 @@ export class Symbols {
       .finally(() => {
         this.preSpinDropInProgress = false;
       });
-  }
-
-  private dropPrevSymbolsForPreSpin(index: number, extendDuration: boolean = false): Promise<void> {
-    return new Promise<void>((resolve) => {
-      if (this.symbols === undefined || this.symbols === null) {
-        resolve();
-        return;
-      }
-
-      if (!this.symbols[0] || !this.symbols[0][0]) {
-        console.warn('[Symbols] dropPrevSymbolsForPreSpin: symbols array structure is invalid, skipping');
-        resolve();
-        return;
-      }
-
-      const height = this.symbols[0][0].displayHeight + this.verticalSpacing;
-      const extraMs = extendDuration ? 3000 : 0;
-      const gridBottomY = this.slotY + this.totalGridHeight * 0.5;
-      const distanceToScreenBottom = Math.max(0, this.scene.scale.height - gridBottomY);
-      const dropDistance = distanceToScreenBottom + this.totalGridHeight + (height * 2) + this.scene.gameData.winUpHeight;
-      const staggerMs = 100;
-      const clearHop = this.scene.gameData.winUpHeight * 0.5;
-      const isTurbo = !!this.scene.gameData?.isTurbo;
-      const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
-      const speed = isSkip
-        ? (isTurbo ? 0.7 : 0.4)
-        : 1;
-
-      let completedAnimations = 0;
-      let totalAnimations = 0;
-
-      for (let col = 0; col < this.symbols.length; col++) {
-        if (!this.symbols[col] || !this.symbols[col][index]) {
-          console.warn(`[Symbols] dropPrevSymbolsForPreSpin: skipping invalid row ${col} or index ${index}`);
-          continue;
-        }
-
-        totalAnimations++;
-        const delayMs = isTurbo ? 0 : (isSkip ? staggerMs * 0.35 * col : staggerMs * col);
-        if (delayMs > 0) {
-          this.scene.time.delayedCall(delayMs, () => {
-            try {
-              const current = this.symbols?.[col]?.[index];
-              if (current && !(current as any).destroyed) {
-                this.playDropAnimationIfAvailable(current);
-              }
-            } catch { }
-          });
-        } else {
-          try { this.playDropAnimationIfAvailable(this.symbols[col][index]); } catch { }
-        }
-
-        const baseObj: any = this.symbols[col][index];
-        const overlayObj: any = (baseObj as any)?.__overlayImage;
-        const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
-        const tweens: any[] = [
-          {
-            delay: delayMs,
-            y: `-= ${clearHop}`,
-            duration: Math.max(1, this.scene.gameData.winUpDuration * speed),
-            ease: Phaser.Math.Easing.Circular.Out,
-          },
-          {
-            y: `+= ${dropDistance}`,
-            duration: Math.max(1, ((this.scene.gameData.dropDuration * 0.9) + extraMs) * speed),
-            ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
-          },
-        ];
-
-        if (!isTurbo && !isSkip) {
-          tweens.push(
-            {
-              y: `+= ${5}`,
-              duration: Math.max(1, this.scene.gameData.dropDuration * 0.05 * speed),
-              ease: Phaser.Math.Easing.Linear,
-            },
-            {
-              y: `-= ${5}`,
-              duration: Math.max(1, this.scene.gameData.dropDuration * 0.05 * speed),
-              ease: Phaser.Math.Easing.Linear,
-            },
-          );
-        }
-
-        const lastTween = tweens[tweens.length - 1];
-        const prevOnComplete = lastTween.onComplete;
-        lastTween.onComplete = () => {
-          try { if (prevOnComplete) prevOnComplete(); } catch { }
-          completedAnimations++;
-          if (completedAnimations >= totalAnimations) {
-            resolve();
-          }
-        };
-
-        this.scene.tweens.chain({
-          targets: tweenTargets,
-          tweens,
-        });
-      }
-
-      if (totalAnimations === 0) {
-        resolve();
-        return;
-      }
-
-      const maxStaggerDelay = isTurbo ? 0 : ((isSkip ? staggerMs * 0.35 : staggerMs) * Math.max(0, totalAnimations - 1));
-      const maxAnimDuration =
-        (this.scene.gameData.winUpDuration * speed) +
-        (((this.scene.gameData.dropDuration * 0.9) + extraMs) * speed) +
-        ((!isTurbo && !isSkip) ? (this.scene.gameData.dropDuration * 0.1 * speed) : 0);
-      const timeoutDuration = Math.max(1, maxStaggerDelay + maxAnimDuration + 100);
-      this.scene.time.delayedCall(timeoutDuration, () => {
-        if (completedAnimations < totalAnimations) {
-          resolve();
-        }
-      });
-    });
   }
 
   // Helper methods for symbol processing
