@@ -4037,8 +4037,6 @@ export class SlotController {
 				} catch {}
 			}
 
-		// Avoid pre-spin symbol clearing; this should only happen on explicit skip.
-
 		// Play spin sound effect
 		if ((window as any).audioManager) {
 			(window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
@@ -4075,6 +4073,20 @@ export class SlotController {
 					this.reenableControlsOnSpinFailure();
 					return;
 				}
+
+				// Start clearing/dropping existing symbols immediately while the spin API is in flight
+				// (matches sugar_wonderland: pre-spin drop before doSpin resolves).
+				try {
+					const gameScene: any = this.scene as any;
+					const symbolsComponent = gameScene?.symbols;
+					if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
+						console.log('[SlotController] Triggering pre-spin symbol drop');
+						symbolsComponent.startPreSpinDrop();
+					}
+				} catch (e) {
+					console.warn('[SlotController] Failed to start pre-spin symbol drop:', e);
+				}
+
 				{
 					console.log('[SlotController] Normal mode - calling GameAPI.doSpin...');
 					// Use base bet amount for API calls (without amplify bet increase)

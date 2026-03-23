@@ -3165,42 +3165,135 @@ export class Symbols {
     } catch { }
   }
 
+  /**
+   * Start dropping/clearing existing symbols as soon as a new spin is triggered.
+   * Intentionally decoupled from `dropReels` so the clear phase can begin immediately
+   * at spin start (manual or autoplay), before `SPIN_DATA_RESPONSE` / new reels drop.
+   * Mirrors sugar_wonderland's lighter pre-spin clear path without changing
+   * beelze_bop's normal `processSpinData` -> `dropReels` architecture.
+   */
   public startPreSpinDrop(): void {
-    // Immediately destroy all old symbols when a new spin starts
-    // This prevents symbols from lingering on screen if the spin button is pressed quickly
-    console.log('[Symbols] startPreSpinDrop: clearing old symbols immediately');
-    
     if (!this.symbols || this.symbols.length === 0) {
+      console.log('[Symbols] startPreSpinDrop: no symbols to drop');
       return;
     }
 
-    let destroyedCount = 0;
-    for (let col = 0; col < this.symbols.length; col++) {
-      const column = this.symbols[col];
-      if (!Array.isArray(column)) continue;
-      
-      for (let row = 0; row < column.length; row++) {
-        const symbol = column[row];
-        if (symbol && !(symbol as any).destroyed) {
-          // Kill any active tweens on this symbol
-          try {
-            this.scene.tweens.killTweensOf(symbol);
-          } catch { }
-          
-          // Destroy the symbol and its overlay if it exists
-          try {
-            const overlayObj = (symbol as any)?.__overlayImage;
-            if (overlayObj && !overlayObj.destroyed) {
-              overlayObj.destroy();
-            }
-            symbol.destroy();
-            destroyedCount++;
-          } catch { }
-        }
-      }
+    const firstCol = this.symbols[0];
+    const numRows = Array.isArray(firstCol) ? firstCol.length : 0;
+    if (numRows === 0) {
+      console.log('[Symbols] startPreSpinDrop: symbol grid has zero rows');
+      return;
     }
-    
-    console.log(`[Symbols] startPreSpinDrop destroyed ${destroyedCount} old symbols immediately`);
+
+    // Ensure GameData timings are initialized before the very first drop.
+    // Mirrors `processSpinDataSymbols` so the first pre-spin drop does not use tiny defaults.
+    const gameData = this.scene?.gameData as GameData;
+    let isTurbo = false;
+    let rowDelay = 0;
+    if (gameData) {
+      // Match sugar_wonderland's pre-spin pacing. Beelze's global DELAY_BETWEEN_SPINS
+      // is lower (2000), which makes the pre-spin clear feel noticeably too fast.
+      // Keep the normal beelze reel pipeline unchanged; only slow the pre-spin path.
+      const baseDelay = 3000;
+      const adjustedDelay = gameStateManager.isTurbo
+        ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
+        : baseDelay;
+      setSpeed(gameData, adjustedDelay);
+      isTurbo = !!gameData.isTurbo;
+      rowDelay = typeof (gameData as any).dropReelsDelay === 'number'
+        ? (gameData as any).dropReelsDelay
+        : 0;
+    }
+
+    const extendLastReelDrop = false;
+
+    console.log('[Symbols] Starting pre-spin drop of existing symbols', {
+      numRows,
+      isTurbo,
+      rowDelay,
+    });
+
+    // Bottom row to top row; stagger matches sugar_wonderland (turbo: all rows at once).
+    for (let step = 0; step < numRows; step++) {
+      const actualRow = (numRows - 1) - step;
+      const isLastReel = actualRow === 0;
+      const startDelay = isTurbo ? 0 : rowDelay * step;
+
+      this.scene.time.delayedCall(startDelay, () => {
+        console.log(`[Symbols] Pre-spin dropping row ${actualRow}/${numRows - 1}`);
+        try {
+          this.dropPrevSymbolsForPreSpin(actualRow, isLastReel && extendLastReelDrop);
+        } catch (e) {
+          console.warn('[Symbols] Error during pre-spin drop for row', actualRow, e);
+        }
+      });
+    }
+  }
+
+  private dropPrevSymbolsForPreSpin(index: number, extendDuration: boolean = false): void {
+    if (this.symbols === undefined || this.symbols === null) {
+      return;
+    }
+
+    if (!this.symbols[0] || !this.symbols[0][0]) {
+      console.warn('[Symbols] dropPrevSymbolsForPreSpin: symbols array structure is invalid, skipping');
+      return;
+    }
+
+    const height = this.symbols[0][0].displayHeight + this.verticalSpacing;
+    const extraMs = extendDuration ? 3000 : 0;
+    const gridBottomY = this.slotY + this.totalGridHeight * 0.5;
+    const distanceToScreenBottom = Math.max(0, this.scene.scale.height - gridBottomY);
+    const dropDistance = distanceToScreenBottom + this.totalGridHeight + (height * 2) + this.scene.gameData.winUpHeight;
+    const staggerMs = 50;
+    const clearHop = this.scene.gameData.winUpHeight * 0.2;
+    const isTurbo = !!this.scene.gameData?.isTurbo;
+
+    for (let col = 0; col < this.symbols.length; col++) {
+      if (!this.symbols[col] || !this.symbols[col][index]) {
+        console.warn(`[Symbols] dropPrevSymbolsForPreSpin: skipping invalid row ${col} or index ${index}`);
+        continue;
+      }
+
+      try { this.playDropAnimationIfAvailable(this.symbols[col][index]); } catch { }
+
+      const baseObj: any = this.symbols[col][index];
+      const overlayObj: any = (baseObj as any)?.__overlayImage;
+      const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
+      const tweens: any[] = [
+        {
+          delay: isTurbo ? 0 : staggerMs * col,
+          y: `-= ${clearHop}`,
+          duration: this.scene.gameData.winUpDuration,
+          ease: Phaser.Math.Easing.Circular.Out,
+        },
+        {
+          y: `+= ${dropDistance}`,
+          duration: (this.scene.gameData.dropDuration * 0.9) + extraMs,
+          ease: Phaser.Math.Easing.Linear,
+        },
+      ];
+
+      if (!isTurbo) {
+        tweens.push(
+          {
+            y: `+= ${5}`,
+            duration: this.scene.gameData.dropDuration * 0.05,
+            ease: Phaser.Math.Easing.Linear,
+          },
+          {
+            y: `-= ${5}`,
+            duration: this.scene.gameData.dropDuration * 0.05,
+            ease: Phaser.Math.Easing.Linear,
+          },
+        );
+      }
+
+      this.scene.tweens.chain({
+        targets: tweenTargets,
+        tweens,
+      });
+    }
   }
 
   // Helper methods for symbol processing
@@ -3262,6 +3355,8 @@ export class Symbols {
   private async dropReels(data: Data): Promise<void> {
     this.reelDropInProgress = true;
     this.initializeSpinDropSoundsByColumn();
+    const extendLastReelDrop = false;
+    try { (this.scene as any).__isScatterAnticipationActive = false; } catch {}
 
     const numRows = (this.symbols && this.symbols[0] && this.symbols[0].length)
       ? this.symbols[0].length
@@ -3278,7 +3373,8 @@ export class Symbols {
     }
     const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
 
-    // Drop symbols row by row from bottom to top
+    // Match sugar_wonderland here: pre-spin already clears outgoing symbols,
+    // so the main reel-drop path should only animate the incoming symbols.
     if (isSkip) {
       // Enforce strict bottom-left to top-right order during skip.
       const bonusPreDropDelay = gameStateManager.isBonus
@@ -3289,11 +3385,11 @@ export class Symbols {
 
       for (let step = 0; step < numRows; step++) {
         const actualRow = (numRows - 1) - step;
+        const isLastReel = actualRow === 0;
         const startDelay = step === 0 ? preDelay : rowDelay;
         await this.delay(startDelay);
         console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
-        await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
-        await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
+        await this.dropNewSymbols(actualRow, isLastReel && extendLastReelDrop, isTurbo, dropTimingSnapshot);
       }
 
       console.log('[Symbols] All reels completed');
@@ -3306,28 +3402,29 @@ export class Symbols {
         const actualRow = (numRows - 1) - step;
         const isLastReel = actualRow === 0;
 
-        // In bonus mode, add small pre-drop delay
+        // In bonus mode, add a small pre-drop delay before any new symbols start falling.
+        // Use winUpDuration so this delay is automatically affected by turbo settings.
         const bonusPreDropDelay = gameStateManager.isBonus
           ? (dropTimingSnapshot.winUpDuration * 2)
           : 0.5;
 
-        // In turbo mode, remove row stagger so all drop together
-        const rowDelayFactor = isTurbo ? 0 : 1;
+        // In turbo mode, remove row-level stagger so all rows drop together,
+        // but still honor the bonus pre-drop delay calculated above.
         const startDelay = bonusPreDropDelay +
-          (dropTimingSnapshot.dropReelsDelay * step * rowDelayFactor);
+          (isTurbo ? 0 : dropTimingSnapshot.dropReelsDelay * step);
 
         const p = (async () => {
-          await this.delayOrSkip(startDelay);
-          await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
-
-          // Then drop new symbols
-          await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
+          await this.delay(startDelay);
+          console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1} (new symbols only)`);
+          await this.dropNewSymbols(actualRow, isLastReel && extendLastReelDrop, isTurbo, dropTimingSnapshot);
         })();
         reelPromises.push(p);
       }
 
       try {
+        console.log('[Symbols] Waiting for all reels to complete animation...');
         await Promise.all(reelPromises);
+        console.log('[Symbols] All reels have completed animation');
         this.clearSkipReelDrops();
       } finally {
         this.reelDropInProgress = false;
@@ -3569,14 +3666,13 @@ export class Symbols {
         let symbol = this.newSymbols[col][index];
         const targetY = this.getYPos(index);
 
-        // Trigger drop animation if available
-        try { this.playDropAnimationIfAvailable(symbol); } catch { }
-
         const baseObj: any = symbol as any;
         const overlayObj: any = (baseObj as any)?.__overlayImage;
         const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
 
-        const delayMs = isSkip ? 0 : STAGGER_MS * col;
+        // Match sugar_wonderland turbo behavior: in turbo, drop all symbols in the
+        // row at the same time (no per-column stagger). Preserve skip behavior too.
+        const delayMs = (isTurbo || isSkip) ? 0 : STAGGER_MS * col;
         console.log(`[Symbols] Column ${col}: delay=${delayMs}ms, targetY=${targetY}`);
 
         const tweens: any[] = [
@@ -5239,17 +5335,35 @@ export class Symbols {
       const baseY = (target as any)?.scaleY;
       const safeBaseX = (typeof baseX === 'number' && isFinite(baseX)) ? baseX : 1;
       const safeBaseY = (typeof baseY === 'number' && isFinite(baseY)) ? baseY : 1;
-      const scaleFactor = 1.3;
-      const scaleDuration = 200;
+      const tweenTargets = this.getSymbolTweenTargets(target);
+      const shrinkFactor = 0.85;
+      const popFactor = 1.5;
+      const shrinkDuration = 220;
+      const popDuration = 180;
 
       try { this.scene.tweens.killTweensOf(target); } catch { }
-      this.scene.tweens.add({
-        targets: target,
-        scaleX: safeBaseX * scaleFactor,
-        scaleY: safeBaseY * scaleFactor,
-        duration: scaleDuration,
-        ease: Phaser.Math.Easing.Cubic.Out,
-        onComplete: () => onComplete(),
+      try {
+        const overlayObj: any = (target as any)?.__overlayImage;
+        if (overlayObj) this.scene.tweens.killTweensOf(overlayObj);
+      } catch { }
+
+      this.scene.tweens.chain({
+        targets: tweenTargets,
+        tweens: [
+          {
+            scaleX: safeBaseX * shrinkFactor,
+            scaleY: safeBaseY * shrinkFactor,
+            duration: shrinkDuration,
+            ease: Phaser.Math.Easing.Sine.Out,
+          },
+          {
+            scaleX: safeBaseX * popFactor,
+            scaleY: safeBaseY * popFactor,
+            duration: popDuration,
+            ease: Phaser.Math.Easing.Cubic.Out,
+            onComplete: () => onComplete(),
+          },
+        ],
       });
     } catch {
       try { onComplete(); } catch { }
