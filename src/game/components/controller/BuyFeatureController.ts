@@ -136,7 +136,19 @@ export class BuyFeatureController {
       this.callbacks.updateBalanceAmount(newBalance);
       console.log(`[SlotController] Balance deducted: $${currentBalance.toFixed(2)} -> $${newBalance.toFixed(2)}`);
 
-      // Avoid pre-spin symbol clearing; only run this on explicit skip to prevent flicker.
+      // Buy feature spins also need the pre-spin clear now that the main reel-drop path
+      // only animates incoming symbols. Otherwise the old grid stays visible and gets
+      // overlaid by the incoming buy-feature spin.
+      try {
+        const scene: any = this.callbacks.getScene();
+        const symbolsComponent = scene?.symbols;
+        if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
+          console.log('[SlotController] Triggering pre-spin symbol drop for buy feature');
+          symbolsComponent.startPreSpinDrop();
+        }
+      } catch (e) {
+        console.warn('[SlotController] Failed to start pre-spin symbol drop for buy feature:', e);
+      }
 
       console.log('[SlotController] Calling doSpin for buy feature...');
       gameStateManager.isBuyFeatureSpin = true;

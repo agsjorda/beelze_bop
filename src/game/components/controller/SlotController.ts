@@ -808,12 +808,7 @@ export class SlotController {
 	}
 
 	private playSpinButtonClickSfx(): void {
-		try {
-			const audioManager = (window as any)?.audioManager;
-			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
-				audioManager.playSoundEffect(SoundEffectType.SPIN_CLICK);
-			}
-		} catch {}
+		// Intentionally disabled: pressing the spin button should not play click_1.ogg.
 	}
 
 	private createControllerElements(scene: Scene, assetScale: number): void {
@@ -4569,7 +4564,19 @@ export class SlotController {
 				return;
 			}
 			
-			// Avoid pre-spin symbol clearing; this should only happen on explicit skip.
+			// Bonus/free-spin autoplay should also clear old symbols before the next
+			// spin is processed; otherwise old symbols remain visible and get overlaid
+			// by the incoming grid because the main drop path only animates new symbols.
+			try {
+				const gameScene: any = this.scene as any;
+				const symbolsComponent = gameScene?.symbols;
+				if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
+					console.log('[SlotController] Triggering pre-spin symbol drop for FREE_SPIN_AUTOPLAY');
+					symbolsComponent.startPreSpinDrop();
+				}
+			} catch (e) {
+				console.warn('[SlotController] Failed to start pre-spin symbol drop for FREE_SPIN_AUTOPLAY:', e);
+			}
 			
 			// Apply turbo mode to scene game data (same as normal autoplay)
 			this.forceApplyTurboToSceneGameData();

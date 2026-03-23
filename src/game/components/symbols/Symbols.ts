@@ -3686,6 +3686,11 @@ export class Symbols {
             y: targetY,
             duration: Math.max(1, ((dropDuration * 0.9) + extraMs) * speed),
             ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
+            onComplete: () => {
+              if (!isTurbo && !isSkip && (window as any).audioManager) {
+                this.playSpinReelDropSoundForColumn(col);
+              }
+            }
           },
         ];
 
@@ -3701,10 +3706,6 @@ export class Symbols {
               duration: Math.max(1, dropDuration * 0.05 * speed),
               ease: Phaser.Math.Easing.Linear,
               onComplete: () => {
-                if (!isTurbo && (window as any).audioManager) {
-                  this.playSpinReelDropSoundForColumn(col);
-                }
-
                 completedAnimations++;
                 if (completedAnimations === totalAnimations) {
                   resolve();
@@ -5339,7 +5340,7 @@ export class Symbols {
       const shrinkFactor = 0.85;
       const popFactor = 1.5;
       const shrinkDuration = 220;
-      const popDuration = 180;
+      const popDuration = 150;
 
       try { this.scene.tweens.killTweensOf(target); } catch { }
       try {
