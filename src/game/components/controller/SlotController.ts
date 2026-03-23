@@ -2008,8 +2008,6 @@ export class SlotController {
 		const totalWidth = currentX;
 		this.featureLabelContainer.setX(featureX - totalWidth / 2);
 		this.controllerContainer.add(this.featureLabelContainer);
-		this.featureLabelContainer.setInteractive();
-		this.featureLabelContainer.on('pointerdown', () => this.handleBuyFeaturePress());
 
 		// Amount (2nd line, no currency prefix) - bound to current bet x100
 		this.featureAmountText = scene.add.text(

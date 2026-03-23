@@ -3191,10 +3191,9 @@ export class Symbols {
     let isTurbo = false;
     let rowDelay = 0;
     if (gameData) {
-      // Match sugar_wonderland's pre-spin pacing. Beelze's global DELAY_BETWEEN_SPINS
-      // is lower (2000), which makes the pre-spin clear feel noticeably too fast.
-      // Keep the normal beelze reel pipeline unchanged; only slow the pre-spin path.
-      const baseDelay = 3000;
+      // Match sugar_wonderland's structure: pre-spin clear and incoming reel drop
+      // must derive their timings from the same DELAY_BETWEEN_SPINS source.
+      const baseDelay = DELAY_BETWEEN_SPINS;
       const adjustedDelay = gameStateManager.isTurbo
         ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
         : baseDelay;
