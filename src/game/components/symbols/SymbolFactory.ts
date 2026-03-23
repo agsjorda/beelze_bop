@@ -150,8 +150,9 @@ export class SymbolFactory {
       spineObj.setAlpha(alpha);
     }
     
-    // Play drop animation, then transition to idle
-    this.playDropThenIdle(spineObj, value);
+    // Keep reel symbols in idle on creation so the reel tween provides the motion
+    // without the BZ drop asset's squash / flip-like effect.
+    this.playIdleAnimation(spineObj, value);
     
     // Add to container
     this.container.add(spineObj);
@@ -160,12 +161,10 @@ export class SymbolFactory {
   }
 
   /**
-   * Play drop animation followed by idle
+   * Play idle animation with small desync so symbols do not look synchronized.
    */
-  private playDropThenIdle(spineObj: any, value: number): void {
+  private playIdleAnimation(spineObj: any, value: number): void {
     try {
-      // Animation names in BZ assets are lowercase: drop, idle
-      const dropName = `Symbol${value}_BZ_drop`;
       const idleName = `Symbol${value}_BZ_idle`;
       
       const animState = spineObj.animationState;
@@ -173,70 +172,27 @@ export class SymbolFactory {
         console.warn(`[SymbolFactory] No animation state for symbol ${value}`);
         return;
       }
-      
-      // Check if drop animation exists
-      const hasDrop = !!spineObj?.skeleton?.data?.findAnimation?.(dropName);
-      
-      console.log(`[SymbolFactory] Symbol ${value}: dropName=${dropName}, idleName=${idleName}, hasDrop=${hasDrop}`);
-      
-      if (hasDrop) {
-        animState.setAnimation(0, dropName, false);
-        console.log(`[SymbolFactory] Playing drop animation: ${dropName}`);
-        
-        // Add listener to transition to idle
-        if (animState.addListener) {
-          const listener = {
-            complete: (entry: any) => {
-              try {
-                if (!entry || entry.animation?.name !== dropName) return;
-                
-                console.log(`[SymbolFactory] Drop complete, transitioning to idle: ${idleName}`);
-                // Transition to idle with random offset
-                const idleEntry = animState.setAnimation(0, idleName, true);
-                
-                // Add speed jitter and random start offset
-                const speedJitter = 0.95 + Math.random() * 0.1;
-                if (idleEntry && typeof idleEntry.timeScale === 'number') {
-                  idleEntry.timeScale = speedJitter;
-                }
-                
-                // Random start time
-                try {
-                  const duration = spineObj?.skeleton?.data?.findAnimation?.(idleName)?.duration;
-                  if (typeof duration === 'number' && duration > 0 && idleEntry) {
-                    idleEntry.trackTime = Math.random() * duration;
-                  }
-                } catch { /* ignore */ }
-                
-                // Remove listener
-                try {
-                  if (animState.removeListener) {
-                    animState.removeListener(listener);
-                  }
-                } catch { /* ignore */ }
-              } catch { /* ignore */ }
-            }
-          };
-          animState.addListener(listener);
+
+      const idleEntry = animState.setAnimation(0, idleName, true);
+      if (idleEntry) {
+        const speedJitter = 0.95 + Math.random() * 0.1;
+        if (typeof idleEntry.timeScale === 'number') {
+          idleEntry.timeScale = speedJitter;
         }
-      } else {
-        // No drop animation, just play idle
-        console.log(`[SymbolFactory] No drop animation, playing idle directly: ${idleName}`);
-        const idleEntry = animState.setAnimation(0, idleName, true);
-        
-        if (idleEntry) {
-          // Add speed jitter
-          const speedJitter = 0.95 + Math.random() * 0.1;
-          if (typeof idleEntry.timeScale === 'number') {
-            idleEntry.timeScale = speedJitter;
+
+        try {
+          const duration = spineObj?.skeleton?.data?.findAnimation?.(idleName)?.duration;
+          if (typeof duration === 'number' && duration > 0) {
+            idleEntry.trackTime = Math.random() * duration;
           }
-          console.log(`[SymbolFactory] Idle animation set successfully for symbol ${value}`);
-        } else {
-          console.warn(`[SymbolFactory] Failed to set idle animation ${idleName} for symbol ${value}`);
-        }
+        } catch { /* ignore */ }
+
+        console.log(`[SymbolFactory] Playing idle animation: ${idleName}`);
+      } else {
+        console.warn(`[SymbolFactory] Failed to set idle animation ${idleName} for symbol ${value}`);
       }
     } catch (err) {
-      console.error(`[SymbolFactory] Error in playDropThenIdle for symbol ${value}:`, err);
+      console.error(`[SymbolFactory] Error in playIdleAnimation for symbol ${value}:`, err);
     }
   }
 

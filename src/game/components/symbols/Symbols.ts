@@ -19,9 +19,9 @@
 
 import { Data } from '../../../tmp_backend/Data';
 import { Game } from '../../scenes/Game';
-import { GameData, setSpeed } from '../GameData';
+import { setSpeed } from '../GameData';
 import { ScatterAnimationManager } from '../../../managers/ScatterAnimationManager';
-import { SymbolDetector, Grid, Wins } from '../../../tmp_backend/SymbolDetector';
+import { SymbolDetector } from '../../../tmp_backend/SymbolDetector';
 import { gameEventManager, GameEventType } from '../../../event/EventManager';
 import { gameStateManager } from '../../../managers/GameStateManager';
 import { TurboConfig } from '../../../config/TurboConfig';
@@ -192,6 +192,10 @@ export class Symbols {
   private cachedTotalWin: number = 0;
   private skipReelDropsActive: boolean = false;
   private skipReelDropsPending: boolean = false;
+  private preSpinDropInProgress: boolean = false;
+  private preSpinDropPromise: Promise<void> | null = null;
+  private preSpinDropRowPromises: Map<number, Promise<void>> = new Map();
+  private spinDataResponseReceivedForCurrentSpin: boolean = false;
   private skipHitbox?: Phaser.GameObjects.Zone;
   private skipTumblesActive: boolean = false;
   private tumbleInProgress: boolean = false;
@@ -275,6 +279,7 @@ export class Symbols {
         console.error('[Symbols] Invalid SpinData received - missing slot.area');
         return;
       }
+      this.spinDataResponseReceivedForCurrentSpin = true;
       this.currentSpinData = data.spinData;
       await this.processSpinData(data.spinData);
     });
@@ -282,6 +287,7 @@ export class Symbols {
     // Listen for REELS_STOP
     gameEventManager.on(GameEventType.REELS_STOP, () => {
       console.log('[Symbols] REELS_STOP event received');
+      this.spinDataResponseReceivedForCurrentSpin = false;
       if (this.scatterAnimationManager?.isAnimationInProgress()) {
         console.log('[Symbols] REELS_STOP during scatter bonus - not triggering new spin');
         return;
@@ -2891,6 +2897,7 @@ export class Symbols {
       const numCols = this.symbols.length;
       const numRows = this.symbols[0].length;
       const rowMajor: (number | null)[][] = Array.from({ length: numRows }, () => Array<number | null>(numCols).fill(null));
+      let tumbleDropSoundPlayed = false;
       for (let col = 0; col < numCols; col++) {
         for (let row = 0; row < numRows; row++) {
           const obj = this.symbols[col]?.[row];
@@ -2902,33 +2909,6 @@ export class Symbols {
       }
       this.currentSymbolData = rowMajor as any;
     } catch { }
-  }
-
-  private updateSkipTweenTimeScale(): void {
-    // no-op; keep for compatibility if referenced elsewhere
-  }
-
-  private clearOldSymbolsForSkip(): void {
-    if (!this.symbols || this.symbols.length === 0) {
-      return;
-    }
-    for (let col = 0; col < this.symbols.length; col++) {
-      const column = this.symbols[col];
-      if (!column) continue;
-      for (let row = 0; row < column.length; row++) {
-        const symbol: any = column[row];
-        if (!symbol || symbol.destroyed) {
-          continue;
-        }
-        const overlayObj: any = (symbol as any)?.__overlayImage;
-        try { this.scene.tweens.killTweensOf(symbol); } catch { }
-        try { if (overlayObj) this.scene.tweens.killTweensOf(overlayObj); } catch { }
-        try { this.destroySymbolOverlays(symbol); } catch { }
-        try { if (!symbol.destroyed) symbol.destroy(); } catch { }
-        try { if (overlayObj && !overlayObj.destroyed) overlayObj.destroy(); } catch { }
-        column[row] = null as any;
-      }
-    }
   }
 
   private delayOrSkip(ms: number): Promise<void> {
@@ -3017,7 +2997,7 @@ export class Symbols {
         try {
           if (this.tumbleInProgress) return;
           if (gameStateManager.isShowingWinDialog) return;
-          if (gameStateManager.isTurbo) return;
+          if (!gameStateManager.isBonus && !this.spinDataResponseReceivedForCurrentSpin) return;
           if (gameStateManager.isReelSpinning && this.reelDropInProgress) {
             this.requestSkipReelDrops();
           }
@@ -3028,7 +3008,7 @@ export class Symbols {
 
       const enable = () => {
         try { this.updateSkipHitboxGeometry(); } catch {}
-        if (gameStateManager.isTurbo || gameStateManager.isShowingWinDialog) {
+        if (gameStateManager.isShowingWinDialog) {
           try { this.skipHitbox?.disableInteractive(); } catch {}
         } else {
           try { this.skipHitbox?.setInteractive({ useHandCursor: false }); } catch {}
@@ -3040,7 +3020,13 @@ export class Symbols {
 
       gameEventManager.on(GameEventType.REELS_START, enable);
       gameEventManager.on(GameEventType.REELS_STOP, disable);
-      const onTurboOn = () => { try { this.skipHitbox?.disableInteractive(); } catch {} };
+      const onTurboOn = () => {
+        try {
+          if (gameStateManager.isReelSpinning && !gameStateManager.isShowingWinDialog) {
+            this.skipHitbox?.setInteractive({ useHandCursor: false });
+          }
+        } catch {}
+      };
       const onTurboOff = () => { try { if (gameStateManager.isReelSpinning) enable(); } catch {} };
       gameEventManager.on(GameEventType.TURBO_ON, onTurboOn);
       gameEventManager.on(GameEventType.TURBO_OFF, onTurboOff);
@@ -3061,6 +3047,34 @@ export class Symbols {
       this.skipHitbox.setPosition(this.slotX, this.slotY);
       try { (this.skipHitbox as any).setSize(this.totalGridWidth, this.totalGridHeight); } catch {}
     } catch {}
+  }
+
+  private sendNewSymbolsBehindExisting(): void {
+    if (!this.container || !this.newSymbols || this.newSymbols.length === 0) {
+      return;
+    }
+
+    const list: any[] = Array.isArray((this.container as any).list)
+      ? (this.container as any).list
+      : [];
+
+    for (let col = 0; col < this.newSymbols.length; col++) {
+      const column = this.newSymbols[col];
+      if (!Array.isArray(column)) continue;
+      for (let row = 0; row < column.length; row++) {
+        const symbol: any = column[row];
+        if (!symbol || symbol.destroyed) continue;
+        try {
+          if (list.includes(symbol)) this.container.sendToBack(symbol);
+        } catch { }
+        try {
+          const overlayObj: any = symbol?.__overlayImage;
+          if (overlayObj && !overlayObj.destroyed && list.includes(overlayObj)) {
+            this.container.sendToBack(overlayObj);
+          }
+        } catch { }
+      }
+    }
   }
 
   //change Transition_BZ to cover and fade faster
@@ -3165,42 +3179,83 @@ export class Symbols {
     } catch { }
   }
 
+  /**
+   * Start dropping/clearing existing symbols as soon as a new spin is triggered.
+   * Intentionally decoupled from `dropReels` so the clear phase can begin immediately
+   * at spin start (manual or autoplay), before `SPIN_DATA_RESPONSE` / new reels drop.
+   * Mirrors sugar_wonderland's lighter pre-spin clear path without changing
+   * beelze_bop's normal `processSpinData` -> `dropReels` architecture.
+   */
   public startPreSpinDrop(): void {
-    // Immediately destroy all old symbols when a new spin starts
-    // This prevents symbols from lingering on screen if the spin button is pressed quickly
-    console.log('[Symbols] startPreSpinDrop: clearing old symbols immediately');
-    
+    if (this.preSpinDropInProgress) {
+      return;
+    }
+    this.spinDataResponseReceivedForCurrentSpin = false;
     if (!this.symbols || this.symbols.length === 0) {
+      console.log('[Symbols] startPreSpinDrop: no symbols to drop');
       return;
     }
 
-    let destroyedCount = 0;
-    for (let col = 0; col < this.symbols.length; col++) {
-      const column = this.symbols[col];
-      if (!Array.isArray(column)) continue;
-      
-      for (let row = 0; row < column.length; row++) {
-        const symbol = column[row];
-        if (symbol && !(symbol as any).destroyed) {
-          // Kill any active tweens on this symbol
-          try {
-            this.scene.tweens.killTweensOf(symbol);
-          } catch { }
-          
-          // Destroy the symbol and its overlay if it exists
-          try {
-            const overlayObj = (symbol as any)?.__overlayImage;
-            if (overlayObj && !overlayObj.destroyed) {
-              overlayObj.destroy();
-            }
-            symbol.destroy();
-            destroyedCount++;
-          } catch { }
+    const numRows = (this.symbols[0] && this.symbols[0].length) ? this.symbols[0].length : SLOT_ROWS;
+    if (numRows <= 0) {
+      console.log('[Symbols] startPreSpinDrop: symbol grid has zero rows');
+      return;
+    }
+
+    const baseDelay = DELAY_BETWEEN_SPINS;
+    const adjustedDelay = gameStateManager.isTurbo
+      ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
+      : baseDelay;
+    setSpeed(this.scene.gameData, adjustedDelay);
+
+    const isTurbo = !!this.scene.gameData?.isTurbo;
+    const dropTimingSnapshot: ReelDropTimingSnapshot = {
+      winUpDuration: Number(this.scene.gameData?.winUpDuration ?? 0),
+      dropDuration: Number(this.scene.gameData?.dropDuration ?? 0),
+      dropReelsDelay: Number(this.scene.gameData?.dropReelsDelay ?? 0),
+    };
+
+    this.preSpinDropInProgress = true;
+    this.preSpinDropRowPromises.clear();
+    const runPromise = (async () => {
+      const rowPromises: Promise<void>[] = [];
+      const bonusPreDropDelay = gameStateManager.isBonus
+        ? (dropTimingSnapshot.winUpDuration * 2)
+        : 0.3;
+
+      if (isTurbo) {
+        const sharedStartGate = this.delayOrSkip(bonusPreDropDelay);
+        for (let step = 0; step < numRows; step++) {
+          const actualRow = (numRows - 1) - step;
+          const rowPromise = sharedStartGate.then(() =>
+            this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot)
+          );
+          this.preSpinDropRowPromises.set(actualRow, rowPromise);
+          rowPromises.push(rowPromise);
+        }
+      } else {
+        for (let step = 0; step < numRows; step++) {
+          const actualRow = (numRows - 1) - step;
+          const startDelay = bonusPreDropDelay + (dropTimingSnapshot.dropReelsDelay * step);
+          const rowPromise = (async () => {
+            await this.delayOrSkip(startDelay);
+            await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+          })();
+          this.preSpinDropRowPromises.set(actualRow, rowPromise);
+          rowPromises.push(rowPromise);
         }
       }
-    }
-    
-    console.log(`[Symbols] startPreSpinDrop destroyed ${destroyedCount} old symbols immediately`);
+
+      await Promise.all(rowPromises);
+    })();
+
+    this.preSpinDropPromise = runPromise
+      .catch((e) => {
+        console.warn('[Symbols] startPreSpinDrop failed:', e);
+      })
+      .finally(() => {
+        this.preSpinDropInProgress = false;
+      });
   }
 
   // Helper methods for symbol processing
@@ -3262,10 +3317,13 @@ export class Symbols {
   private async dropReels(data: Data): Promise<void> {
     this.reelDropInProgress = true;
     this.initializeSpinDropSoundsByColumn();
+    try { (this.scene as any).__isScatterAnticipationActive = false; } catch {}
 
-    const numRows = (this.symbols && this.symbols[0] && this.symbols[0].length)
-      ? this.symbols[0].length
-      : SLOT_ROWS;
+    const numRows = (this.newSymbols && this.newSymbols[0] && this.newSymbols[0].length)
+      ? this.newSymbols[0].length
+      : ((this.symbols && this.symbols[0] && this.symbols[0].length)
+        ? this.symbols[0].length
+        : SLOT_ROWS);
     const isTurbo = !!this.scene.gameData?.isTurbo;
     const dropTimingSnapshot: ReelDropTimingSnapshot = {
       winUpDuration: Number(this.scene.gameData?.winUpDuration ?? 0),
@@ -3277,10 +3335,21 @@ export class Symbols {
       this.skipReelDropsActive = true;
     }
     const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
+    const pendingPreSpinDrop = this.preSpinDropPromise;
+    if (pendingPreSpinDrop) {
+      pendingPreSpinDrop.finally(() => {
+        if (this.preSpinDropPromise === pendingPreSpinDrop) {
+          this.preSpinDropPromise = null;
+        }
+      });
+    }
+    const shouldSkipOldDropPhase = !!pendingPreSpinDrop;
+    const allowPreSpinOverlap = shouldSkipOldDropPhase && isTurbo && !gameStateManager.isAutoPlaying;
+    if (allowPreSpinOverlap) {
+      this.sendNewSymbolsBehindExisting();
+    }
 
-    // Drop symbols row by row from bottom to top
     if (isSkip) {
-      // Enforce strict bottom-left to top-right order during skip.
       const bonusPreDropDelay = gameStateManager.isBonus
         ? (dropTimingSnapshot.winUpDuration * 2)
         : 0.5;
@@ -3291,36 +3360,72 @@ export class Symbols {
         const actualRow = (numRows - 1) - step;
         const startDelay = step === 0 ? preDelay : rowDelay;
         await this.delay(startDelay);
-        console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
-        await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+        if (shouldSkipOldDropPhase && !allowPreSpinOverlap) {
+          const oldRowDone = this.preSpinDropRowPromises.get(actualRow);
+          if (oldRowDone) {
+            try { await oldRowDone; } catch { }
+          }
+        }
+        if (!shouldSkipOldDropPhase) {
+          await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+        }
         await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
       }
 
-      console.log('[Symbols] All reels completed');
       this.clearSkipReelDrops();
       this.reelDropInProgress = false;
+    } else if (isTurbo) {
+      const reelPromises: Promise<void>[] = [];
+      const bonusPreDropDelay = gameStateManager.isBonus
+        ? (dropTimingSnapshot.winUpDuration * 2)
+        : 0.5;
+      const sharedStartGate = this.delayOrSkip(bonusPreDropDelay);
+
+      for (let step = 0; step < numRows; step++) {
+        const actualRow = (numRows - 1) - step;
+        const p = (async () => {
+          await sharedStartGate;
+          if (shouldSkipOldDropPhase && !allowPreSpinOverlap) {
+            const oldRowDone = this.preSpinDropRowPromises.get(actualRow);
+            if (oldRowDone) {
+              try { await oldRowDone; } catch { }
+            }
+          }
+          if (!shouldSkipOldDropPhase) {
+            await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+          }
+          await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
+        })();
+        reelPromises.push(p);
+      }
+
+      try {
+        await Promise.all(reelPromises);
+        this.clearSkipReelDrops();
+      } finally {
+        this.reelDropInProgress = false;
+      }
     } else {
       const reelPromises: Promise<void>[] = [];
 
       for (let step = 0; step < numRows; step++) {
         const actualRow = (numRows - 1) - step;
-        const isLastReel = actualRow === 0;
-
-        // In bonus mode, add small pre-drop delay
         const bonusPreDropDelay = gameStateManager.isBonus
           ? (dropTimingSnapshot.winUpDuration * 2)
           : 0.5;
-
-        // In turbo mode, remove row stagger so all drop together
-        const rowDelayFactor = isTurbo ? 0 : 1;
-        const startDelay = bonusPreDropDelay +
-          (dropTimingSnapshot.dropReelsDelay * step * rowDelayFactor);
+        const startDelay = bonusPreDropDelay + (dropTimingSnapshot.dropReelsDelay * step);
 
         const p = (async () => {
           await this.delayOrSkip(startDelay);
-          await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
-
-          // Then drop new symbols
+          if (shouldSkipOldDropPhase && !allowPreSpinOverlap) {
+            const oldRowDone = this.preSpinDropRowPromises.get(actualRow);
+            if (oldRowDone) {
+              try { await oldRowDone; } catch { }
+            }
+          }
+          if (!shouldSkipOldDropPhase) {
+            await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+          }
           await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
         })();
         reelPromises.push(p);
@@ -3365,7 +3470,9 @@ export class Symbols {
       const winUpDuration = Number(timingOverride?.winUpDuration ?? this.scene.gameData.winUpDuration);
       const dropDuration = Number(timingOverride?.dropDuration ?? this.scene.gameData.dropDuration);
       const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
-      const speed = isSkip ? 0.5 : 1;
+      const speed = isSkip
+        ? (isTurbo ? 0.7 : 0.4)
+        : 1;
 
       // During scatter transitions, immediately dispose symbols without animation
       // to avoid conflicts with special transition sequences
@@ -3443,12 +3550,26 @@ export class Symbols {
         }
 
         const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
+        const delayMs = isTurbo
+          ? 0
+          : (isSkip ? STAGGER_MS * 0.35 * col : STAGGER_MS * col);
+
+        if (delayMs > 0) {
+          this.scene.time.delayedCall(delayMs, () => {
+            try {
+              const current = this.symbols?.[col]?.[rowIndex];
+              if (current && !(current as any).destroyed) {
+                this.playDropAnimationIfAvailable(current);
+              }
+            } catch { }
+          });
+        } else {
+          try { this.playDropAnimationIfAvailable(baseObj); } catch { }
+        }
 
         const tweens: any[] = [
           {
-            // Match felice behavior: in turbo, outgoing symbols clear simultaneously;
-            // incoming symbols keep sequential column landing.
-            delay: (isTurbo || isSkip) ? 0 : STAGGER_MS * col,
+            delay: delayMs,
             y: `-= ${symbolHop}`,
             duration: Math.max(1, winUpDuration * speed),
             ease: Phaser.Math.Easing.Circular.Out,
@@ -3561,7 +3682,11 @@ export class Symbols {
       const winUpDuration = Number(timingOverride?.winUpDuration ?? this.scene.gameData.winUpDuration);
       const dropDuration = Number(timingOverride?.dropDuration ?? this.scene.gameData.dropDuration);
       const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
-      const speed = isSkip ? 0.2 : 1;
+      // Match pastry_cub skip pacing: faster than normal, but not so compressed
+      // that later columns appear to fall out of order.
+      const speed = isSkip
+        ? (isTurbo ? 0.7 : 0.35)
+        : 1;
 
       console.log(`[Symbols] dropNewSymbols row ${index}: ${totalAnimations} columns, isTurbo=${isTurbo}, STAGGER_MS=${STAGGER_MS}`);
 
@@ -3576,7 +3701,11 @@ export class Symbols {
         const overlayObj: any = (baseObj as any)?.__overlayImage;
         const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
 
-        const delayMs = isSkip ? 0 : STAGGER_MS * col;
+        // Match pastry_cub: turbo stays collapsed, while non-turbo skip keeps
+        // a reduced left-to-right stagger instead of the full normal gap.
+        const delayMs = isTurbo
+          ? 0
+          : (isSkip ? STAGGER_MS * 0.3 * col : STAGGER_MS * col);
         console.log(`[Symbols] Column ${col}: delay=${delayMs}ms, targetY=${targetY}`);
 
         const tweens: any[] = [
@@ -3590,6 +3719,11 @@ export class Symbols {
             y: targetY,
             duration: Math.max(1, ((dropDuration * 0.9) + extraMs) * speed),
             ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
+            onComplete: () => {
+              if (!isTurbo && !isSkip && (window as any).audioManager) {
+                this.playSpinReelDropSoundForColumn(col);
+              }
+            }
           },
         ];
 
@@ -3605,10 +3739,6 @@ export class Symbols {
               duration: Math.max(1, dropDuration * 0.05 * speed),
               ease: Phaser.Math.Easing.Linear,
               onComplete: () => {
-                if (!isTurbo && (window as any).audioManager) {
-                  this.playSpinReelDropSoundForColumn(col);
-                }
-
                 completedAnimations++;
                 if (completedAnimations === totalAnimations) {
                   resolve();
@@ -3621,6 +3751,9 @@ export class Symbols {
           const prevOnComplete = last.onComplete;
           last.onComplete = () => {
             try { if (prevOnComplete) prevOnComplete(); } catch { }
+            if (isSkip && !isTurbo && (window as any).audioManager) {
+              try { this.playSpinReelDropSoundForColumn(col); } catch { }
+            }
             completedAnimations++;
             if (completedAnimations === totalAnimations) {
               resolve();
@@ -3666,6 +3799,20 @@ export class Symbols {
       this.spinDropSoundPlayedColumns.add(colIndex);
     } catch (e) {
       console.warn('[Symbols] Failed to play spin reel-drop sound:', e);
+    }
+  }
+
+  private playTumbleReelDropSound(): void {
+    try {
+      const sceneSound: any = this.scene?.sound;
+      if (!sceneSound || typeof sceneSound.play !== 'function') return;
+      const audioManager: any = (window as any).audioManager;
+      const volume = typeof audioManager?.getSfxVolume === 'function'
+        ? audioManager.getSfxVolume()
+        : 0.2;
+      sceneSound.play('reeldrop_bz', { volume, loop: false });
+    } catch (e) {
+      console.warn('[Symbols] Failed to play tumble reel-drop sound:', e);
     }
   }
 
@@ -4815,6 +4962,7 @@ export class Symbols {
       for (let col = 0; col < numCols; col++) {
         const incoming = Array.isArray(ins?.[col]) ? ins[col] : [];
         if (incoming.length === 0) continue;
+        let columnTumbleDropSoundPlayed = false;
 
         let emptyCount = 0;
         for (let row = 0; row < numRows; row++) {
@@ -4866,6 +5014,12 @@ export class Symbols {
                   y: targetY,
                   duration: (tumbleTimingSnapshot.dropDuration * 0.9),
                   ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    if (!tumbleTurboSnapshot && !columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
+                    }
+                  }
                 });
               } else {
                 tweensArr.push({
@@ -4873,6 +5027,12 @@ export class Symbols {
                   y: targetY,
                   duration: (tumbleTimingSnapshot.dropDuration * 0.9),
                   ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    if (!tumbleTurboSnapshot && !columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
+                    }
+                  }
                 });
               }
               if (!isTurbo) {
@@ -4887,14 +5047,7 @@ export class Symbols {
                     y: `-= ${10}`,
                     duration: tumbleTimingSnapshot.dropDuration * 0.05,
                     ease: Phaser.Math.Easing.Linear,
-                    onComplete: () => {
-                      try {
-                        if (!tumbleTurboSnapshot && (window as any).audioManager) {
-                          (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                        }
-                      } catch { }
-                      resolve();
-                    }
+                    onComplete: () => { resolve(); }
                   }
                 );
               } else {
@@ -4905,8 +5058,9 @@ export class Symbols {
                   try {
                     if (prevOnComplete) prevOnComplete();
                     // Play tumble sound for every symbol dropped after compression in turbo mode
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                    if (!columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
                     }
                   } catch (e) {
                     console.warn('[Symbols] Error playing reel drop sound in turbo mode:', e);
@@ -4966,6 +5120,7 @@ export class Symbols {
       for (let col = 0; col < numCols; col++) {
         const incoming = Array.isArray(ins?.[col]) ? ins[col] : [];
         if (incoming.length === 0) continue;
+        let columnTumbleDropSoundPlayed = false;
         let emptyCount = 0;
         for (let row = 0; row < numRows; row++) {
           if (!self.symbols[col][row]) emptyCount++;
@@ -5003,9 +5158,30 @@ export class Symbols {
               const tweensArr: any[] = [];
               if (!skipPreHop) {
                 tweensArr.push({ delay: computedStartDelay, y: `-= ${symbolHop}`, duration: tumbleTimingSnapshot.winUpDuration, ease: Phaser.Math.Easing.Circular.Out });
-                tweensArr.push({ y: targetY, duration: (tumbleTimingSnapshot.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
+                tweensArr.push({
+                  y: targetY,
+                  duration: (tumbleTimingSnapshot.dropDuration * 0.9),
+                  ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    if (!tumbleTurboSnapshot && !columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
+                    }
+                  }
+                });
               } else {
-                tweensArr.push({ delay: computedStartDelay, y: targetY, duration: (tumbleTimingSnapshot.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
+                tweensArr.push({
+                  delay: computedStartDelay,
+                  y: targetY,
+                  duration: (tumbleTimingSnapshot.dropDuration * 0.9),
+                  ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    if (!tumbleTurboSnapshot && !columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
+                    }
+                  }
+                });
               }
               if (!isTurbo) {
                 // Normal mode: include the small post-drop bounce and SFX
@@ -5015,14 +5191,7 @@ export class Symbols {
                     y: `-= ${10}`,
                     duration: tumbleTimingSnapshot.dropDuration * 0.05,
                     ease: Phaser.Math.Easing.Linear,
-                    onComplete: () => {
-                      try {
-                        if (!tumbleTurboSnapshot && (window as any).audioManager) {
-                          (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                        }
-                      } catch { }
-                      resolve();
-                    }
+                    onComplete: () => { resolve(); }
                   }
                 );
               } else {
@@ -5033,8 +5202,9 @@ export class Symbols {
                   try {
                     if (prevOnComplete) prevOnComplete();
                     // Play tumble sound for every symbol dropped after compression in turbo mode
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                    if (!columnTumbleDropSoundPlayed) {
+                      columnTumbleDropSoundPlayed = true;
+                      this.playTumbleReelDropSound();
                     }
                   } catch (e) {
                     console.warn('[Symbols] Error playing reel drop sound in turbo mode:', e);
@@ -5239,17 +5409,35 @@ export class Symbols {
       const baseY = (target as any)?.scaleY;
       const safeBaseX = (typeof baseX === 'number' && isFinite(baseX)) ? baseX : 1;
       const safeBaseY = (typeof baseY === 'number' && isFinite(baseY)) ? baseY : 1;
-      const scaleFactor = 1.3;
-      const scaleDuration = 200;
+      const tweenTargets = this.getSymbolTweenTargets(target);
+      const shrinkFactor = 0.85;
+      const popFactor = 1.5;
+      const shrinkDuration = 220;
+      const popDuration = 150;
 
       try { this.scene.tweens.killTweensOf(target); } catch { }
-      this.scene.tweens.add({
-        targets: target,
-        scaleX: safeBaseX * scaleFactor,
-        scaleY: safeBaseY * scaleFactor,
-        duration: scaleDuration,
-        ease: Phaser.Math.Easing.Cubic.Out,
-        onComplete: () => onComplete(),
+      try {
+        const overlayObj: any = (target as any)?.__overlayImage;
+        if (overlayObj) this.scene.tweens.killTweensOf(overlayObj);
+      } catch { }
+
+      this.scene.tweens.chain({
+        targets: tweenTargets,
+        tweens: [
+          {
+            scaleX: safeBaseX * shrinkFactor,
+            scaleY: safeBaseY * shrinkFactor,
+            duration: shrinkDuration,
+            ease: Phaser.Math.Easing.Sine.Out,
+          },
+          {
+            scaleX: safeBaseX * popFactor,
+            scaleY: safeBaseY * popFactor,
+            duration: popDuration,
+            ease: Phaser.Math.Easing.Cubic.Out,
+            onComplete: () => onComplete(),
+          },
+        ],
       });
     } catch {
       try { onComplete(); } catch { }
