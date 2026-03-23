@@ -192,6 +192,10 @@ export class Symbols {
   private cachedTotalWin: number = 0;
   private skipReelDropsActive: boolean = false;
   private skipReelDropsPending: boolean = false;
+  private preSpinDropInProgress: boolean = false;
+  private preSpinDropPromise: Promise<void> | null = null;
+  private preSpinDropRowPromises: Map<number, Promise<void>> = new Map();
+  private spinDataResponseReceivedForCurrentSpin: boolean = false;
   private skipHitbox?: Phaser.GameObjects.Zone;
   private skipTumblesActive: boolean = false;
   private tumbleInProgress: boolean = false;
@@ -275,6 +279,7 @@ export class Symbols {
         console.error('[Symbols] Invalid SpinData received - missing slot.area');
         return;
       }
+      this.spinDataResponseReceivedForCurrentSpin = true;
       this.currentSpinData = data.spinData;
       await this.processSpinData(data.spinData);
     });
@@ -282,6 +287,7 @@ export class Symbols {
     // Listen for REELS_STOP
     gameEventManager.on(GameEventType.REELS_STOP, () => {
       console.log('[Symbols] REELS_STOP event received');
+      this.spinDataResponseReceivedForCurrentSpin = false;
       if (this.scatterAnimationManager?.isAnimationInProgress()) {
         console.log('[Symbols] REELS_STOP during scatter bonus - not triggering new spin');
         return;
@@ -962,6 +968,13 @@ export class Symbols {
 
   public clearSkipTumbles(): void {
     this.skipTumblesActive = false;
+  }
+
+  public clearPreSpinDropState(): void {
+    this.preSpinDropInProgress = false;
+    this.preSpinDropPromise = null;
+    this.preSpinDropRowPromises.clear();
+    this.spinDataResponseReceivedForCurrentSpin = false;
   }
 
   public isSkipReelDropsActive(): boolean {
@@ -3017,7 +3030,7 @@ export class Symbols {
         try {
           if (this.tumbleInProgress) return;
           if (gameStateManager.isShowingWinDialog) return;
-          if (gameStateManager.isTurbo) return;
+          if (!gameStateManager.isBonus && !this.spinDataResponseReceivedForCurrentSpin) return;
           if (gameStateManager.isReelSpinning && this.reelDropInProgress) {
             this.requestSkipReelDrops();
           }
@@ -3028,7 +3041,7 @@ export class Symbols {
 
       const enable = () => {
         try { this.updateSkipHitboxGeometry(); } catch {}
-        if (gameStateManager.isTurbo || gameStateManager.isShowingWinDialog) {
+        if (gameStateManager.isShowingWinDialog) {
           try { this.skipHitbox?.disableInteractive(); } catch {}
         } else {
           try { this.skipHitbox?.setInteractive({ useHandCursor: false }); } catch {}
@@ -3040,7 +3053,13 @@ export class Symbols {
 
       gameEventManager.on(GameEventType.REELS_START, enable);
       gameEventManager.on(GameEventType.REELS_STOP, disable);
-      const onTurboOn = () => { try { this.skipHitbox?.disableInteractive(); } catch {} };
+      const onTurboOn = () => {
+        try {
+          if (gameStateManager.isReelSpinning && !gameStateManager.isShowingWinDialog) {
+            this.skipHitbox?.setInteractive({ useHandCursor: false });
+          }
+        } catch {}
+      };
       const onTurboOff = () => { try { if (gameStateManager.isReelSpinning) enable(); } catch {} };
       gameEventManager.on(GameEventType.TURBO_ON, onTurboOn);
       gameEventManager.on(GameEventType.TURBO_OFF, onTurboOff);
@@ -3061,6 +3080,34 @@ export class Symbols {
       this.skipHitbox.setPosition(this.slotX, this.slotY);
       try { (this.skipHitbox as any).setSize(this.totalGridWidth, this.totalGridHeight); } catch {}
     } catch {}
+  }
+
+  private sendNewSymbolsBehindExisting(): void {
+    if (!this.container || !this.newSymbols || this.newSymbols.length === 0) {
+      return;
+    }
+
+    const list: any[] = Array.isArray((this.container as any).list)
+      ? (this.container as any).list
+      : [];
+
+    for (let col = 0; col < this.newSymbols.length; col++) {
+      const column = this.newSymbols[col];
+      if (!Array.isArray(column)) continue;
+      for (let row = 0; row < column.length; row++) {
+        const symbol: any = column[row];
+        if (!symbol || symbol.destroyed) continue;
+        try {
+          if (list.includes(symbol)) this.container.sendToBack(symbol);
+        } catch { }
+        try {
+          const overlayObj: any = symbol?.__overlayImage;
+          if (overlayObj && !overlayObj.destroyed && list.includes(overlayObj)) {
+            this.container.sendToBack(overlayObj);
+          }
+        } catch { }
+      }
+    }
   }
 
   //change Transition_BZ to cover and fade faster
@@ -3173,126 +3220,192 @@ export class Symbols {
    * beelze_bop's normal `processSpinData` -> `dropReels` architecture.
    */
   public startPreSpinDrop(): void {
+    if (this.preSpinDropInProgress) {
+      return;
+    }
+    this.spinDataResponseReceivedForCurrentSpin = false;
     if (!this.symbols || this.symbols.length === 0) {
       console.log('[Symbols] startPreSpinDrop: no symbols to drop');
       return;
     }
 
-    const firstCol = this.symbols[0];
-    const numRows = Array.isArray(firstCol) ? firstCol.length : 0;
-    if (numRows === 0) {
+    const numRows = (this.symbols[0] && this.symbols[0].length) ? this.symbols[0].length : SLOT_ROWS;
+    if (numRows <= 0) {
       console.log('[Symbols] startPreSpinDrop: symbol grid has zero rows');
       return;
     }
 
-    // Ensure GameData timings are initialized before the very first drop.
-    // Mirrors `processSpinDataSymbols` so the first pre-spin drop does not use tiny defaults.
-    const gameData = this.scene?.gameData as GameData;
-    let isTurbo = false;
-    let rowDelay = 0;
-    if (gameData) {
-      // Match sugar_wonderland's structure: pre-spin clear and incoming reel drop
-      // must derive their timings from the same DELAY_BETWEEN_SPINS source.
-      const baseDelay = DELAY_BETWEEN_SPINS;
-      const adjustedDelay = gameStateManager.isTurbo
-        ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
-        : baseDelay;
-      setSpeed(gameData, adjustedDelay);
-      isTurbo = !!gameData.isTurbo;
-      rowDelay = typeof (gameData as any).dropReelsDelay === 'number'
-        ? (gameData as any).dropReelsDelay
-        : 0;
-    }
+    const baseDelay = DELAY_BETWEEN_SPINS;
+    const adjustedDelay = gameStateManager.isTurbo
+      ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
+      : baseDelay;
+    setSpeed(this.scene.gameData, adjustedDelay);
 
-    const extendLastReelDrop = false;
+    const isTurbo = !!this.scene.gameData?.isTurbo;
+    const dropTimingSnapshot: ReelDropTimingSnapshot = {
+      winUpDuration: Number(this.scene.gameData?.winUpDuration ?? 0),
+      dropDuration: Number(this.scene.gameData?.dropDuration ?? 0),
+      dropReelsDelay: Number(this.scene.gameData?.dropReelsDelay ?? 0),
+    };
 
-    console.log('[Symbols] Starting pre-spin drop of existing symbols', {
-      numRows,
-      isTurbo,
-      rowDelay,
-    });
+    this.preSpinDropInProgress = true;
+    this.preSpinDropRowPromises.clear();
+    const runPromise = (async () => {
+      const rowPromises: Promise<void>[] = [];
+      const bonusPreDropDelay = gameStateManager.isBonus
+        ? (dropTimingSnapshot.winUpDuration * 2)
+        : 0.3;
 
-    // Bottom row to top row; stagger matches sugar_wonderland (turbo: all rows at once).
-    for (let step = 0; step < numRows; step++) {
-      const actualRow = (numRows - 1) - step;
-      const isLastReel = actualRow === 0;
-      const startDelay = isTurbo ? 0 : rowDelay * step;
-
-      this.scene.time.delayedCall(startDelay, () => {
-        console.log(`[Symbols] Pre-spin dropping row ${actualRow}/${numRows - 1}`);
-        try {
-          this.dropPrevSymbolsForPreSpin(actualRow, isLastReel && extendLastReelDrop);
-        } catch (e) {
-          console.warn('[Symbols] Error during pre-spin drop for row', actualRow, e);
+      if (isTurbo) {
+        const sharedStartGate = this.delayOrSkip(bonusPreDropDelay);
+        for (let step = 0; step < numRows; step++) {
+          const actualRow = (numRows - 1) - step;
+          const rowPromise = sharedStartGate.then(() =>
+            this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot)
+          );
+          this.preSpinDropRowPromises.set(actualRow, rowPromise);
+          rowPromises.push(rowPromise);
         }
+      } else {
+        for (let step = 0; step < numRows; step++) {
+          const actualRow = (numRows - 1) - step;
+          const startDelay = bonusPreDropDelay + (dropTimingSnapshot.dropReelsDelay * step);
+          const rowPromise = (async () => {
+            await this.delayOrSkip(startDelay);
+            await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+          })();
+          this.preSpinDropRowPromises.set(actualRow, rowPromise);
+          rowPromises.push(rowPromise);
+        }
+      }
+
+      await Promise.all(rowPromises);
+    })();
+
+    this.preSpinDropPromise = runPromise
+      .catch((e) => {
+        console.warn('[Symbols] startPreSpinDrop failed:', e);
+      })
+      .finally(() => {
+        this.preSpinDropInProgress = false;
       });
-    }
   }
 
-  private dropPrevSymbolsForPreSpin(index: number, extendDuration: boolean = false): void {
-    if (this.symbols === undefined || this.symbols === null) {
-      return;
-    }
-
-    if (!this.symbols[0] || !this.symbols[0][0]) {
-      console.warn('[Symbols] dropPrevSymbolsForPreSpin: symbols array structure is invalid, skipping');
-      return;
-    }
-
-    const height = this.symbols[0][0].displayHeight + this.verticalSpacing;
-    const extraMs = extendDuration ? 3000 : 0;
-    const gridBottomY = this.slotY + this.totalGridHeight * 0.5;
-    const distanceToScreenBottom = Math.max(0, this.scene.scale.height - gridBottomY);
-    const dropDistance = distanceToScreenBottom + this.totalGridHeight + (height * 2) + this.scene.gameData.winUpHeight;
-    const staggerMs = 50;
-    const clearHop = this.scene.gameData.winUpHeight * 0.2;
-    const isTurbo = !!this.scene.gameData?.isTurbo;
-
-    for (let col = 0; col < this.symbols.length; col++) {
-      if (!this.symbols[col] || !this.symbols[col][index]) {
-        console.warn(`[Symbols] dropPrevSymbolsForPreSpin: skipping invalid row ${col} or index ${index}`);
-        continue;
+  private dropPrevSymbolsForPreSpin(index: number, extendDuration: boolean = false): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (this.symbols === undefined || this.symbols === null) {
+        resolve();
+        return;
       }
 
-      try { this.playDropAnimationIfAvailable(this.symbols[col][index]); } catch { }
-
-      const baseObj: any = this.symbols[col][index];
-      const overlayObj: any = (baseObj as any)?.__overlayImage;
-      const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
-      const tweens: any[] = [
-        {
-          delay: isTurbo ? 0 : staggerMs * col,
-          y: `-= ${clearHop}`,
-          duration: this.scene.gameData.winUpDuration,
-          ease: Phaser.Math.Easing.Circular.Out,
-        },
-        {
-          y: `+= ${dropDistance}`,
-          duration: (this.scene.gameData.dropDuration * 0.9) + extraMs,
-          ease: Phaser.Math.Easing.Linear,
-        },
-      ];
-
-      if (!isTurbo) {
-        tweens.push(
-          {
-            y: `+= ${5}`,
-            duration: this.scene.gameData.dropDuration * 0.05,
-            ease: Phaser.Math.Easing.Linear,
-          },
-          {
-            y: `-= ${5}`,
-            duration: this.scene.gameData.dropDuration * 0.05,
-            ease: Phaser.Math.Easing.Linear,
-          },
-        );
+      if (!this.symbols[0] || !this.symbols[0][0]) {
+        console.warn('[Symbols] dropPrevSymbolsForPreSpin: symbols array structure is invalid, skipping');
+        resolve();
+        return;
       }
 
-      this.scene.tweens.chain({
-        targets: tweenTargets,
-        tweens,
+      const height = this.symbols[0][0].displayHeight + this.verticalSpacing;
+      const extraMs = extendDuration ? 3000 : 0;
+      const gridBottomY = this.slotY + this.totalGridHeight * 0.5;
+      const distanceToScreenBottom = Math.max(0, this.scene.scale.height - gridBottomY);
+      const dropDistance = distanceToScreenBottom + this.totalGridHeight + (height * 2) + this.scene.gameData.winUpHeight;
+      const staggerMs = 100;
+      const clearHop = this.scene.gameData.winUpHeight * 0.5;
+      const isTurbo = !!this.scene.gameData?.isTurbo;
+      const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
+      const speed = isSkip
+        ? (isTurbo ? 0.7 : 0.4)
+        : 1;
+
+      let completedAnimations = 0;
+      let totalAnimations = 0;
+
+      for (let col = 0; col < this.symbols.length; col++) {
+        if (!this.symbols[col] || !this.symbols[col][index]) {
+          console.warn(`[Symbols] dropPrevSymbolsForPreSpin: skipping invalid row ${col} or index ${index}`);
+          continue;
+        }
+
+        totalAnimations++;
+        const delayMs = isTurbo ? 0 : (isSkip ? staggerMs * 0.35 * col : staggerMs * col);
+        if (delayMs > 0) {
+          this.scene.time.delayedCall(delayMs, () => {
+            try {
+              const current = this.symbols?.[col]?.[index];
+              if (current && !(current as any).destroyed) {
+                this.playDropAnimationIfAvailable(current);
+              }
+            } catch { }
+          });
+        } else {
+          try { this.playDropAnimationIfAvailable(this.symbols[col][index]); } catch { }
+        }
+
+        const baseObj: any = this.symbols[col][index];
+        const overlayObj: any = (baseObj as any)?.__overlayImage;
+        const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
+        const tweens: any[] = [
+          {
+            delay: delayMs,
+            y: `-= ${clearHop}`,
+            duration: Math.max(1, this.scene.gameData.winUpDuration * speed),
+            ease: Phaser.Math.Easing.Circular.Out,
+          },
+          {
+            y: `+= ${dropDistance}`,
+            duration: Math.max(1, ((this.scene.gameData.dropDuration * 0.9) + extraMs) * speed),
+            ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
+          },
+        ];
+
+        if (!isTurbo && !isSkip) {
+          tweens.push(
+            {
+              y: `+= ${5}`,
+              duration: Math.max(1, this.scene.gameData.dropDuration * 0.05 * speed),
+              ease: Phaser.Math.Easing.Linear,
+            },
+            {
+              y: `-= ${5}`,
+              duration: Math.max(1, this.scene.gameData.dropDuration * 0.05 * speed),
+              ease: Phaser.Math.Easing.Linear,
+            },
+          );
+        }
+
+        const lastTween = tweens[tweens.length - 1];
+        const prevOnComplete = lastTween.onComplete;
+        lastTween.onComplete = () => {
+          try { if (prevOnComplete) prevOnComplete(); } catch { }
+          completedAnimations++;
+          if (completedAnimations >= totalAnimations) {
+            resolve();
+          }
+        };
+
+        this.scene.tweens.chain({
+          targets: tweenTargets,
+          tweens,
+        });
+      }
+
+      if (totalAnimations === 0) {
+        resolve();
+        return;
+      }
+
+      const maxStaggerDelay = isTurbo ? 0 : ((isSkip ? staggerMs * 0.35 : staggerMs) * Math.max(0, totalAnimations - 1));
+      const maxAnimDuration =
+        (this.scene.gameData.winUpDuration * speed) +
+        (((this.scene.gameData.dropDuration * 0.9) + extraMs) * speed) +
+        ((!isTurbo && !isSkip) ? (this.scene.gameData.dropDuration * 0.1 * speed) : 0);
+      const timeoutDuration = Math.max(1, maxStaggerDelay + maxAnimDuration + 100);
+      this.scene.time.delayedCall(timeoutDuration, () => {
+        if (completedAnimations < totalAnimations) {
+          resolve();
+        }
       });
-    }
+    });
   }
 
   // Helper methods for symbol processing
@@ -3354,12 +3467,13 @@ export class Symbols {
   private async dropReels(data: Data): Promise<void> {
     this.reelDropInProgress = true;
     this.initializeSpinDropSoundsByColumn();
-    const extendLastReelDrop = false;
     try { (this.scene as any).__isScatterAnticipationActive = false; } catch {}
 
-    const numRows = (this.symbols && this.symbols[0] && this.symbols[0].length)
-      ? this.symbols[0].length
-      : SLOT_ROWS;
+    const numRows = (this.newSymbols && this.newSymbols[0] && this.newSymbols[0].length)
+      ? this.newSymbols[0].length
+      : ((this.symbols && this.symbols[0] && this.symbols[0].length)
+        ? this.symbols[0].length
+        : SLOT_ROWS);
     const isTurbo = !!this.scene.gameData?.isTurbo;
     const dropTimingSnapshot: ReelDropTimingSnapshot = {
       winUpDuration: Number(this.scene.gameData?.winUpDuration ?? 0),
@@ -3371,11 +3485,21 @@ export class Symbols {
       this.skipReelDropsActive = true;
     }
     const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
+    const pendingPreSpinDrop = this.preSpinDropPromise;
+    if (pendingPreSpinDrop) {
+      pendingPreSpinDrop.finally(() => {
+        if (this.preSpinDropPromise === pendingPreSpinDrop) {
+          this.preSpinDropPromise = null;
+        }
+      });
+    }
+    const shouldSkipOldDropPhase = !!pendingPreSpinDrop;
+    const allowPreSpinOverlap = shouldSkipOldDropPhase && isTurbo && !gameStateManager.isAutoPlaying;
+    if (allowPreSpinOverlap) {
+      this.sendNewSymbolsBehindExisting();
+    }
 
-    // Match sugar_wonderland here: pre-spin already clears outgoing symbols,
-    // so the main reel-drop path should only animate the incoming symbols.
     if (isSkip) {
-      // Enforce strict bottom-left to top-right order during skip.
       const bonusPreDropDelay = gameStateManager.isBonus
         ? (dropTimingSnapshot.winUpDuration * 2)
         : 0.5;
@@ -3384,46 +3508,81 @@ export class Symbols {
 
       for (let step = 0; step < numRows; step++) {
         const actualRow = (numRows - 1) - step;
-        const isLastReel = actualRow === 0;
         const startDelay = step === 0 ? preDelay : rowDelay;
         await this.delay(startDelay);
-        console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
-        await this.dropNewSymbols(actualRow, isLastReel && extendLastReelDrop, isTurbo, dropTimingSnapshot);
+        if (shouldSkipOldDropPhase && !allowPreSpinOverlap) {
+          const oldRowDone = this.preSpinDropRowPromises.get(actualRow);
+          if (oldRowDone) {
+            try { await oldRowDone; } catch { }
+          }
+        }
+        if (!shouldSkipOldDropPhase) {
+          await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+        }
+        await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
       }
 
-      console.log('[Symbols] All reels completed');
       this.clearSkipReelDrops();
       this.reelDropInProgress = false;
-    } else {
+    } else if (isTurbo) {
       const reelPromises: Promise<void>[] = [];
+      const bonusPreDropDelay = gameStateManager.isBonus
+        ? (dropTimingSnapshot.winUpDuration * 2)
+        : 0.5;
+      const sharedStartGate = this.delayOrSkip(bonusPreDropDelay);
 
       for (let step = 0; step < numRows; step++) {
         const actualRow = (numRows - 1) - step;
-        const isLastReel = actualRow === 0;
-
-        // In bonus mode, add a small pre-drop delay before any new symbols start falling.
-        // Use winUpDuration so this delay is automatically affected by turbo settings.
-        const bonusPreDropDelay = gameStateManager.isBonus
-          ? (dropTimingSnapshot.winUpDuration * 2)
-          : 0.5;
-
-        // In turbo mode, remove row-level stagger so all rows drop together,
-        // but still honor the bonus pre-drop delay calculated above.
-        const startDelay = bonusPreDropDelay +
-          (isTurbo ? 0 : dropTimingSnapshot.dropReelsDelay * step);
-
         const p = (async () => {
-          await this.delay(startDelay);
-          console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1} (new symbols only)`);
-          await this.dropNewSymbols(actualRow, isLastReel && extendLastReelDrop, isTurbo, dropTimingSnapshot);
+          await sharedStartGate;
+          if (shouldSkipOldDropPhase && !allowPreSpinOverlap) {
+            const oldRowDone = this.preSpinDropRowPromises.get(actualRow);
+            if (oldRowDone) {
+              try { await oldRowDone; } catch { }
+            }
+          }
+          if (!shouldSkipOldDropPhase) {
+            await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+          }
+          await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
         })();
         reelPromises.push(p);
       }
 
       try {
-        console.log('[Symbols] Waiting for all reels to complete animation...');
         await Promise.all(reelPromises);
-        console.log('[Symbols] All reels have completed animation');
+        this.clearSkipReelDrops();
+      } finally {
+        this.reelDropInProgress = false;
+      }
+    } else {
+      const reelPromises: Promise<void>[] = [];
+
+      for (let step = 0; step < numRows; step++) {
+        const actualRow = (numRows - 1) - step;
+        const bonusPreDropDelay = gameStateManager.isBonus
+          ? (dropTimingSnapshot.winUpDuration * 2)
+          : 0.5;
+        const startDelay = bonusPreDropDelay + (dropTimingSnapshot.dropReelsDelay * step);
+
+        const p = (async () => {
+          await this.delayOrSkip(startDelay);
+          if (shouldSkipOldDropPhase && !allowPreSpinOverlap) {
+            const oldRowDone = this.preSpinDropRowPromises.get(actualRow);
+            if (oldRowDone) {
+              try { await oldRowDone; } catch { }
+            }
+          }
+          if (!shouldSkipOldDropPhase) {
+            await this.dropOldSymbols(actualRow, isTurbo, dropTimingSnapshot);
+          }
+          await this.dropNewSymbols(actualRow, false, isTurbo, dropTimingSnapshot);
+        })();
+        reelPromises.push(p);
+      }
+
+      try {
+        await Promise.all(reelPromises);
         this.clearSkipReelDrops();
       } finally {
         this.reelDropInProgress = false;
@@ -3461,7 +3620,9 @@ export class Symbols {
       const winUpDuration = Number(timingOverride?.winUpDuration ?? this.scene.gameData.winUpDuration);
       const dropDuration = Number(timingOverride?.dropDuration ?? this.scene.gameData.dropDuration);
       const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
-      const speed = isSkip ? 0.5 : 1;
+      const speed = isSkip
+        ? (isTurbo ? 0.7 : 0.4)
+        : 1;
 
       // During scatter transitions, immediately dispose symbols without animation
       // to avoid conflicts with special transition sequences
@@ -3542,9 +3703,9 @@ export class Symbols {
 
         const tweens: any[] = [
           {
-            // Match felice behavior: in turbo, outgoing symbols clear simultaneously;
-            // incoming symbols keep sequential column landing.
-            delay: (isTurbo || isSkip) ? 0 : STAGGER_MS * col,
+            delay: isTurbo
+              ? 0
+              : (isSkip ? STAGGER_MS * 0.35 * col : STAGGER_MS * col),
             y: `-= ${symbolHop}`,
             duration: Math.max(1, winUpDuration * speed),
             ease: Phaser.Math.Easing.Circular.Out,
@@ -3657,7 +3818,11 @@ export class Symbols {
       const winUpDuration = Number(timingOverride?.winUpDuration ?? this.scene.gameData.winUpDuration);
       const dropDuration = Number(timingOverride?.dropDuration ?? this.scene.gameData.dropDuration);
       const isSkip = this.skipReelDropsActive || this.skipReelDropsPending;
-      const speed = isSkip ? 0.2 : 1;
+      // Match pastry_cub skip pacing: faster than normal, but not so compressed
+      // that later columns appear to fall out of order.
+      const speed = isSkip
+        ? (isTurbo ? 0.7 : 0.35)
+        : 1;
 
       console.log(`[Symbols] dropNewSymbols row ${index}: ${totalAnimations} columns, isTurbo=${isTurbo}, STAGGER_MS=${STAGGER_MS}`);
 
@@ -3669,9 +3834,11 @@ export class Symbols {
         const overlayObj: any = (baseObj as any)?.__overlayImage;
         const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
 
-        // Match sugar_wonderland turbo behavior: in turbo, drop all symbols in the
-        // row at the same time (no per-column stagger). Preserve skip behavior too.
-        const delayMs = (isTurbo || isSkip) ? 0 : STAGGER_MS * col;
+        // Match pastry_cub: turbo stays collapsed, while non-turbo skip keeps
+        // a reduced left-to-right stagger instead of the full normal gap.
+        const delayMs = isTurbo
+          ? 0
+          : (isSkip ? STAGGER_MS * 0.3 * col : STAGGER_MS * col);
         console.log(`[Symbols] Column ${col}: delay=${delayMs}ms, targetY=${targetY}`);
 
         const tweens: any[] = [
@@ -3717,6 +3884,9 @@ export class Symbols {
           const prevOnComplete = last.onComplete;
           last.onComplete = () => {
             try { if (prevOnComplete) prevOnComplete(); } catch { }
+            if (isSkip && !isTurbo && (window as any).audioManager) {
+              try { this.playSpinReelDropSoundForColumn(col); } catch { }
+            }
             completedAnimations++;
             if (completedAnimations === totalAnimations) {
               resolve();
