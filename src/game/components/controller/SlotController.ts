@@ -3387,8 +3387,7 @@ export class SlotController {
 			return;
 		}
 
-		const currentBet = parseFloat(currentBetText);
-		const increasedBet = currentBet * 1.25; // Add 25%
+		const increasedBet = this.baseBetAmount * 1.25; // Add 25%
 		
 		// Only update the display, keep baseBetAmount unchanged for API calls.
 		// Do not show or layout currency here - bet display uses "BET (USD)" label above and amount only between -/+.
@@ -3400,8 +3399,6 @@ export class SlotController {
 		
 		// Even though base bet doesn't change, price uses base bet x100
 		this.updateFeatureAmountFromCurrentBet();
-		
-		console.log(`[SlotController] Amplify bet applied: $${currentBet} -> $${increasedBet.toFixed(2)} (+25%) - Base bet for API: $${this.baseBetAmount}`);
 	}
 
 	/**
