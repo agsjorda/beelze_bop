@@ -50,6 +50,14 @@ export class AssetLoader {
 		// Load audio files
 		if (assetGroup.audio) {
 			Object.entries(assetGroup.audio).forEach(([key, path]) => {
+				const audioCache: any = scene.cache.audio as any;
+				const alreadyLoaded = typeof audioCache?.exists === 'function'
+					? !!audioCache.exists(key)
+					: !!audioCache?.has?.(key);
+				if (alreadyLoaded) {
+					console.log(`[AssetLoader] Skipping cached audio: ${key}`);
+					return;
+				}
 				console.log(`[AssetLoader] Loading audio: ${key} from ${path}`);
 				scene.load.audio(key, path);
 			});

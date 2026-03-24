@@ -3387,7 +3387,7 @@ export class SlotController {
 			return;
 		}
 
-		const increasedBet = this.baseBetAmount * 1.25; // Add 25%
+		const increasedBet = this.baseBetAmount * (this.getGameData()?.enhancedBetMultiplier?? 1.25); // Add 25%
 		
 		// Only update the display, keep baseBetAmount unchanged for API calls.
 		// Do not show or layout currency here - bet display uses "BET (USD)" label above and amount only between -/+.

@@ -62,6 +62,11 @@ export class BetOptions {
 		this.screenModeManager = screenModeManager;
 	}
 
+	private formatBetOptionLabel(value: number): string {
+		// Compact display for bet option buttons, while preserving shared precision rules.
+		return formatCurrencyNumber(value, true);
+	}
+
 	private getBetOptionsText(key: string): string {
 		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
 	}
@@ -202,7 +207,7 @@ export class BetOptions {
 		(container as any).buttonValue = value;
 		(container as any).buttonIndex = index;
 		(container as any).buttonWidth = width;
-		const buttonText = scene.add.text(width / 2, height / 2, this.formatBetValue(value), {
+		const buttonText = scene.add.text(width / 2, height / 2, this.formatBetOptionLabel(value), {
 			fontSize: `${this.calculatedFontSize}px`,
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -429,7 +434,7 @@ export class BetOptions {
 	}
 
 	private calculateOptimalFontSize(scene: Scene, buttonWidth?: number, buttonHeight?: number, displayMultiplier: number = 1): void {
-		const displayValues = this.betOptions.map(v => this.formatBetValue(v * displayMultiplier));
+		const displayValues = this.betOptions.map(v => this.formatBetOptionLabel(v * displayMultiplier));
 		const width = buttonWidth ?? this.BUTTON_WIDTH;
 		const height = buttonHeight ?? this.BUTTON_HEIGHT;
 		const availableWidth = width - (this.BUTTON_PADDING * 2);
@@ -462,16 +467,11 @@ export class BetOptions {
 			if (!textObj || typeof baseValue !== 'number') continue;
 			const displayValue = baseValue * multiplier;
 			const isSelected = i === this.selectedButtonIndex;
-			textObj.setText(this.formatBetValue(displayValue))
+			textObj.setText(this.formatBetOptionLabel(displayValue))
 				.setFontSize(`${this.calculatedFontSize}px`)
 				.setColor(isSelected ? '#000000' : '#ffffff')
 				.setFontFamily(isSelected ? 'Poppins-Bold' : 'Poppins-Regular');
 		}
-	}
-
-	private formatBetValue(value: number): string {
-		const rounded = Math.round((Number(value) + Number.EPSILON) * 100) / 100;
-		return Number.isFinite(rounded) ? rounded.toString() : value.toString();
 	}
 
 	public setEnhancedBetState(isEnhanced: boolean, displayBet?: number, baseBet?: number): void {

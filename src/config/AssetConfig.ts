@@ -125,6 +125,10 @@ export class AssetConfig {
 					atlas: `assets/characters/Character2_BZ.atlas`,
 					json: `assets/characters/Character2_BZ.json`
 				}
+			},
+			audio: {
+				// Boot-load the transition whistle so it is ready before the Preloader play button is shown.
+				'whistle_bz': 'assets/sounds/SFX/whistle_BB.ogg'
 			}
 		};
 	}

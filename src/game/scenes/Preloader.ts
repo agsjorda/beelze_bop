@@ -52,6 +52,7 @@ export class Preloader extends Scene
 	private websiteText?: Phaser.GameObjects.Text;
 	private maxWinText?: Phaser.GameObjects.Text;
 	private fullscreenBtn?: Phaser.GameObjects.Image;
+	private preloaderWhistle?: Phaser.Sound.BaseSound;
 
 	constructor ()
 	{
@@ -355,6 +356,23 @@ export class Preloader extends Scene
 		this.maxWinText?.setText(`${maxWinLabel} 21,000x`);
 	}
 
+	private primeTransitionAudio(): void {
+		try {
+			const audioCache: any = this.cache.audio as any;
+			const hasWhistle = typeof audioCache?.exists === 'function'
+				? !!audioCache.exists('whistle_bz')
+				: !!audioCache?.has?.('whistle_bz');
+			if (!hasWhistle) return;
+
+			if (!this.preloaderWhistle) {
+				this.preloaderWhistle = this.sound.add('whistle_bz');
+			}
+			(this as any).__preloaderWhistle = this.preloaderWhistle;
+		} catch (e) {
+			console.warn('[Preloader] Failed to prime transition audio:', e);
+		}
+	}
+
 	preload ()
 	{
 		// Prefer more parallel requests on modern networks
@@ -380,50 +398,11 @@ export class Preloader extends Scene
 		this.assetLoader.loadBuyFeatureAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
-		// Ensure radial dimmer whistle is ready before "Press to Play" can be clicked.
-		try {
-			if (!(this.cache.audio as any)?.exists?.('whistle_bz')) {
-				this.load.audio('whistle_bz', 'assets/sounds/SFX/whistle_BB.ogg');
-			}
-		} catch {
-			this.load.audio('whistle_bz', 'assets/sounds/SFX/whistle_BB.ogg');
-		}
+		// Preload audio as part of the main Preloader load (blocking),
+		// matching sugar_wonderland so audio is ready when the game starts.
+		this.assetLoader.loadAudioAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
-	}
-
-	private startBackgroundAudioLoad(): void {
-		try {
-			const audioAssets = this.assetConfig.getAudioAssets();
-			const audioMap = audioAssets.audio || {};
-			const entries = Object.entries(audioMap);
-			if (entries.length === 0) return;
-
-			let queued = 0;
-			for (const [key, path] of entries) {
-				try {
-					if ((this.cache.audio as any)?.exists?.(key)) continue;
-				} catch {
-					// If we can't check the cache, still attempt to queue.
-				}
-				try {
-					this.load.audio(key, path);
-					queued++;
-				} catch {}
-			}
-
-			if (queued <= 0) return;
-
-			console.log(`[Preloader] Background-loading ${queued} audio files (non-blocking for StudioLoading)`);
-
-			this.load.once('complete', () => {
-				console.log('[Preloader] Background audio load complete');
-			});
-
-			this.load.start();
-		} catch (e) {
-			console.warn('[Preloader] Failed to start background audio load:', e);
-		}
 	}
 
     async create ()
@@ -472,6 +451,10 @@ export class Preloader extends Scene
 			console.warn('[Preloader] Localization fetch failed, using defaults:', err);
 			localizationManager.setTranslations(JSON.stringify(LOCALIZATION_DEFAULTS));
 		}
+
+		// Prime the whistle instance before the play button becomes interactive so the
+		// first transition click does not pay the sound creation cost.
+		this.primeTransitionAudio();
 
 		// ========================================
 		// Add Character1 Spine Animation
@@ -566,9 +549,7 @@ export class Preloader extends Scene
             });
         });
 
-		// Start loading audio in the background now that the main visual load is complete.
-		// If the user clicks early and this scene stops, Game scene will fall back to loading audio again.
-		this.startBackgroundAudioLoad();
+		// Audio is preloaded in `preload()`, so no background audio load is needed here.
 
 		// Ensure web fonts are applied after they are ready
 		const fontsObj: any = (document as any).fonts;

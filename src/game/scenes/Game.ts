@@ -612,15 +612,17 @@ export class Game extends Scene {
 
 			console.log('[Game] Showing bet options with fade-in effect');
 
-			// Use base bet for selection; use display bet for enhanced multiplier if active
+			// Use base bet for selection; derive display bet numerically so commas in HUD text
+			// cannot corrupt the amplify multiplier (e.g. parseFloat("1,250.00") -> 1).
 			const currentBaseBet = this.slotController.getBaseBetAmount() || 0.20;
-			const currentDisplayText = this.slotController.getBetAmountText();
-			const currentDisplayBet = currentDisplayText ? parseFloat(currentDisplayText) : currentBaseBet;
+			const isEnhancedBet = this.gameData?.isEnhancedBet === true;
+			const betDisplayMultiplier = isEnhancedBet ? 1.25 : 1;
+			const currentDisplayBet = currentBaseBet * betDisplayMultiplier;
 
 			this.betOptions.show({
 				currentBet: currentBaseBet,
 				currentBetDisplay: currentDisplayBet,
-				isEnhancedBet: this.gameData?.isEnhancedBet,
+				isEnhancedBet: isEnhancedBet,
 				onClose: () => {
 					console.log('[Game] Bet options closed');
 				},
@@ -638,8 +640,7 @@ export class Game extends Scene {
 			try {
 				if (this.betOptions && this.betOptions.isVisible()) {
 					const baseBet = this.slotController.getBaseBetAmount() || 0.20;
-					const displayText = this.slotController.getBetAmountText();
-					const displayBet = displayText ? parseFloat(displayText) : baseBet;
+					const displayBet = baseBet * (isEnhanced ? 1.25 : 1);
 					this.betOptions.setEnhancedBetState(!!isEnhanced, displayBet, baseBet);
 				}
 			} catch { }
