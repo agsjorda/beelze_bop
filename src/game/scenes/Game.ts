@@ -48,6 +48,7 @@ import { CurrencyManager } from '../components/CurrencyManager';
 import { IdleManager } from '../components/IdleManager';
 import { setDecimalPlaces } from '../../utils/NumberPrecisionFormatter';
 import { localizationManager } from '../../managers/LocalizationManager';
+import { unresolvedSpinManager } from '../../managers/UnresolvedSpinManager';
 import { CLOCK_DEMO, LOCALIZATION_DEFAULTS } from '../../backend/LocalizationData';
 
 export class Game extends Scene {
@@ -253,6 +254,7 @@ export class Game extends Scene {
 		// Set bet levels from initialization data so GameData.betLevels
 		// is the single source of truth for all bet UIs.
 		this.initializeGameDataBetLevels();
+		unresolvedSpinManager.setFromInitializationData(this.gameAPI?.getInitializationData?.() ?? null);
 
 		// Set physics world bounds (physics is already enabled globally)
 		if (this.physics && this.physics.world) {
@@ -450,7 +452,7 @@ export class Game extends Scene {
 			this.freeRoundManager = new FreeRoundManager();
 			this.freeRoundManager.create(this, this.gameAPI, this.slotController);
 
-			if (initData && initData.hasFreeSpinRound && initFsRemaining > 0) {
+			if (!unresolvedSpinManager.hasUnresolvedSpin && initData && initData.hasFreeSpinRound && initFsRemaining > 0) {
 				console.log(
 					`[Game] Initialization indicates free spin round available (${initFsRemaining}). Enabling FreeRoundManager UI.`
 				);
@@ -473,8 +475,9 @@ export class Game extends Scene {
 		}
 
 		// After BetOptions + SlotController are initialized, set the base bet to the first bet level.
-		// Respect initialization free-spin bet if one was applied above.
-		if (!appliedInitializationFreeSpinBet) {
+		// Respect initialization free-spin bet or unresolved-spin bet if one was applied above.
+		const appliedUnresolvedBet = this.applyUnresolvedBetFromInit();
+		if (!appliedInitializationFreeSpinBet && !appliedUnresolvedBet) {
 			this.initializeBetAmoung();
 		}
 
@@ -529,6 +532,13 @@ export class Game extends Scene {
 
 		// Setup bonus mode event listeners
 		this.setupBonusModeEventListeners();
+		unresolvedSpinManager.showPopupIfUnresolved(this, () => this.resumeUnresolvedSpinRound());
+		unresolvedSpinManager.applyBonusModeVisuals(this);
+		if (unresolvedSpinManager.hasUnresolvedSpin && this.slotController) {
+			const spinsToShow = this.getRemainingSpinsFromUnresolved(unresolvedSpinManager.unresolvedSpin);
+			this.slotController.clearFreeSpinDisplaySuppression();
+			this.slotController.showFreeSpinDisplayWithActualValue(spinsToShow || 1);
+		}
 
 		EventBus.emit('current-scene-ready', this);
 
@@ -767,6 +777,16 @@ export class Game extends Scene {
 					console.log(`[Game] WIN_STOP: No qualifying cluster wins (>=${MIN_CLUSTER_SIZE}) detected`);
 				}
 
+				if (this.gameStateManager.isBonus && this.gameAPI.getUnresolvedSpinUuid()) {
+					const currentWin =
+						typeof this.bonusHeader?.getCumulativeBonusWin === 'function'
+							? this.bonusHeader.getCumulativeBonusWin()
+							: undefined;
+					this.gameAPI.patchUnresolvedSpin(currentWin).catch((err) =>
+						console.warn('[Game] Unresolved spin PATCH failed', err)
+					);
+				}
+
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');
 			}
@@ -806,6 +826,17 @@ export class Game extends Scene {
 			try {
 				const spinData = data?.spinData ?? data;
 				this.queueHistoryUpdateFromSpinData(spinData);
+
+				const unresolvedField = (spinData as any)?.unresolvedSpin;
+				const unresolvedUuid =
+					typeof unresolvedField === 'string'
+						? unresolvedField
+						: typeof unresolvedField?.uuid === 'string'
+							? unresolvedField.uuid
+							: '';
+				if (unresolvedUuid) {
+					this.gameAPI.setUnresolvedSpinUuid(unresolvedUuid);
+				}
 			} catch {}
 		});
 
@@ -943,6 +974,91 @@ export class Game extends Scene {
 			}
 		} catch (e) {
 			console.warn('[Game] Failed to apply initialization first bet level:', e);
+		}
+	}
+
+	private applyUnresolvedBetFromInit(): boolean {
+		const unresolved = unresolvedSpinManager.unresolvedSpin;
+		if (!unresolved || !this.slotController) {
+			return false;
+		}
+
+		const unresolvedBet = Number(unresolved.betSize ?? (unresolved.response as any)?.bet);
+		if (!Number.isFinite(unresolvedBet) || unresolvedBet <= 0) {
+			return false;
+		}
+
+		const previousBet = this.slotController.getBaseBetAmount?.() ?? 0.20;
+		this.slotController.updateBetAmount(unresolvedBet);
+		this.betOptions?.setCurrentBet?.(unresolvedBet);
+		this.autoplayOptions?.setCurrentBet?.(unresolvedBet);
+
+		if (Math.abs(unresolvedBet - previousBet) > 0.0001) {
+			gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: unresolvedBet, previousBet });
+		}
+
+		return true;
+	}
+
+	private getRemainingSpinsFromUnresolved(unresolved: any): number {
+		try {
+			const response: any = unresolved?.response;
+			const fs = response?.slot?.freespin || response?.slot?.freeSpin;
+			const items = Array.isArray(fs?.items) ? fs.items : [];
+			const index = Number.isFinite(unresolved?.index) ? Math.max(0, Math.floor(unresolved.index)) : 0;
+			const itemAtIndex = items[index];
+			const indexSpinsLeft = Number(itemAtIndex?.spinsLeft ?? 0);
+			if (Number.isFinite(indexSpinsLeft) && indexSpinsLeft > 0) {
+				return indexSpinsLeft;
+			}
+
+			const firstSpinsLeft = Number(items[0]?.spinsLeft ?? 0);
+			const count = Number(fs?.count ?? 0);
+			return Math.max(count, firstSpinsLeft, items.length, 0);
+		} catch {
+			return 0;
+		}
+	}
+
+	private resumeUnresolvedSpinRound(): void {
+		const unresolved = unresolvedSpinManager.unresolvedSpin;
+		if (!unresolved) {
+			return;
+		}
+
+		try {
+			this.gameStateManager.isBonus = true;
+			this.gameStateManager.isScatter = false;
+
+			this.gameAPI.setFreeSpinData(unresolved.response);
+			this.gameAPI.setCurrentFreeSpinIndex(unresolved.index);
+			this.gameAPI.setUnresolvedSpinUuid(unresolved.uuid);
+			this.symbols.currentSpinData = unresolved.response;
+
+			this.events.emit('setBonusMode', true);
+			this.events.emit('showBonusBackground');
+			this.events.emit('showBonusHeader');
+
+			const remainingSpins = this.getRemainingSpinsFromUnresolved(unresolved);
+			this.events.emit('scatterBonusActivated', {
+				scatterIndex: 0,
+				actualFreeSpins: remainingSpins,
+				isRetrigger: false,
+				fromUnresolvedSpin: true,
+			});
+
+			if (this.slotController) {
+				this.slotController.clearFreeSpinDisplaySuppression();
+				this.slotController.showFreeSpinDisplayWithActualValue(remainingSpins || 1);
+				this.slotController.disableBetBackgroundInteraction('unresolved_bonus_mode');
+			}
+
+			this.time.delayedCall(500, () => {
+				this.events.emit('scatterBonusCompleted');
+				this.events.emit('dialogAnimationsComplete');
+			});
+		} finally {
+			unresolvedSpinManager.clear();
 		}
 	}
 

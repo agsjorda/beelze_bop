@@ -52,6 +52,14 @@ export interface InitFreeSpinRound {
     remainingFreeSpin: number;
 }
 
+export interface UnresolvedSpin {
+    uuid: string;
+    betSize?: string;
+    mode?: string;
+    index: number;
+    response: SpinData;
+}
+
 /**
  * Response payload for the /api/v1/slots/initialize endpoint
  */
@@ -69,10 +77,10 @@ export interface SlotInitializeData {
     // Kept as `any` union-friendly type for backwards compatibility,
     // but we always treat it as InitFreeSpinRound[] in our helper.
     freeSpinRound: InitFreeSpinRound[] | number | Record<string, unknown> | null;
-    hasUnresolvedSpin: boolean;
-    unresolvedSpinIndex: number;
+    hasUnresolvedSpin?: boolean;
+    unresolvedSpinIndex?: number;
     // The backend can return arbitrary structure here; keep it flexible
-    unresolvedSpin: any;
+    unresolvedSpin?: any;
 }
 
 export interface SlotInitializeResponse {
@@ -122,6 +130,7 @@ export class GameAPI {
     exitURL: string = '';
     private currentSpinData: SpinData | null = null;
     private currentFreeSpinIndex: number = 0; // Track current free spin item index
+    private unresolvedSpinUuid: string | null = null;
     private initializationData: SlotInitializeData | null = null; // Cached initialization response
     private remainingInitFreeSpins: number = 0; // Free spin rounds from initialization still available
     private initFreeSpinBet: number | null = null; // Bet size associated with initialization free spins
@@ -542,7 +551,7 @@ export class GameAPI {
                 freeSpinRound: {},
                 hasUnresolvedSpin: false,
                 unresolvedSpinIndex: 0,
-                unresolvedSpin: {},
+                unresolvedSpin: null,
             };
             this.initializationData = payload;
             this.remainingInitFreeSpins = 0;
@@ -663,6 +672,73 @@ export class GameAPI {
      */
     public getInitializationData(): SlotInitializeData | null {
         return this.initializationData;
+    }
+
+    /**
+     * Cache an unresolved-spin UUID from runtime spin data (e.g. a scatter-triggered bonus).
+     */
+    public setUnresolvedSpinUuid(uuid?: string | null): void {
+        if (typeof uuid === 'string' && uuid.length > 0) {
+            this.unresolvedSpinUuid = uuid;
+        } else {
+            this.unresolvedSpinUuid = null;
+        }
+    }
+
+    /**
+     * Get the unresolved-spin UUID, preferring the runtime value and falling back to init data.
+     */
+    public getUnresolvedSpinUuid(): string | null {
+        if (typeof this.unresolvedSpinUuid === 'string' && this.unresolvedSpinUuid.length > 0) {
+            return this.unresolvedSpinUuid;
+        }
+
+        const initUuid = this.initializationData?.unresolvedSpin?.uuid;
+        return typeof initUuid === 'string' && initUuid.length > 0 ? initUuid : null;
+    }
+
+    /**
+     * PATCH the unresolved-spin endpoint once a bonus spin completes.
+     */
+    public async patchUnresolvedSpin(currentWin?: number): Promise<void> {
+        const uuid = this.getUnresolvedSpinUuid();
+        if (!uuid) {
+            return;
+        }
+
+        const token =
+            localStorage.getItem('token') ||
+            sessionStorage.getItem('token') ||
+            '';
+
+        if (!token) {
+            console.warn('[GameAPI] patchUnresolvedSpin: no token, skipping');
+            return;
+        }
+
+        const apiUrl = `${getApiBaseUrl()}/api/v1/unresolved-spin/${uuid}`;
+        const body =
+            typeof currentWin === 'number' && Number.isFinite(currentWin)
+                ? JSON.stringify({ current_win: currentWin })
+                : undefined;
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    ...(body ? { 'Content-Type': 'application/json' } : {}),
+                },
+                ...(body ? { body } : {}),
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                console.warn('[GameAPI] patchUnresolvedSpin failed:', response.status, errText);
+            }
+        } catch (err) {
+            console.warn('[GameAPI] patchUnresolvedSpin error:', err);
+        }
     }
 
     /**
@@ -1353,6 +1429,22 @@ export class GameAPI {
      */
     public resetFreeSpinIndex(): void {
         this.currentFreeSpinIndex = 0;
+    }
+
+    /**
+     * Set the current free spin index explicitly.
+     * Used when resuming an unresolved free-spin round.
+     */
+    public setCurrentFreeSpinIndex(index: number): void {
+        const safeIndex = Number.isFinite(index) ? Math.max(0, Math.floor(index)) : 0;
+        this.currentFreeSpinIndex = safeIndex;
+    }
+
+    /**
+     * Current free-spin item index (next item to simulate).
+     */
+    public getCurrentFreeSpinIndex(): number {
+        return this.currentFreeSpinIndex;
     }
 
     /**

@@ -198,6 +198,8 @@ export interface FreeSpinItem {
 export interface PendingFreeSpinsData {
   scatterIndex: number;
   actualFreeSpins: number;
+  isRetrigger?: boolean;
+  fromUnresolvedSpin?: boolean;
 }
 
 /**

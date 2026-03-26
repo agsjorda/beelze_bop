@@ -9,6 +9,9 @@ export interface SpinData {
   
   /** Bet amount for this spin */
   bet: string;
+
+  /** Optional unresolved-spin UUID returned for scatter-triggered bonus rounds */
+  unresolvedSpin?: string | { uuid?: string; [key: string]: any };
   
   /** Slot game data containing the grid and win information */
   slot: SlotData;

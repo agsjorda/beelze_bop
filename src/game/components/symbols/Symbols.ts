@@ -384,7 +384,9 @@ export class Symbols {
   private handleScatterBonusActivated(data: PendingFreeSpinsData): void {
     // Re-arm the post-dialog autoplay handoff for each scatter trigger.
     this.dialogListenerSetup = false;
-    this.freeSpinItemIndex = 0;
+    if (!data?.fromUnresolvedSpin) {
+      this.freeSpinItemIndex = 0;
+    }
     this.freeSpinController.setPendingFreeSpinsData(data);
   }
 
@@ -1817,9 +1819,20 @@ export class Symbols {
       gameScene.dialogs.hideDialog();
     }
 
-    // Calculate total win (prefer cached total from trigger spin, then spinData, then cumulative)
+    // Calculate total win, preferring the live cumulative bonus header total so the
+    // congrats dialog stays aligned with the same running total shown during bonus mode.
     let totalWin = 0;
-    if (this.cachedTotalWin > 0) {
+    let bonusHeaderTotal = 0;
+    try {
+      const bonusHeader = gameScene?.bonusHeader;
+      if (bonusHeader?.getCumulativeBonusWin) {
+        bonusHeaderTotal = Number(bonusHeader.getCumulativeBonusWin()) || 0;
+      }
+    } catch { /* ignore */ }
+
+    if (bonusHeaderTotal > 0) {
+      totalWin = bonusHeaderTotal;
+    } else if (this.cachedTotalWin > 0) {
       totalWin = this.cachedTotalWin;
       this.cachedTotalWin = 0;
       console.log(`[Symbols] Using cached total win for TotalW_BZ: ${totalWin}`);
@@ -1828,16 +1841,7 @@ export class Symbols {
       try {
         spinDataTotal = this.calculateTotalWinFromSpinData();
       } catch { }
-      if (spinDataTotal > 0) {
-        totalWin = spinDataTotal;
-      } else {
-        try {
-          const bonusHeader = gameScene?.bonusHeader;
-          if (bonusHeader?.getCumulativeBonusWin) {
-            totalWin = Number(bonusHeader.getCumulativeBonusWin()) || 0;
-          }
-        } catch { /* ignore */ }
-      }
+      totalWin = spinDataTotal > 0 ? spinDataTotal : 0;
     }
 
     // Get free spin count

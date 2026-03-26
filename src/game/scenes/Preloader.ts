@@ -15,6 +15,7 @@ import { Character } from '../components/Character';
 import { playRadialDimmerTransition } from '../utils/playRadialDimmerTransition';
 import { CurrencyManager } from '../components/CurrencyManager';
 import { localizationManager } from '../../managers/LocalizationManager';
+import { unresolvedSpinManager } from '../../managers/UnresolvedSpinManager';
 import { CLOCK_DEMO, LOCALIZATION_DEFAULTS, PRELOADER_MAX_WIN } from '../../backend/LocalizationData';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 
@@ -425,6 +426,7 @@ export class Preloader extends Scene
 				console.log('[Preloader] Calling backend slot initialization...');
 				const slotInitData = await this.gameAPI.initializeSlotSession();
 				console.log('[Preloader] Slot initialization data:', slotInitData);
+				unresolvedSpinManager.setFromInitializationData(slotInitData);
 				CurrencyManager.initializeFromInitData(slotInitData);
 			} else {
 				console.log('[Preloader] Demo mode active - skipping backend slot initialization');

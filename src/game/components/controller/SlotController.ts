@@ -80,7 +80,12 @@ export class SlotController {
 	
 	// UI override for free spin remaining display
 	private freeSpinDisplayOverride: number | null = null;
-	private pendingFreeSpinsData: { scatterIndex: number; actualFreeSpins: number; isRetrigger?: boolean } | null = null;
+	private pendingFreeSpinsData: {
+		scatterIndex: number;
+		actualFreeSpins: number;
+		isRetrigger?: boolean;
+		fromUnresolvedSpin?: boolean;
+	} | null = null;
 	private pendingFakeDataRetriggerNextSpinsLeft: number | null = null;
 	private pendingFakeDataRetriggerAdded: number | null = null;
 	private freeSpinAutoplaySimInFlight: boolean = false;
@@ -498,7 +503,7 @@ export class SlotController {
 	 * Disable interaction on the bet background that opens the bet options panel.
 	 * This is used in multiple states (free rounds, buy feature, etc.).
 	 */
-	private disableBetBackgroundInteraction(reason: string = ''): void {
+	public disableBetBackgroundInteraction(reason: string = ''): void {
 		if (!this.controllerContainer) {
 			return;
 		}
@@ -4336,7 +4341,7 @@ export class SlotController {
 		});
 
 		// Listen for scatter bonus events with scatter index and actual free spins
-		this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number; isRetrigger?: boolean }) => {
+		this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number; isRetrigger?: boolean; fromUnresolvedSpin?: boolean }) => {
 			console.log(`[SlotController] scatterBonusActivated event received with data:`, data);
 			console.log(`[SlotController] Data validation: scatterIndex=${data.scatterIndex}, actualFreeSpins=${data.actualFreeSpins}`);
 			
@@ -4486,7 +4491,8 @@ export class SlotController {
 			}
 
 			if (!skipInitialization) {
-				// Prefer to initialize from the first freeSpin item's spinsLeft (supports freespin and freeSpin)
+				// Prefer pending scatter data first, then the current free-spin index item,
+				// then fall back to the first item.
 				let initializedFromFreeSpinData = false;
 				try {
 					// If we have an override (e.g., from retrigger), prefer to show that and skip server initialization
@@ -4498,16 +4504,38 @@ export class SlotController {
 						} catch {}
 					}
 					
+					if (!initializedFromFreeSpinData && this.pendingFreeSpinsData) {
+						const pending = Number(this.pendingFreeSpinsData.actualFreeSpins || 0);
+						if (pending > 0) {
+							console.log(`[SlotController] Initializing free spin display from pending data: ${pending}`);
+							this.showFreeSpinDisplayWithActualValue(pending);
+							this.pendingFreeSpinsData = null;
+							initializedFromFreeSpinData = true;
+						}
+					}
+					
 					if (!initializedFromFreeSpinData) {
 						const apiSpinData = this.gameAPI?.getCurrentSpinData();
 						const fs = apiSpinData?.slot?.freespin || (apiSpinData as any)?.slot?.freeSpin;
 						if (fs?.items && fs.items.length > 0) {
-							const firstItem = fs.items[0];
-							const initialSpinsLeft = typeof firstItem?.spinsLeft === 'number' ? firstItem.spinsLeft : 0;
+							let initialSpinsLeft = 0;
+							try {
+								const idx = this.gameAPI?.getCurrentFreeSpinIndex?.() ?? 0;
+								const safeIdx = Math.max(0, Math.min(Math.floor(idx), fs.items.length - 1));
+								const itemAtIdx = fs.items[safeIdx];
+								if (itemAtIdx && typeof itemAtIdx.spinsLeft === 'number' && itemAtIdx.spinsLeft > 0) {
+									initialSpinsLeft = itemAtIdx.spinsLeft;
+								}
+							} catch {}
+							if (initialSpinsLeft <= 0) {
+								const firstItem = fs.items[0];
+								initialSpinsLeft = typeof firstItem?.spinsLeft === 'number' ? firstItem.spinsLeft : 0;
+							}
 							if (initialSpinsLeft > 0) {
-								console.log(`[SlotController] Initializing free spin display from first freeSpin item: spinsLeft=${initialSpinsLeft}`);
+								console.log(`[SlotController] Initializing free spin display from freeSpin item: spinsLeft=${initialSpinsLeft}`);
 								this.showFreeSpinDisplayWithActualValue(initialSpinsLeft);
 								initializedFromFreeSpinData = true;
+								this.pendingFreeSpinsData = null;
 							}
 						}
 					}
@@ -4669,8 +4697,13 @@ export class SlotController {
 		});
 
 		// Listen for scatter bonus activation to reset free spin index (but NOT on retriggers)
-		this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number; isRetrigger?: boolean }) => {
+		this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number; isRetrigger?: boolean; fromUnresolvedSpin?: boolean }) => {
 			const isRetrigger = !!(data && (data as any).isRetrigger);
+			const fromUnresolvedSpin = !!(data && (data as any).fromUnresolvedSpin);
+			if (fromUnresolvedSpin) {
+				console.log('[SlotController] Scatter bonus from unresolved spin - preserving free spin index');
+				return;
+			}
 			if (isRetrigger) {
 				console.log('[SlotController] Scatter bonus retrigger detected - NOT resetting free spin index');
 				return;

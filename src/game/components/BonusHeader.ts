@@ -233,16 +233,22 @@ export class BonusHeader {
 	 * Seed the cumulative bonus total with a base amount (e.g., scatter payout)
 	 * Only shows the display if bonus mode is already active to avoid race conditions
 	 */
-	public seedCumulativeWin(baseAmount: number): void {
+	public seedCumulativeWin(baseAmount: number, cumulativeTotal?: number): void {
 		this.scatterBaseWin = Math.max(0, Number(baseAmount) || 0);
-		this.cumulativeBonusWin = this.scatterBaseWin;
+		const seededTotal = Number(cumulativeTotal);
+		this.cumulativeBonusWin =
+			Number.isFinite(seededTotal) && seededTotal >= this.scatterBaseWin
+				? seededTotal
+				: this.scatterBaseWin;
 		this.hasStartedBonusTracking = true;
 		this.justSeededWin = true; // Flag that we just seeded to prevent immediate text overrides
 		this.skipNextSpinAccumulation = false;
 		
 		// For bonus mode, we only show per-tumble "YOU WON" values.
 		// Seed the cumulative tracker silently; UI will be driven by tumble events.
-		console.log(`[BonusHeader] Seeded cumulative bonus win with scatter base (tracking only): $${this.scatterBaseWin}`);
+		console.log(
+			`[BonusHeader] Seeded cumulative bonus win: scatterBase=$${this.scatterBaseWin}, cumulative=$${this.cumulativeBonusWin}`
+		);
 	}
 
 	/**
