@@ -206,7 +206,6 @@ export class Symbols {
   // Per-spin staged scatter reel-drop SFX counter (scatterdrop1 -> ... -> scatterdrop4 max).
   private scatterDropStageForSpin: number = 0;
   private spinDropSoundByColumn: Map<number, SoundEffectType> = new Map();
-  private spinDropSoundPlayedColumns: Set<number> = new Set();
 
   // Free spin autoplay state - delegate to controller
   public get freeSpinAutoplayActive(): boolean {
@@ -1117,7 +1116,6 @@ export class Symbols {
     this.hadWinsInCurrentItem = false;
     this.scatterDropStageForSpin = 0;
     this.spinDropSoundByColumn.clear();
-    this.spinDropSoundPlayedColumns.clear();
 
     // Clear previous state
     this.scatterAnimationManager?.clearScatterSymbols();
@@ -3725,7 +3723,7 @@ export class Symbols {
             ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
             onComplete: () => {
               if (!isTurbo && !isSkip && (window as any).audioManager) {
-                this.playSpinReelDropSoundForColumn(col);
+                this.playSpinReelDropSoundForColumn(col, symbol);
               }
             }
           },
@@ -3756,7 +3754,7 @@ export class Symbols {
           last.onComplete = () => {
             try { if (prevOnComplete) prevOnComplete(); } catch { }
             if (isSkip && !isTurbo && (window as any).audioManager) {
-              try { this.playSpinReelDropSoundForColumn(col); } catch { }
+              try { this.playSpinReelDropSoundForColumn(col, symbol); } catch { }
             }
             completedAnimations++;
             if (completedAnimations === totalAnimations) {
@@ -3792,15 +3790,24 @@ export class Symbols {
     return SoundEffectType.SCATTER_DROP_4;
   }
 
-  private playSpinReelDropSoundForColumn(colIndex: number): void {
+  /**
+   * Sugar-style spin drop audio:
+   * - Triggered per landing symbol (per cell wave), not "once per column per spin".
+   * - Scatter brass (SCATTER_DROP_*) is only used when the landing symbol is actually a scatter;
+   *   otherwise REEL_DROP.
+   */
+  private playSpinReelDropSoundForColumn(colIndex: number, symbolAtCell?: any): void {
     const audioManager = (window as any).audioManager;
     if (!audioManager || typeof audioManager.playSoundEffect !== 'function') return;
-    if (this.spinDropSoundPlayedColumns.has(colIndex)) return;
 
     try {
-      const effect = this.spinDropSoundByColumn.get(colIndex) ?? SoundEffectType.REEL_DROP;
+      const mapped = this.spinDropSoundByColumn.get(colIndex) ?? SoundEffectType.REEL_DROP;
+      const isScatterCell = !!symbolAtCell && this.isScatterSymbol(symbolAtCell as SymbolObject);
+      const effect =
+        isScatterCell && mapped !== SoundEffectType.REEL_DROP
+          ? mapped
+          : SoundEffectType.REEL_DROP;
       audioManager.playSoundEffect(effect);
-      this.spinDropSoundPlayedColumns.add(colIndex);
     } catch (e) {
       console.warn('[Symbols] Failed to play spin reel-drop sound:', e);
     }
@@ -3822,7 +3829,6 @@ export class Symbols {
 
   private initializeSpinDropSoundsByColumn(): void {
     this.spinDropSoundByColumn.clear();
-    this.spinDropSoundPlayedColumns.clear();
     this.scatterDropStageForSpin = 0;
 
     if (!this.newSymbols || this.newSymbols.length === 0) return;
