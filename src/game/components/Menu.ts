@@ -59,6 +59,7 @@ export class Menu {
     private width: number = 0;
     private height: number = 0;
     private menuEventHandlers: Function[] = [];
+    private menuGlobalCleanupFns: Array<() => void> = [];
     private isDraggingMusic: boolean = false;
     private isDraggingSFX: boolean = false;
     private scene: GameScene;
@@ -1111,6 +1112,7 @@ export class Menu {
         drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
         const musicToggleArea = scene.add.zone(toggleX, startY + 70 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         musicToggleArea.setInteractive();
+        try { if ((musicToggleArea as any).input) (musicToggleArea as any).input.priorityID = 10; } catch {}
         musicToggleArea.on('pointerdown', () => {
             musicOn = !musicOn;
             scene.audioManager.setVolume(musicOn ? 1 : 0);
@@ -1131,10 +1133,11 @@ export class Menu {
         drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 190, sfxOn);
         const sfxToggleArea = scene.add.zone(toggleX, startY + 190 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         sfxToggleArea.setInteractive();
+        try { if ((sfxToggleArea as any).input) (sfxToggleArea as any).input.priorityID = 10; } catch {}
         sfxToggleArea.on('pointerdown', () => {
             sfxOn = !sfxOn;
             scene.audioManager.setSfxVolume(sfxOn ? 1 : 0);
-            drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
+            drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 190, sfxOn);
             updateSliders();
         });
         contentArea.add(sfxToggleArea);
@@ -1165,6 +1168,7 @@ export class Menu {
             new Geom.Circle(0, 0, 22 * scaleFactor),
             Geom.Circle.Contains
         );
+        try { if ((musicSlider as any).input) (musicSlider as any).input.priorityID = 10; } catch {}
         contentArea.add(musicSlider);
 
         // Music value text
@@ -1179,7 +1183,7 @@ export class Menu {
         const sfxSliderBg = scene.add.graphics();
         const sfxSliderBg2 = scene.add.graphics();
         const sfxSlider = scene.add.graphics();
-        const sfxValue = scene.add.text(sliderStartX, sfxSliderY + 25, '75%', {
+        const sfxValue = scene.add.text(sliderStartX, sfxSliderY + 25, Math.round(scene.audioManager.getSfxVolume() * 100) + '%', {
             fontSize: '16px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Regular'
@@ -1246,6 +1250,19 @@ export class Menu {
             sfxSliderBg.fillRoundedRect(sliderStartX, sfxSliderY, sliderWidth * sfxVol, 8 * scaleFactor, 4 * scaleFactor);
             sfxValue.setText(Math.round(sfxVol * 100) + '%');
 
+            // Sync SFX toggle with slider value
+            if (sfxVol === 0) {
+                if (sfxOn) {
+                    sfxOn = false;
+                    drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 190, sfxOn);
+                }
+            } else {
+                if (!sfxOn) {
+                    sfxOn = true;
+                    drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 190, sfxOn);
+                }
+            }
+
             // Update volumes
             if (musicX !== null) scene.audioManager.setVolume(musicVol);
             if (sfxX !== null) scene.audioManager.setSfxVolume(sfxVol);
@@ -1255,10 +1272,12 @@ export class Menu {
                 new Geom.Circle(0, 0, 22 * scaleFactor),  
                 Geom.Circle.Contains
             );
+            try { if ((musicSlider as any).input) (musicSlider as any).input.priorityID = 10; } catch {}
             sfxSlider.setInteractive(
                 new Geom.Circle(0, 0, 22 * scaleFactor),
                 Geom.Circle.Contains
             );
+            try { if ((sfxSlider as any).input) (sfxSlider as any).input.priorityID = 10; } catch {}
         };
 
         // Initial slider setup
@@ -1294,6 +1313,24 @@ export class Menu {
 
         this.scene.input.on('pointermove', pointerMoveHandler);
         this.scene.input.on('pointerup', pointerUpHandler);
+        try {
+            this.scene.input.on('gameout', pointerUpHandler);
+            this.menuGlobalCleanupFns.push(() => {
+                try { this.scene.input.off('gameout', pointerUpHandler); } catch {}
+            });
+        } catch {}
+
+        try {
+            const endDrag = () => pointerUpHandler();
+            window.addEventListener('mouseup', endDrag);
+            window.addEventListener('blur', endDrag);
+            document.addEventListener('visibilitychange', endDrag);
+            this.menuGlobalCleanupFns.push(() => {
+                try { window.removeEventListener('mouseup', endDrag); } catch {}
+                try { window.removeEventListener('blur', endDrag); } catch {}
+                try { document.removeEventListener('visibilitychange', endDrag); } catch {}
+            });
+        } catch {}
 
         // Create clickable areas for the entire slider tracks
         const musicSliderTrack = scene.add.graphics();
@@ -1305,6 +1342,7 @@ export class Menu {
             new Geom.Rectangle(0, -10, widthSlider * scaleFactor, 28),
             Geom.Rectangle.Contains
         );
+        try { if ((musicSliderTrack as any).input) (musicSliderTrack as any).input.priorityID = 10; } catch {}
         contentArea.add(musicSliderTrack);
 
         const sfxSliderTrack = scene.add.graphics();
@@ -1316,6 +1354,7 @@ export class Menu {
             new Geom.Rectangle(0, -10, widthSlider * scaleFactor, 28),
             Geom.Rectangle.Contains
         );
+        try { if ((sfxSliderTrack as any).input) (sfxSliderTrack as any).input.priorityID = 10; } catch {}
         contentArea.add(sfxSliderTrack);
 
         // Music slider track click handler
@@ -1388,6 +1427,12 @@ export class Menu {
                 scene.input.off('pointerup', handler);
             });
             this.menuEventHandlers = [];
+        }
+        if (this.menuGlobalCleanupFns) {
+            this.menuGlobalCleanupFns.forEach((off) => {
+                try { off(); } catch {}
+            });
+            this.menuGlobalCleanupFns = [];
         }
         
         // Reset dragging states

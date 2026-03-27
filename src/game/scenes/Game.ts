@@ -1070,7 +1070,11 @@ export class Game extends Scene {
 			console.log('[Game] Initializing game balance...');
 
 			// Call the GameAPI to get the current balance
-			const balance = await this.gameAPI.initializeBalance();
+			const rawBalance = await this.gameAPI.initializeBalance();
+			const balance = Number(rawBalance);
+			if (!Number.isFinite(balance) || balance < 0) {
+				throw new Error(`[Game] Invalid initial balance received: ${rawBalance}`);
+			}
 
 			// Update the SlotController balance display
 			if (this.slotController) {

@@ -43,6 +43,10 @@
 			object-fit: cover;
 			object-position: center bottom;
 			border-radius: 0;
+			user-select: none;
+			-webkit-user-select: none;
+			-webkit-user-drag: none;
+			pointer-events: none;
 		}
 		
 		#root {
@@ -65,6 +69,7 @@
 			class="background-image"
 			src="/fullscreen_bg.webp"
 			alt="Fullscreen background"
+			draggable="false"
 		/>
 	</div>
 	<div id="root"></div>

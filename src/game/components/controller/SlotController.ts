@@ -109,6 +109,7 @@ export class SlotController {
 	private uiFsDecrementApplied: boolean = false;
 	// Guard to ensure balance API is called only once per spin (REELS_STOP can fire twice: from Symbols + WinLineDrawer)
 	private balanceApiCalledThisSpin: boolean = false;
+	private pendingSpinUntilBalanceReady: boolean = false;
 	
 	// Flag to track if we're in buy feature free spins and waiting for TotalW_BZ dialog
 	private isBuyFeatureFreeSpinsActive: boolean = false;
@@ -2528,10 +2529,26 @@ export class SlotController {
 		// Listen for balance initialization
 		gameEventManager.on(GameEventType.BALANCE_INITIALIZED, (data: any) => {
 			console.log('[SlotController] Balance initialized event received:', data);
-			
-			if (data && data.newBalance !== undefined) {
-				console.log(`[SlotController] Updating balance display to: $${data.newBalance}`);
-				this.updateBalanceAmount(data.newBalance);
+			const resolvedBalance = Number(
+				data?.newBalance ?? data?.balance ?? data?.currentBalance
+			);
+			if (!Number.isFinite(resolvedBalance)) {
+				console.warn('[SlotController] BALANCE_INITIALIZED ignored due to invalid payload:', data);
+				return;
+			}
+
+			console.log(`[SlotController] Updating balance display to: $${resolvedBalance}`);
+			this.updateBalanceAmount(resolvedBalance);
+
+			if (this.pendingSpinUntilBalanceReady && !gameStateManager.isReelSpinning) {
+				this.pendingSpinUntilBalanceReady = false;
+				if (this.scene?.time) {
+					this.scene.time.delayedCall(0, () => {
+						void this.handleSpin();
+					});
+				} else {
+					void this.handleSpin();
+				}
 			}
 		});
 
@@ -4017,6 +4034,14 @@ export class SlotController {
 			if (!inInitFreeRoundContext) {
 				try {
 					const currentBalance = this.getBalanceAmount();
+					const isBalanceReady = this.balanceController?.hasInitializedBalance() ?? false;
+					if (!isBalanceReady || !Number.isFinite(currentBalance)) {
+						console.warn('[SlotController] Balance not ready yet; queueing spin until BALANCE_INITIALIZED.');
+						this.pendingSpinUntilBalanceReady = true;
+						this.isSpinLocked = false;
+						gameStateManager.isProcessingSpin = false;
+						return;
+					}
 					const currentBet = this.getBaseBetAmount() || 0;
 					const gd = this.getGameData();
 					const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * 1.25 : currentBet;
