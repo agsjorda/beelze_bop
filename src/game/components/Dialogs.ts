@@ -1548,6 +1548,7 @@ export class Dialogs {
 					// If end-of-bonus dialog closed while in bonus mode, revert to base visuals and reset symbols
 					if (dialogTypeBeforeCleanup === 'Congrats_BZ' || dialogTypeBeforeCleanup === 'TotalW_BZ') {
 						console.log('[Dialogs] Bonus total dialog closed - reverting from bonus visuals to base');
+						gameStateManager.isBonusExitTransitionActive = true;
 						// Switch off bonus mode visuals and music
 						scene.events.emit('setBonusMode', false);
 						scene.events.emit('hideBonusBackground');
@@ -1594,6 +1595,8 @@ export class Dialogs {
 								console.log('[Dialogs] Black screen faded out after bonus total dialog - restoring normal background and header');
 								scene.events.emit('hideBonusBackground');
 								scene.events.emit('hideBonusHeader');
+								gameStateManager.isBonusExitTransitionActive = false;
+								scene.events.emit('bonusTransitionComplete');
 							}
 
 							console.log('[Dialogs] Black screen transition complete');

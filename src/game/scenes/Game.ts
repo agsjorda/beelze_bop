@@ -1485,6 +1485,7 @@ export class Game extends Scene {
 
 			// Ensure winnings display stays visible and transfers to bonus header on bonus start
 			if (isBonus) {
+				this.gameStateManager.isBonusExitTransitionActive = false;
 				this.menu?.setHistoryRefreshBlocked?.(true);
 				// Only transfer winnings if we're NOT already in bonus mode (i.e., this is the initial bonus activation)
 				// During retriggers, we're already in bonus mode, so we should preserve the accumulated total
@@ -1522,9 +1523,7 @@ export class Game extends Scene {
 				// Ensure bonus-finished flag is cleared and bonus mode is turned off when leaving bonus
 				this.gameStateManager.isBonus = false;
 				this.gameStateManager.isBonusFinished = false;
-				// Clear autoplay-related flags like on fresh spin
-				this.gameStateManager.isAutoPlaying = false;
-				this.gameStateManager.isAutoPlaySpinRequested = false;
+				// Keep autoplay flags untouched: scatter-triggered autoplay may be paused and resumed after bonus.
 				this.gameStateManager.isShowingWinDialog = false;
 				// Suppress any win dialogs that might be triggered during the transition back to base
 				this.suppressWinDialogsUntilNextSpin = true;

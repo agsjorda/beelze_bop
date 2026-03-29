@@ -21,6 +21,7 @@ export class GameStateManager {
   private _isShowingWinDialog: boolean = false;
   private _scatterIndex: number = 0;
   private _isBonusFinished: boolean = false;
+  private _isBonusExitTransitionActive: boolean = false;
   private _isBuyFeatureSpin: boolean = false;
 
   private constructor() {
@@ -87,6 +88,7 @@ export class GameStateManager {
   public get isShowingWinDialog(): boolean { return this._isShowingWinDialog; }
   public get scatterIndex(): number { return this._scatterIndex; }
   public get isBonusFinished(): boolean { return this._isBonusFinished; }
+  public get isBonusExitTransitionActive(): boolean { return this._isBonusExitTransitionActive; }
   public get isBuyFeatureSpin(): boolean { return this._isBuyFeatureSpin; }
 
   // Setters for state properties (with event emission where appropriate)
@@ -142,6 +144,10 @@ export class GameStateManager {
 
   public set scatterIndex(value: number) {
     this._scatterIndex = value;
+  }
+
+  public set isBonusExitTransitionActive(value: boolean) {
+    this._isBonusExitTransitionActive = value;
   }
 
   public set isBonusFinished(value: boolean) {
@@ -202,6 +208,7 @@ export class GameStateManager {
     this._isShowingWinDialog = false;
     this._scatterIndex = 0;
     this._isBonusFinished = false;
+    this._isBonusExitTransitionActive = false;
     this._isBuyFeatureSpin = false;
   }
 
@@ -222,6 +229,7 @@ export class GameStateManager {
       isShowingWinDialog: this._isShowingWinDialog,
       scatterIndex: this._scatterIndex,
       isBonusFinished: this._isBonusFinished,
+      isBonusExitTransitionActive: this._isBonusExitTransitionActive,
       isBuyFeatureSpin: this._isBuyFeatureSpin
     };
   }

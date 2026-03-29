@@ -37,6 +37,8 @@ export class AutoplayController {
   
   // State
   private autoplaySpinsRemaining: number = 0;
+  /** Cached when autoplay is paused for scatter/bonus (not cleared until resume or user stop). */
+  private pausedAutoplaySpinsRemaining: number = 0;
   private autoplayTimer: Phaser.Time.TimerEvent | null = null;
   private isFreeRoundAutoplay: boolean = false;
   private hasDecrementedAutoplayForCurrentSpin: boolean = false;
@@ -176,6 +178,7 @@ export class AutoplayController {
   public startAutoplay(spins: number, options?: { showBaseUi?: boolean }): void {
     log.debug(`Starting autoplay with ${spins} spins`);
     
+    this.pausedAutoplaySpinsRemaining = 0;
     this.autoplaySpinsRemaining = spins;
     this.isManagingAutoplay = true;
     this.showBaseUi = options?.showBaseUi !== false;
@@ -210,7 +213,7 @@ export class AutoplayController {
   /**
    * Stop autoplay
    */
-  public stopAutoplay(emitAutoStop: boolean = true): void {
+  public stopAutoplay(emitAutoStop: boolean = true, userInitiated: boolean = true): void {
     log.debug('Stopping autoplay');
     
     // Clear timer
@@ -225,6 +228,9 @@ export class AutoplayController {
     this.hasDecrementedAutoplayForCurrentSpin = false;
     this.isManagingAutoplay = false;
     this.showBaseUi = true;
+    if (userInitiated) {
+      this.pausedAutoplaySpinsRemaining = 0;
+    }
     
     // Update global state
     gameStateManager.isAutoPlaying = false;
@@ -249,6 +255,31 @@ export class AutoplayController {
     
     // Notify
     this.callbacks.onAutoplayStopped();
+  }
+
+  /**
+   * Pause autoplay and cache remaining spins (e.g. scatter → bonus). Does not emit AUTO_STOP.
+   */
+  public pauseAutoplay(reason: string = 'system_pause'): void {
+    if (this.autoplaySpinsRemaining <= 0 && !this.isManagingAutoplay) {
+      log.debug('pauseAutoplay: nothing to pause', { reason });
+      return;
+    }
+    const toSave = this.autoplaySpinsRemaining;
+    if (toSave <= 0) {
+      return;
+    }
+    this.pausedAutoplaySpinsRemaining = toSave;
+    log.debug('Pausing autoplay', { reason, cached: toSave });
+    this.stopAutoplay(false, false);
+  }
+
+  public getPausedSpinsRemaining(): number {
+    return this.pausedAutoplaySpinsRemaining;
+  }
+
+  public clearPausedSpinsCache(): void {
+    this.pausedAutoplaySpinsRemaining = 0;
   }
 
   /**
@@ -280,7 +311,7 @@ export class AutoplayController {
       return;
     }
     if (this.autoplaySpinsRemaining <= 0) {
-      this.stopAutoplay(true);
+      this.stopAutoplay(true, true);
       return;
     }
     
@@ -380,7 +411,7 @@ export class AutoplayController {
   }
 
   private isScatterOrBonusTransitionActive(): boolean {
-    if (gameStateManager.isScatter || gameStateManager.isBonus) {
+    if (gameStateManager.isScatter || gameStateManager.isBonus || gameStateManager.isBonusExitTransitionActive) {
       return true;
     }
 

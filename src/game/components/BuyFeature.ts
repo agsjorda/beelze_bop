@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { SlotController } from './controller/SlotController';
 import { CurrencyManager } from './CurrencyManager';
+import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 import { localizationManager } from '../../managers/LocalizationManager';
@@ -24,6 +25,9 @@ export class BuyFeature {
 	private container!: Phaser.GameObjects.Container;
 	private background!: Phaser.GameObjects.Graphics;
 	private confirmButtonMask!: Phaser.GameObjects.Graphics;
+	private confirmButtonImage!: Phaser.GameObjects.Image;
+	private readonly DISABLED_ALPHA: number = 0.5;
+	private balanceEventUnsubs: (() => void)[] = [];
 	private featurePrice: number = 24000.00;
 	private currentBet: number = 0.2; // Start with first bet option
 	private slotController: SlotController | null = null;
@@ -98,6 +102,72 @@ export class BuyFeature {
 	 */
 	private getCurrentBetValue(): number {
 		return this.currentBet * this.BET_MULTIPLIER;
+	}
+
+	/**
+	 * Returns true if balance covers the current feature price (bet × multiplier).
+	 */
+	private canAffordFeature(): boolean {
+		const balance = this.slotController?.getBalanceAmount?.();
+		const price = this.getCurrentBetValue();
+		if (!Number.isFinite(price) || price <= 0) {
+			return false;
+		}
+		if (!Number.isFinite(balance)) {
+			return false;
+		}
+		return balance + 1e-9 >= price;
+	}
+
+	/**
+	 * Dim + disable the panel BUY button when unaffordable or balance not ready.
+	 */
+	private updateBuyButtonState(): void {
+		if (!this.confirmButtonImage) return;
+
+		const affordable = this.canAffordFeature();
+		if (!affordable) {
+			this.confirmButtonImage.setAlpha(this.DISABLED_ALPHA);
+			this.confirmButtonImage.setTint(0x888888);
+			this.confirmButtonImage.disableInteractive();
+			if (this.confirmButton) {
+				this.confirmButton.setAlpha(this.DISABLED_ALPHA);
+				this.confirmButton.setTint(0x888888);
+			}
+		} else {
+			this.confirmButtonImage.setAlpha(1);
+			this.confirmButtonImage.clearTint();
+			this.confirmButtonImage.setInteractive();
+			if (this.confirmButton) {
+				this.confirmButton.setAlpha(1);
+				this.confirmButton.clearTint();
+				this.confirmButton.setColor('#000000');
+			}
+		}
+	}
+
+	private clearBalanceEventSubscriptions(): void {
+		for (const u of this.balanceEventUnsubs) {
+			try {
+				u();
+			} catch {
+				/* noop */
+			}
+		}
+		this.balanceEventUnsubs = [];
+	}
+
+	private subscribeBalanceEventSubscriptions(): void {
+		this.clearBalanceEventSubscriptions();
+		const refresh = () => {
+			if (this.container?.visible) {
+				this.updateBuyButtonState();
+			}
+		};
+		this.balanceEventUnsubs.push(
+			gameEventManager.on(GameEventType.BALANCE_UPDATE, refresh),
+			gameEventManager.on(GameEventType.BALANCE_INITIALIZED, refresh)
+		);
 	}
 
 	/**
@@ -451,6 +521,7 @@ export class BuyFeature {
 		buttonImage.setOrigin(0.5, 0.5);
 		buttonImage.setDisplaySize(screenWidth - this.HORIZONTAL_PADDING * 2, 62);
 		this.container.add(buttonImage);
+		this.confirmButtonImage = buttonImage;
 		
 		// Button label
 		const confirmButtonText = this.getBuyFeatureText(BUY_FEATURE_BUY_BUTTON);
@@ -465,6 +536,7 @@ export class BuyFeature {
 		
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => this.confirmPurchase());
+		this.updateBuyButtonState();
 	}
 
 	private createCloseButton(scene: Scene): void {
@@ -486,6 +558,11 @@ export class BuyFeature {
 
 	private confirmPurchase(): void {
 		console.log(`[BuyFeature] Confirming purchase`);
+
+		if (!this.canAffordFeature()) {
+			this.updateBuyButtonState();
+			return;
+		}
 		
 		if (this.onConfirmCallback) {
 			this.onConfirmCallback();
@@ -504,6 +581,7 @@ export class BuyFeature {
 			this.priceDisplay.setStyle({ color: '#ffffff' });
 			console.log('[BuyFeature] priceDisplay update forced to white:', this.priceDisplay.style.color);
 		}
+		this.updateBuyButtonState();
 	}
 
 	private animateIn(): void {
@@ -710,6 +788,7 @@ export class BuyFeature {
 		this.updatePriceDisplay();
 		this.updateBetDisplay();
 		this.updateBetLimitButtons();
+		this.subscribeBalanceEventSubscriptions();
 		this.animateIn();
 		this.scatterShouldLoopWin = true;
 		this.playLogoWinAnimation();
@@ -762,6 +841,7 @@ export class BuyFeature {
 
 	public hide(): void {
 		console.log("[BuyFeature] Hiding buy feature drawer");
+		this.clearBalanceEventSubscriptions();
 		
 		this.animateOut();
 		
@@ -782,6 +862,7 @@ export class BuyFeature {
 	}
 
 	public destroy(): void {
+		this.clearBalanceEventSubscriptions();
 		if (this.scatterSpine) {
 			try { this.scatterSpine.destroy(); } catch {}
 			this.scatterSpine = undefined;

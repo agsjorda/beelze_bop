@@ -50,6 +50,7 @@ export class SlotController {
 	private betController!: BetController;
 	private autoplayController!: AutoplayController;
 	private spinButtonController!: SpinButtonController;
+	private pausedAutoplayResumeTimer: Phaser.Time.TimerEvent | null = null;
 	
 	// Properties still needed (not yet migrated to controllers)
 	private spinButtonAnimation: any = null;
@@ -456,6 +457,10 @@ export class SlotController {
 		if (gameStateManager.isScatter || gameStateManager.isBonus) {
 			return;
 		}
+		const autoplayRunning =
+			gameStateManager.isAutoPlaying &&
+			(this.autoplayController?.getSpinsRemaining() ?? 0) > 0;
+
 		this.enableSpinButton();
 		this.enableAutoplayButton();
 		// Force autoplay button to full opacity and no tint (can stay greyed if only enableAutoplayButton ran before other logic)
@@ -465,10 +470,20 @@ export class SlotController {
 			autoplayButton.clearTint();
 			autoplayButton.setInteractive();
 		}
-		this.setAutoplayButtonState(false);
+		// Do not force autoplay "off" when normal autoplay resumed after bonus — that runs before this 100ms deferred call and would be overwritten.
+		this.setAutoplayButtonState(autoplayRunning);
 		this.enableTurboButton();
 		this.enableBetButtons();
-		this.enableAmplifyButton();
+		// enableAmplifyButton() clears tint; sync from GameData so enhanced-bet visuals match after bonus exit, then dim/disable during autoplay like startAutoplay().
+		if (this.isBuyFeatureControlsLocked()) {
+			this.disableAmplifyButton();
+		} else if (autoplayRunning) {
+			this.initializeAmplifyButtonState();
+			this.disableAmplifyButton();
+		} else {
+			this.enableAmplifyButton();
+			this.initializeAmplifyButtonState();
+		}
 		this.enableBetBackgroundInteraction('free round ended');
 		// Re-enable bet amount text so the bet options panel can be opened again
 		if (this.betAmountText) {
@@ -2994,6 +3009,11 @@ export class SlotController {
 				console.log('[SlotController] AUTO_STOP during free-round mode - turbo, menu and spin enabled');
 				return;
 			}
+
+			if (gameStateManager.isBonusExitTransitionActive) {
+				console.log('[SlotController] AUTO_STOP during bonus exit transition - skipping base re-enable');
+				return;
+			}
 			
 			// Re-enable spin button, bet buttons, feature button, and bet background
 			// Autoplay button stays disabled until TUMBLE_SEQUENCE_DONE (all tumbles finished)
@@ -3185,6 +3205,8 @@ export class SlotController {
 		// Disable bet, feature, and amplify immediately when autoplay is confirmed
 		this.disableBetButtons();
 		this.disableFeatureButton();
+		// Re-apply enhance tint before dimming — enableAmplifyButton()/auxiliary refreshes clear tint without this.
+		this.initializeAmplifyButtonState();
 		this.disableAmplifyButton();
 	}
 
@@ -3209,7 +3231,7 @@ export class SlotController {
 		this.setAutoplayButtonState(false);
 		this.disableAutoplayButton();
 		this.hideAutoplaySpinsRemainingText();
-		this.autoplayController?.stopAutoplay(false);
+		this.autoplayController?.stopAutoplay(false, true);
 		this.isFreeRoundAutoplay = false;
 		this.shouldReenableSpinButtonAfterFirstAutoplay = false;
 
@@ -3270,6 +3292,94 @@ export class SlotController {
 			this.disableSpinButton();
 			console.log('[SlotController] Autoplay stopped - spin button remains greyed until spin/tumbles complete');
 		}
+	}
+
+	/**
+	 * Pause normal autoplay and cache remaining spins (e.g. scatter → bonus). Same UI as stop without consuming resume cache.
+	 */
+	public pauseAutoplay(reason: string = 'scatter_triggered_bonus'): void {
+		console.log('[SlotController] pauseAutoplay', reason);
+		this.setAutoplayButtonState(false);
+		this.disableAutoplayButton();
+		this.hideAutoplaySpinsRemainingText();
+		this.autoplayController?.pauseAutoplay(reason);
+		this.isFreeRoundAutoplay = false;
+		this.shouldReenableSpinButtonAfterFirstAutoplay = false;
+
+		if (this.spinIcon) {
+			this.spinIcon.setVisible(true);
+		}
+		if (this.spinIconTween) {
+			this.spinIconTween.resume();
+		}
+
+		const gsmPause: any = gameStateManager as any;
+		const inFreeRoundModePause = gsmPause.isInFreeSpinRound === true;
+
+		if (gameStateManager.isScatter || (gameStateManager.isBonus && !inFreeRoundModePause)) {
+			this.lockControlsForScatterOrBonus();
+			return;
+		}
+
+		if (inFreeRoundModePause) {
+			this.lockControlsForFreeRoundMode();
+			if (!this.pendingWinLock && !gameStateManager.isShowingWinDialog) {
+				this.updateSpinButtonState();
+			} else {
+				this.disableSpinButton();
+			}
+			return;
+		}
+
+		const spinStillInProgress =
+			gameStateManager.isReelSpinning ||
+			gameStateManager.isProcessingSpin ||
+			gameStateManager.isShowingWinDialog ||
+			this.pendingWinLock;
+		if (!spinStillInProgress) {
+			this.updateSpinButtonState();
+			if (!this.isBuyFeatureControlsLocked()) {
+				this.enableBetButtons();
+				this.enableAmplifyButton();
+				this.enableBetBackgroundInteraction('after pauseAutoplay');
+			}
+			if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
+				this.enableFeatureButton();
+			}
+			this.updateAutoplayButtonState();
+			console.log('[SlotController] Autoplay paused - controls re-enabled');
+		} else {
+			this.disableSpinButton();
+			console.log('[SlotController] Autoplay paused - spin button remains greyed until spin/tumbles complete');
+		}
+	}
+
+	public resumeAutoplayFromPause(): void {
+		if (this.pausedAutoplayResumeTimer) {
+			this.pausedAutoplayResumeTimer.destroy();
+			this.pausedAutoplayResumeTimer = null;
+		}
+
+		const cached = this.autoplayController?.getPausedSpinsRemaining() ?? 0;
+		if (cached <= 0) {
+			return;
+		}
+
+		const blocked =
+			gameStateManager.isBonus ||
+			gameStateManager.isScatter ||
+			gameStateManager.isShowingWinDialog ||
+			gameStateManager.isProcessingSpin ||
+			gameStateManager.isReelSpinning ||
+			gameStateManager.isBonusExitTransitionActive;
+
+		if (blocked) {
+			this.pausedAutoplayResumeTimer = this.scene?.time.delayedCall(250, () => this.resumeAutoplayFromPause()) ?? null;
+			return;
+		}
+
+		this.autoplayController?.clearPausedSpinsCache();
+		this.startAutoplay(cached);
 	}
 
 	/**
@@ -4271,12 +4381,17 @@ export class SlotController {
 					console.log('[SlotController] Buy feature free spins activated - buttons will remain disabled until TotalW_BZ dialog');
 				}
 			} else {
-				console.log('[SlotController] Bonus mode deactivated - showing primary controller');
-				// Do not clear TotalW_BZ finalization flags here.
-				// For end-of-free-spin flow, Dialogs emits setBonusMode(false) before
-				// dialogAnimationsComplete, and clearing these flags here can skip
-				// the final bonus credit to balance.
-				this.showPrimaryController();
+				const deferPrimaryForExitTransition = gameStateManager.isBonusExitTransitionActive;
+				if (!deferPrimaryForExitTransition) {
+					console.log('[SlotController] Bonus mode deactivated - showing primary controller');
+					// Do not clear TotalW_BZ finalization flags here.
+					// For end-of-free-spin flow, Dialogs emits setBonusMode(false) before
+					// dialogAnimationsComplete, and clearing these flags here can skip
+					// the final bonus credit to balance.
+					this.showPrimaryController();
+				} else {
+					console.log('[SlotController] Bonus exit transition active - deferring primary controller');
+				}
 				// Clear buy feature free spins flag when bonus ends and release buy-feature locks.
 				// Do NOT gate on gameStateManager.isBonusFinished: Game clears this flag early in setBonusMode(false),
 				// which can leave controller buttons permanently disabled after the final free spin.
@@ -4296,27 +4411,53 @@ export class SlotController {
 				}
 				// Allow feature button to be enabled again (now that bonus is off)
 				this.canEnableFeatureButton = true;
-				// Re-enable buy feature only after bonus is fully deactivated
-				this.enableFeatureButton();
-				this.updateSpinButtonState();
-				// Defer UI refresh so Game's setBonusMode handler can clear bonus flags first,
-				// then explicitly re-enable all controls so buttons are not left greyed after free round end
-				if (this.scene?.time) {
-					this.scene.time.delayedCall(0, () => {
-						this.updateSpinButtonState();
+				if (!deferPrimaryForExitTransition) {
+					// Re-enable buy feature only after bonus is fully deactivated
+					this.enableFeatureButton();
+					this.updateSpinButtonState();
+					// Defer UI refresh so Game's setBonusMode handler can clear bonus flags first,
+					// then explicitly re-enable all controls so buttons are not left greyed after free round end
+					if (this.scene?.time) {
+						this.scene.time.delayedCall(0, () => {
+							this.updateSpinButtonState();
+							this.updateAllAuxiliaryButtonStates();
+							this.updateFeatureButtonState();
+						});
+						// Short delay so isInFreeSpinRound etc. are cleared by other components, then force re-enable all buttons
+						this.scene.time.delayedCall(100, () => {
+							this.reenableControlsAfterFreeRoundEnd();
+						});
+					} else {
 						this.updateAllAuxiliaryButtonStates();
 						this.updateFeatureButtonState();
-					});
-					// Short delay so isInFreeSpinRound etc. are cleared by other components, then force re-enable all buttons
-					this.scene.time.delayedCall(100, () => {
 						this.reenableControlsAfterFreeRoundEnd();
-					});
+					}
 				} else {
-					this.updateAllAuxiliaryButtonStates();
-					this.updateFeatureButtonState();
-					this.reenableControlsAfterFreeRoundEnd();
+					this.lockControlsForScatterOrBonus();
 				}
 			}
+		});
+
+		this.scene.events.on('bonusTransitionComplete', () => {
+			console.log('[SlotController] bonusTransitionComplete - restoring primary UI and attempting autoplay resume');
+			this.showPrimaryController();
+			this.enableFeatureButton();
+			this.updateSpinButtonState();
+			if (this.scene?.time) {
+				this.scene.time.delayedCall(0, () => {
+					this.updateSpinButtonState();
+					this.updateAllAuxiliaryButtonStates();
+					this.updateFeatureButtonState();
+				});
+				this.scene.time.delayedCall(100, () => {
+					this.reenableControlsAfterFreeRoundEnd();
+				});
+			} else {
+				this.updateAllAuxiliaryButtonStates();
+				this.updateFeatureButtonState();
+				this.reenableControlsAfterFreeRoundEnd();
+			}
+			this.resumeAutoplayFromPause();
 		});
 
 		// Ensure free spin UI is hidden on generic bonus-reset events as well
@@ -4380,8 +4521,8 @@ export class SlotController {
 				!!gameStateManager.isAutoPlaying ||
 				!!this.gameData?.isAutoPlaying;
 			if (autoplayActive) {
-				console.log(`[SlotController] Scatter hit during autoplay - stopping normal autoplay (spinsRemaining=${spinsRemaining})`);
-				this.stopAutoplay();
+				console.log(`[SlotController] Scatter hit during autoplay - pausing normal autoplay (spinsRemaining=${spinsRemaining})`);
+				this.pauseAutoplay('scatter_triggered_bonus');
 			}
 			
 		// Keep controls disabled/greyed out while scatter/bonus sequence proceeds
@@ -5097,8 +5238,17 @@ export class SlotController {
 			this.disableAmplifyButton();
 			return;
 		}
-		// Otherwise enable amplify button
+		const autoplayRunning =
+			gameStateManager.isAutoPlaying &&
+			(this.autoplayController?.getSpinsRemaining() ?? 0) > 0;
+		// During autoplay, amplify stays non-interactive (like startAutoplay) but must keep enhanced-bet tint — do not call enableAmplifyButton() (it used to clear tint).
+		if (autoplayRunning) {
+			this.initializeAmplifyButtonState();
+			this.disableAmplifyButton();
+			return;
+		}
 		this.enableAmplifyButton();
+		this.initializeAmplifyButtonState();
 	}
 
 	/**

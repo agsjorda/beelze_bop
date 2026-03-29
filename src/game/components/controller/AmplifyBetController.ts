@@ -291,7 +291,13 @@ export class AmplifyBetController {
     const amplifyButton = this.buttons.get('amplify');
     if (amplifyButton) {
       amplifyButton.setAlpha(1.0);
-      amplifyButton.clearTint();
+      const gameData = this.callbacks.getGameData();
+      // Do not clear tint when enhanced bet is still on — callers (e.g. auxiliary UI refresh during autoplay) must not wipe the yellow "on" state.
+      if (gameData?.isEnhancedBet) {
+        amplifyButton.setTint(0xffff00);
+      } else {
+        amplifyButton.clearTint();
+      }
       amplifyButton.setInteractive();
       console.log('[SlotController] Amplify button enabled');
     }
