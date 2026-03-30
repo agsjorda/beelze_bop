@@ -11,6 +11,7 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { UI_CONFIG, WIN_THRESHOLDS, TIMING_CONFIG } from '../../config/GameConfig';
 import { Logger } from '../../utils/Logger';
 import { CurrencyManager } from './CurrencyManager';
+import { getDecimalPlaces } from '../../utils/NumberPrecisionFormatter';
 import { localizationManager } from '../../managers/LocalizationManager';
 import { DIALOG_PRESS_CONTINUE, LOCALIZATION_DEFAULTS } from '../../backend/LocalizationData';
 
@@ -836,7 +837,11 @@ export class Dialogs {
 			freeSpins === undefined;
 		const isDemo = (scene as any).gameAPI?.getDemoState();
 
-		// Create number display configuration
+			// Resolve decimal places for currency-aligned display.
+			// Free spins remain integer; wins follow the initialized currency precision.
+			const decimalPlaces = freeSpins !== undefined ? 0 : getDecimalPlaces() || 2;
+
+			// Create number display configuration
 		const numberConfig: NumberDisplayConfig = {
 			x: scene.scale.width / 2,
 			y: this.getNumberDisplayY(scene, this.currentDialogType),
@@ -846,7 +851,7 @@ export class Dialogs {
 			scale: 0.3,
 			spacing: 0,
 			alignment: 'center',
-			decimalPlaces: freeSpins !== undefined ? 0 : 3, // No decimals for free spins
+			decimalPlaces, // 0 for free spins, currency-driven for wins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
 			// For total win dialog use currency code (not symbol) so e.g. Tunisian "." doesn't render as extra dot in NumberDisplay.
 			prefix: isTotalWinDialog ? (isDemo ? '' : (CurrencyManager.getCurrencyCode() ? `${CurrencyManager.getCurrencyCode()} ` : '')) : '',

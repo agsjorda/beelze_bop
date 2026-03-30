@@ -36,6 +36,7 @@ export class BuyFeatureController {
   private buyFeature: BuyFeature | null = null;
   private buyFeatureSpinLock: boolean = false;
   private callbacks: BuyFeatureCallbacks;
+  private readonly BET_MULTIPLIER: number = 100;
 
   constructor(callbacks: BuyFeatureCallbacks) {
     this.callbacks = callbacks;
@@ -54,6 +55,22 @@ export class BuyFeatureController {
 
   public isSpinLocked(): boolean {
     return this.buyFeatureSpinLock;
+  }
+
+  /**
+   * Price shown on the buy feature button/panel (baseBet × multiplier).
+   * Returns 0 when unavailable.
+   */
+  public getDisplayedFeaturePrice(): number {
+    try {
+      const bet = Number(this.buyFeature?.getCurrentBetAmount?.());
+      if (!Number.isFinite(bet) || bet <= 0) {
+        return 0;
+      }
+      return bet * this.BET_MULTIPLIER;
+    } catch {
+      return 0;
+    }
   }
 
   public setSpinLock(locked: boolean): void {

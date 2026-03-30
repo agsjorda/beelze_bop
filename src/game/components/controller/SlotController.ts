@@ -658,8 +658,10 @@ export class SlotController {
 			this.networkManager,
 			{
 				getGameData: () => this.getGameData(),
-				enableFeatureButton: () => this.enableFeatureButton(),
-				disableFeatureButton: () => this.disableFeatureButton(),
+				// Never force-enable Buy Feature from amplify toggle; it must respect affordability gating.
+				enableFeatureButton: () => this.updateFeatureButtonState(),
+				// Ditto for "disable" requests from amplify flows: re-evaluate instead of hard-disabling.
+				disableFeatureButton: () => this.updateFeatureButtonState(),
 				applyAmplifyBetIncrease: () => this.applyAmplifyBetIncrease(),
 				restoreOriginalBetAmount: () => this.restoreOriginalBetAmount(),
 				updateFeatureAmountFromCurrentBet: () => this.updateFeatureAmountFromCurrentBet(),
@@ -2289,6 +2291,9 @@ export class SlotController {
 
 		// Update bet +/- button states based on the new bet (for min/max greying)
 		this.updateBetLimitButtons(betAmount);
+
+		// Bet changes must immediately re-evaluate control states (spin/feature disable on insufficient balance).
+		this.updateSpinButtonState();
 	}
 
 	/**
@@ -2554,6 +2559,8 @@ export class SlotController {
 
 			console.log(`[SlotController] Updating balance display to: $${resolvedBalance}`);
 			this.updateBalanceAmount(resolvedBalance);
+			// Balance readiness affects spin + buy-feature enable/disable.
+			this.updateSpinButtonState();
 
 			if (this.pendingSpinUntilBalanceReady && !gameStateManager.isReelSpinning) {
 				this.pendingSpinUntilBalanceReady = false;
@@ -2565,6 +2572,19 @@ export class SlotController {
 					void this.handleSpin();
 				}
 			}
+		});
+
+		// Any later balance changes should also refresh controls (e.g. wallet sync, demo balance changes).
+		gameEventManager.on(GameEventType.BALANCE_UPDATE, (data: any) => {
+			try {
+				const resolvedBalance = Number(
+					data?.newBalance ?? data?.balance ?? data?.currentBalance
+				);
+				if (Number.isFinite(resolvedBalance)) {
+					this.updateBalanceAmount(resolvedBalance);
+				}
+			} catch { }
+			this.updateSpinButtonState();
 		});
 
 		// Reset pending win lock on spin start
@@ -3436,6 +3456,27 @@ export class SlotController {
 			this.disableAmplifyButton();
 			return;
 		}
+		// Enforce affordability here too, because many flows call enableAmplifyButton()
+		// directly (bypassing updateAmplifyButtonStateWithLock()).
+		try {
+			const isBalanceReady = this.balanceController?.hasInitializedBalance() ?? false;
+			if (isBalanceReady) {
+				const gameData = this.getGameData();
+				const baseBet = this.getBaseBetAmount() || 0;
+				const enhancedMultiplier =
+					Number(gameData?.enhancedBetMultiplier) > 0 ? Number(gameData?.enhancedBetMultiplier) : 1.25;
+				const requiredBet = baseBet * (gameData?.isEnhancedBet ? enhancedMultiplier : 1);
+				const requiredBetIfAmplified = baseBet * enhancedMultiplier;
+				const balance = this.getBalanceAmount() || 0;
+				if (
+					(requiredBet > 0 && balance + 1e-9 < requiredBet) ||
+					(!gameData?.isEnhancedBet && requiredBetIfAmplified > 0 && balance + 1e-9 < requiredBetIfAmplified)
+				) {
+					this.disableAmplifyButton();
+					return;
+				}
+			}
+		} catch { }
 		this.amplifyBetController.enableButton();
 	}
 
@@ -5165,6 +5206,30 @@ export class SlotController {
 			return;
 		}
 
+		// Disable spin when balance is insufficient for the selected bet.
+		// Applies to both demo and real mode; excludes active autoplay so Spin can still act as STOP.
+		try {
+			const isBalanceReady = this.balanceController?.hasInitializedBalance() ?? false;
+			if (!isBalanceReady) {
+				// Don't treat "balance not initialized" as "insufficient balance".
+				throw new Error('balance not initialized');
+			}
+			const baseBet = this.getBaseBetAmount() || 0;
+			const multiplier =
+				gameData.isEnhancedBet
+					? (Number(gameData.enhancedBetMultiplier) > 0 ? Number(gameData.enhancedBetMultiplier) : 1.25)
+					: 1;
+			const requiredBet = baseBet * multiplier;
+			const balance = this.getBalanceAmount() || 0;
+			if (requiredBet > 0 && balance + 1e-9 < requiredBet) {
+				this.disableSpinButton();
+				this.updateFeatureButtonState();
+				// Keep amplify in sync too (bet just became unaffordable).
+				this.updateAmplifyButtonStateWithLock();
+				return;
+			}
+		} catch {}
+
 		// Simple logic: disable if spinning or spin in progress (e.g. API call in flight), enable otherwise
 		if (gameStateManager.isReelSpinning || gameStateManager.isProcessingSpin) {
 			this.disableSpinButton();
@@ -5173,6 +5238,8 @@ export class SlotController {
 		}
 		// Also update feature button state whenever spin button state changes
 		this.updateFeatureButtonState();
+		// Keep amplify state in sync too (depends on bet + balance).
+		this.updateAmplifyButtonStateWithLock();
 	}
 
 	/**
@@ -5180,12 +5247,29 @@ export class SlotController {
 	 */
 	public updateFeatureButtonState(): void {
 		if (!this.isBuyFeatureControlsLocked() && !gameStateManager.isBonus && this.canEnableFeatureButton) {
-			const gameData = this.getGameData();
-			if (!gameData || !gameData.isEnhancedBet) {
-				this.enableFeatureButton();
-			} else {
+			// Disable feature when the displayed buy price exceeds current balance (match pastry_cub behavior).
+			try {
+				const isBalanceReady = this.balanceController?.hasInitializedBalance() ?? false;
+				if (!isBalanceReady) {
+					// Before balance is initialized, avoid disabling due to "0" placeholder; let other guards decide.
+					this.enableFeatureButton();
+					return;
+				}
+				const balance = this.getBalanceAmount() || 0;
+				// Feature price shown on the main HUD is always baseBet × 100 (enhanced +25% is display-only for BET).
+				const baseBet = this.getBaseBetAmount() || 0;
+				const price = baseBet * 100;
+				if (price > 0 && Number.isFinite(balance) && balance + 1e-9 < price) {
+					this.disableFeatureButton();
+					return;
+				}
+			} catch {
+				// If anything is not ready yet, keep disabled to avoid incorrect enable.
 				this.disableFeatureButton();
+				return;
 			}
+
+			this.enableFeatureButton();
 		} else {
 			this.disableFeatureButton();
 		}
@@ -5247,6 +5331,29 @@ export class SlotController {
 			this.disableAmplifyButton();
 			return;
 		}
+
+		// Disable amplify when balance is insufficient for the current bet (or for enabling amplify).
+		try {
+			const isBalanceReady = this.balanceController?.hasInitializedBalance() ?? false;
+			if (isBalanceReady) {
+				const gameData = this.getGameData();
+				const baseBet = this.getBaseBetAmount() || 0;
+				const enhancedMultiplier =
+					Number(gameData?.enhancedBetMultiplier) > 0 ? Number(gameData?.enhancedBetMultiplier) : 1.25;
+				const requiredBet = baseBet * (gameData?.isEnhancedBet ? enhancedMultiplier : 1);
+				const requiredBetIfAmplified = baseBet * enhancedMultiplier;
+				const balance = this.getBalanceAmount() || 0;
+				if (
+					(requiredBet > 0 && balance + 1e-9 < requiredBet) ||
+					(!gameData?.isEnhancedBet && requiredBetIfAmplified > 0 && balance + 1e-9 < requiredBetIfAmplified)
+				) {
+					this.initializeAmplifyButtonState();
+					this.disableAmplifyButton();
+					return;
+				}
+			}
+		} catch { }
+
 		this.enableAmplifyButton();
 		this.initializeAmplifyButtonState();
 	}

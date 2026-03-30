@@ -11,6 +11,10 @@ export function setDecimalPlaces(places: number): void {
 	currentDecimalPlaces = normalized;
 }
 
+export function getDecimalPlaces(): number {
+	return currentDecimalPlaces;
+}
+
 export function formatCurrencyNumber(
 	value: number,
 	trimZeroValueDecimals: boolean = false,
