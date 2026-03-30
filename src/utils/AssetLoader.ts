@@ -2,6 +2,19 @@ import { Scene } from "phaser";
 import { AssetConfig, AssetGroup } from "../config/AssetConfig";
 import { ensureSpineLoader } from "./SpineGuard";
 
+export function resolveAssetUrl(path: string): string {
+	if (!path) {
+		return path;
+	}
+	if (/^(?:https?:|data:|blob:)/i.test(path)) {
+		return path;
+	}
+	const base = (import.meta as any).env?.BASE_URL ?? '/';
+	const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+	const normalizedPath = path.replace(/^\.\//, '').replace(/^\//, '');
+	return `${normalizedBase}${normalizedPath}`;
+}
+
 export class AssetLoader {
 	private assetConfig: AssetConfig;
 
@@ -200,12 +213,14 @@ export class AssetLoader {
 	}
 
 	private preloadFont(fontFamily: string, fontPath: string): void {
+		const srcUrl = resolveAssetUrl(fontPath);
+
 		// Create a link element to preload the font
 		const link = document.createElement('link');
 		link.rel = 'preload';
 		link.as = 'font';
 		link.type = 'font/ttf';
-		link.href = fontPath;
+		link.href = srcUrl;
 		link.crossOrigin = 'anonymous';
 		
 		// Add to document head
@@ -216,13 +231,40 @@ export class AssetLoader {
 		style.textContent = `
 			@font-face {
 				font-family: '${fontFamily}';
-				src: url('${fontPath}') format('truetype');
+				src: url('${srcUrl}') format('truetype');
 				font-display: swap;
+				font-style: normal;
+				font-weight: 400;
 			}
 		`;
 		document.head.appendChild(style);
+
+		try {
+			if (typeof FontFace !== 'undefined') {
+				const face = new FontFace(fontFamily, `url('${srcUrl}') format('truetype')`, {
+					style: 'normal',
+					weight: '400',
+					display: 'swap' as any
+				});
+				face.load().then((loaded) => {
+					(document as any).fonts?.add(loaded);
+					try {
+						(document as any).fonts?.load?.(`1em ${fontFamily}`);
+					} catch {}
+					console.log(`[AssetLoader] Font ${fontFamily} loaded via FontFace API`);
+				}).catch((error) => {
+					console.warn(`[AssetLoader] FontFace load failed for ${fontFamily}:`, error);
+				});
+			} else {
+				try {
+					(document as any).fonts?.load?.(`1em ${fontFamily}`);
+				} catch {}
+			}
+		} catch (error) {
+			console.warn('[AssetLoader] Error while using FontFace API:', error);
+		}
 		
-		console.log(`[AssetLoader] Font ${fontFamily} preloaded from ${fontPath}`);
+		console.log(`[AssetLoader] Font ${fontFamily} preloaded from ${srcUrl}`);
 	}
 
 	private ensureFontsLoaded(): void {

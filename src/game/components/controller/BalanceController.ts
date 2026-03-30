@@ -437,14 +437,9 @@ export class BalanceController {
     }
   }
 
-  public async updateBalanceFromServer(): Promise<void> {
-    if (this.callbacks.getGameAPI()?.getDemoState()) {
-      console.log('[SlotController] Demo mode active - skipping balance update from server');
-      return;
-    }
-
+  public async updateBalanceFromServer(spinData?: any): Promise<void> {
     try {
-      console.log('[SlotController] 💰 Updating balance from server after reels stopped...');
+      console.log('[SlotController] 💰 Reconciling balance from spin payload...');
 
       const gameAPI = this.callbacks.getGameAPI();
       if (!gameAPI) {
@@ -452,17 +447,34 @@ export class BalanceController {
         return;
       }
 
-      const balanceResponse = await gameAPI.getBalance();
-      console.log('[SlotController] Balance response received:', balanceResponse);
+      let payload =
+        spinData ?? gameAPI.getCurrentSpinData?.() ?? (() => {
+          try {
+            return (this.callbacks.getScene() as any)?.symbols?.currentSpinData;
+          } catch {
+            return undefined;
+          }
+        })();
 
-      let newBalance = 0;
-      if (balanceResponse && balanceResponse.data && balanceResponse.data.balance !== undefined) {
-        newBalance = parseFloat(balanceResponse.data.balance);
-      } else if (balanceResponse && balanceResponse.balance !== undefined) {
-        newBalance = parseFloat(balanceResponse.balance);
-      } else {
-        console.warn('[SlotController] Unexpected balance response structure:', balanceResponse);
-        return;
+      const rawBalance = payload?.balance ?? payload?.data?.balance;
+      let newBalance = parseFloat(String(rawBalance ?? '').replace(/,/g, ''));
+
+      if (!Number.isFinite(newBalance)) {
+        console.log('[SlotController] No valid balance on spin payload; falling back to getBalance');
+        const balanceResponse = await gameAPI.getBalance();
+        console.log('[SlotController] Balance response received:', balanceResponse);
+        if (balanceResponse && balanceResponse.data && balanceResponse.data.balance !== undefined) {
+          newBalance = parseFloat(String(balanceResponse.data.balance).replace(/,/g, ''));
+        } else if (balanceResponse && balanceResponse.balance !== undefined) {
+          newBalance = parseFloat(String(balanceResponse.balance).replace(/,/g, ''));
+        } else {
+          console.warn('[SlotController] Unexpected balance response structure:', balanceResponse);
+          return;
+        }
+        if (!Number.isFinite(newBalance)) {
+          console.warn('[SlotController] Invalid balance received from server:', balanceResponse);
+          return;
+        }
       }
 
       const oldBalance = this.getBalanceAmount();
@@ -477,7 +489,13 @@ export class BalanceController {
         this.callbacks.showOutOfBalancePopup();
       }
 
-      console.log('[SlotController] ✅ Balance updated from server successfully');
+      if (gameAPI.getDemoState?.()) {
+        try {
+          gameAPI.updateDemoBalance?.(newBalance);
+        } catch {}
+      }
+
+      console.log('[SlotController] ✅ Balance reconciled successfully');
     } catch (error) {
       console.error('[SlotController] ❌ Error updating balance from server:', error);
     }

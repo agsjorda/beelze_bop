@@ -234,22 +234,37 @@ export class StudioLoadingScreen {
                 console.log(`[StudioLoadingScreen] Text2 displayed: "${this.options.text2}" at (${text2X}, ${text2Y}) with font size ${fontSize}px, weight 500, and alpha ${alpha}`);
             }
 
-            // Ensure Poppins fonts are applied once web fonts are ready
+            const applyStudioFonts = (): void => {
+                this.text?.setFontFamily('poppins-regular');
+                this.text2?.setFontFamily('poppins-regular');
+                try {
+                    (this.text as any)?.updateText?.();
+                    (this.text2 as any)?.updateText?.();
+                } catch {}
+            };
+
             try {
                 const fontsObj: any = (document as any).fonts;
-                if (fontsObj && typeof fontsObj.ready?.then === 'function') {
-                    fontsObj.ready.then(() => {
-                        this.text?.setFontFamily('poppins-regular');
-                        this.text2?.setFontFamily('poppins-regular');
+                if (fontsObj && typeof fontsObj.load === 'function') {
+                    Promise.allSettled([
+                        fontsObj.load('1em poppins-regular')
+                    ]).then(() => {
+                        applyStudioFonts();
                     }).catch(() => {
-                        this.text?.setFontFamily('poppins-regular');
-                        this.text2?.setFontFamily('poppins-regular');
+                        applyStudioFonts();
+                    });
+                } else if (fontsObj && typeof fontsObj.ready?.then === 'function') {
+                    fontsObj.ready.then(() => {
+                        applyStudioFonts();
+                    }).catch(() => {
+                        applyStudioFonts();
                     });
                 } else {
-                    this.text?.setFontFamily('poppins-regular');
-                    this.text2?.setFontFamily('poppins-regular');
+                    applyStudioFonts();
                 }
-            } catch {}
+            } catch {
+                applyStudioFonts();
+            }
 
             // Time display disabled in this game (no TimeUtils helper available)
 

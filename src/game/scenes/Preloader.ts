@@ -553,33 +553,43 @@ export class Preloader extends Scene
 
 		// Audio is preloaded in `preload()`, so no background audio load is needed here.
 
-		// Ensure web fonts are applied after they are ready
+		const refreshTextFont = (textObject: Phaser.GameObjects.Text | undefined, fontFamily: string): void => {
+			if (!textObject) {
+				return;
+			}
+			textObject.setFontFamily(fontFamily);
+			try {
+				(textObject as any).updateText?.();
+			} catch {}
+		};
+
+		const applyLoadingFonts = (): void => {
+			refreshTextFont(this.progressText, 'poppins-regular');
+			refreshTextFont(this.pressToPlayText, 'poppins-regular');
+			refreshTextFont(this.taglineText, 'poppins-regular');
+			refreshTextFont(this.websiteText, 'poppins-regular');
+			refreshTextFont(this.maxWinText, 'poppins-bold');
+			this.versionDisplay?.setFontFamily('poppins-regular');
+		};
+
 		const fontsObj: any = (document as any).fonts;
-		if (fontsObj && typeof fontsObj.ready?.then === 'function') {
-			fontsObj.ready.then(() => {
-				this.progressText?.setFontFamily('poppins-regular');
-				this.pressToPlayText?.setFontFamily('poppins-regular');
-				this.taglineText?.setFontFamily('poppins-regular');
-				this.websiteText?.setFontFamily('poppins-regular');
-				this.maxWinText?.setFontFamily('poppins-bold');
-				this.versionDisplay?.setFontFamily('poppins-regular');
+		if (fontsObj && typeof fontsObj.load === 'function') {
+			Promise.allSettled([
+				fontsObj.load('1em poppins-regular'),
+				fontsObj.load('1em poppins-bold')
+			]).then(() => {
+				applyLoadingFonts();
 			}).catch(() => {
-				// Fallback: set families anyway
-				this.progressText?.setFontFamily('poppins-regular');
-				this.pressToPlayText?.setFontFamily('poppins-regular');
-				this.taglineText?.setFontFamily('poppins-regular');
-				this.websiteText?.setFontFamily('poppins-regular');
-				this.maxWinText?.setFontFamily('poppins-bold');
-				this.versionDisplay?.setFontFamily('poppins-regular');
+				applyLoadingFonts();
+			});
+		} else if (fontsObj && typeof fontsObj.ready?.then === 'function') {
+			fontsObj.ready.then(() => {
+				applyLoadingFonts();
+			}).catch(() => {
+				applyLoadingFonts();
 			});
 		} else {
-			// Browser without document.fonts support
-			this.progressText?.setFontFamily('poppins-regular');
-			this.pressToPlayText?.setFontFamily('poppins-regular');
-			this.taglineText?.setFontFamily('poppins-regular');
-			this.websiteText?.setFontFamily('poppins-regular');
-			this.maxWinText?.setFontFamily('poppins-bold');
-			this.versionDisplay?.setFontFamily('poppins-regular');
+			applyLoadingFonts();
 		}
     }
 }

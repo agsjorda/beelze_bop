@@ -108,7 +108,7 @@ export class SlotController {
 	// For free spin autoplay UI sync: subtract 1 from server value for current spin
 	private shouldSubtractOneFromServerFsDisplay: boolean = false;
 	private uiFsDecrementApplied: boolean = false;
-	// Guard to ensure balance API is called only once per spin (REELS_STOP can fire twice: from Symbols + WinLineDrawer)
+	// Guard to ensure balance reconcile runs only once per spin (REELS_STOP can fire twice: from Symbols + WinLineDrawer)
 	private balanceApiCalledThisSpin: boolean = false;
 	private pendingSpinUntilBalanceReady: boolean = false;
 	
@@ -255,12 +255,33 @@ export class SlotController {
 			const Popup = module.OutOfBalancePopup;
 			this.outOfBalancePopup = new Popup(scene, 0, 0, {
 				onClose: () => {
-					this.enableSpinButton();
+					this.refreshControlsAfterOutOfBalancePopupClose();
 				}
 			});
 			if (message) this.outOfBalancePopup.updateMessage(message);
 			this.outOfBalancePopup.show();
 		}).catch(() => {});
+	}
+
+	private refreshControlsAfterOutOfBalancePopupClose(): void {
+		this.updateSpinButtonState();
+
+		const gsmAny: any = gameStateManager as any;
+		const isInFreeSpinRound = gsmAny.isInFreeSpinRound === true;
+		if (
+			this.isSpinLocked ||
+			gameStateManager.isScatter ||
+			(gameStateManager.isBonus && !isInFreeSpinRound) ||
+			gameStateManager.isReelSpinning ||
+			gameStateManager.isProcessingSpin ||
+			(this.balanceController?.hasPendingBalanceUpdate() ?? false)
+		) {
+			console.log('[SlotController] Skipping out-of-balance control refresh (blocked game state still active)');
+			return;
+		}
+
+		this.updateAllAuxiliaryButtonStates();
+		this.updateFeatureButtonState();
 	}
 
 	/**
@@ -2711,7 +2732,7 @@ export class SlotController {
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[SlotController] Reels stopped event received - updating spin button state');
 			
-			// Update balance from server once per spin (REELS_STOP can fire twice: Symbols + WinLineDrawer)
+			// Reconcile balance once per spin (REELS_STOP can fire twice: Symbols + WinLineDrawer)
 			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
 				if (this.shouldDeferBalanceSyncToTotalWinDialog()) {
 					console.log('[SlotController] Skipping REELS_STOP balance sync (buy feature/TotalW_BZ flow active)');
@@ -2719,12 +2740,16 @@ export class SlotController {
 					console.log('[SlotController] Deferring REELS_STOP balance update (pending winnings will apply on WIN_STOP)');
 				} else if (!this.balanceApiCalledThisSpin) {
 					this.balanceApiCalledThisSpin = true;
-					this.updateBalanceFromServer();
+					const spinData =
+						(this.symbols as any)?.currentSpinData ??
+						this.gameAPI?.getCurrentSpinData() ??
+						(this.scene as any)?.symbols?.currentSpinData;
+					this.updateBalanceFromServer(spinData);
 				} else {
-					console.log('[SlotController] Skipping duplicate balance API call (already called this spin)');
+					console.log('[SlotController] Skipping duplicate balance reconcile (already done this spin)');
 				}
 			} else {
-				console.log('[SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)');
+				console.log('[SlotController] Skipping balance reconcile on REELS_STOP (scatter/bonus active)');
 			}
 			
 			// If we're in bonus mode, check if free spins are finishing now
@@ -3081,7 +3106,7 @@ export class SlotController {
 						const spinData = this.gameAPI?.getCurrentSpinData() || (this.scene as any)?.symbols?.currentSpinData;
 						if (this.spinDataHasWins(spinData) && !this.balanceApiCalledThisSpin) {
 							this.balanceApiCalledThisSpin = true;
-							this.updateBalanceFromServer();
+							this.updateBalanceFromServer(spinData);
 						}
 					} catch (e) {
 						console.warn('[SlotController] Failed WIN_STOP balance sync after applying pending update:', e);
@@ -3094,7 +3119,7 @@ export class SlotController {
 						const baseWin = spinData ? this.getBaseSpinWinForBalance(spinData as SpinData) : 0;
 						if (baseWin > 0 && !this.balanceApiCalledThisSpin) {
 							this.balanceApiCalledThisSpin = true;
-							this.updateBalanceFromServer();
+							this.updateBalanceFromServer(spinData);
 						}
 					} catch (e) {
 						console.warn('[SlotController] Failed WIN_STOP base-win balance fallback:', e);
@@ -4382,10 +4407,10 @@ export class SlotController {
 	}
 
 	/**
-	 * Update balance from server using getBalance API
+	 * Reconcile balance from spin payload (BalanceController falls back to getBalance when payload has no balance).
 	 */
-	private async updateBalanceFromServer(): Promise<void> {
-		await this.balanceController?.updateBalanceFromServer();
+	private async updateBalanceFromServer(spinData?: any): Promise<void> {
+		await this.balanceController?.updateBalanceFromServer(spinData);
 	}
 
 	/**
