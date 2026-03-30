@@ -1230,12 +1230,6 @@ export class SlotController {
 				console.log('[SlotController] Skipping feature enable (bonus active or not allowed yet)');
 				return;
 			}
-			// Also keep Buy Feature disabled while enhance/amplify bet is active
-			const gameData = this.getGameData();
-			if (gameData && gameData.isEnhancedBet) {
-				console.log('[SlotController] Skipping feature enable (enhance/amplify bet is ON)');
-				return;
-			}
 			// Also keep Buy Feature disabled while buy feature flow or free spins are active
 			if (this.isBuyFeatureControlsLocked()) {
 				console.log('[SlotController] Skipping feature enable (buy feature flow active)');
