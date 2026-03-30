@@ -3923,11 +3923,14 @@ export class Symbols {
       const currentTumbleIndex = tumbleIndex;
 
         await this.applySingleTumble(tumble, currentTumbleIndex, () => {
-        // Track cumulative wins
+        // Track cumulative wins; emit per-tumble win for win bar (YOU WON + this step only)
         try {
           cumulativeWin += tumbleTotal;
           if (cumulativeWin > 0) {
-            gameEventManager.emit(GameEventType.TUMBLE_WIN_PROGRESS, { cumulativeWin } as any);
+            gameEventManager.emit(GameEventType.TUMBLE_WIN_PROGRESS, {
+              cumulativeWin,
+              tumbleWin: tumbleTotal,
+            } as any);
           }
         } catch { }
 
@@ -3942,7 +3945,27 @@ export class Symbols {
       }
 
       try {
-        gameEventManager.emit(GameEventType.TUMBLE_SEQUENCE_DONE, { totalWin: cumulativeWin } as any);
+        let totalWinForEvent = cumulativeWin;
+        // Base game: single-spin total from backend / spin data (not running tumble sum only)
+        if (!gameStateManager.isBonus) {
+          try {
+            const slot: any = this.currentSpinData?.slot;
+            const tw = Number(slot?.totalWin);
+            if (Number.isFinite(tw) && tw > 0) {
+              totalWinForEvent = tw;
+            } else {
+              let pl = 0;
+              if (Array.isArray(slot?.paylines) && slot.paylines.length > 0) {
+                pl = this.calculateTotalWinFromPaylines(slot.paylines);
+              }
+              const tmb = this.calculateTotalWinFromTumbles(tumbles);
+              if (pl + tmb > 0) {
+                totalWinForEvent = pl + tmb;
+              }
+            }
+          } catch { }
+        }
+        gameEventManager.emit(GameEventType.TUMBLE_SEQUENCE_DONE, { totalWin: totalWinForEvent } as any);
       } catch { }
     } finally {
       this.tumbleInProgress = false;

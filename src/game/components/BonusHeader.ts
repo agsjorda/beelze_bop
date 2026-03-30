@@ -714,7 +714,17 @@ export class BonusHeader {
 		gameEventManager.on(GameEventType.TUMBLE_WIN_PROGRESS, (data: any) => {
 			try {
 				if (!gameStateManager.isBonus) return;
-				const amount = Number((data as any)?.cumulativeWin ?? 0);
+				const d = data as any;
+				// Per tumble: show this step's win only (not cumulative). Legacy payloads omit tumbleWin.
+				let amount = 0;
+				if (typeof d?.tumbleWin === 'number') {
+					if (d.tumbleWin <= 0) {
+						return;
+					}
+					amount = d.tumbleWin;
+				} else {
+					amount = Number(d?.cumulativeWin ?? 0);
+				}
 				if (amount > 0) {
 					// As soon as tumble wins start, we are in the "YOU WON" phase for this spin.
 					// Never show "TOTAL WIN" on tumble updates; that label is reserved for the

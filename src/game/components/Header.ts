@@ -120,9 +120,18 @@ export class Header {
 				if (gameStateManager.isBonus) {
 					return;
 				}
-				const amount = Number((data as any)?.cumulativeWin ?? 0);
+				const d = data as any;
+				// Per tumble: show this step's win only (not cumulative). Legacy payloads omit tumbleWin.
+				let amount = 0;
+				if (typeof d?.tumbleWin === 'number') {
+					if (d.tumbleWin <= 0) {
+						return;
+					}
+					amount = d.tumbleWin;
+				} else {
+					amount = Number(d?.cumulativeWin ?? 0);
+				}
 				if (amount > 0) {
-					// Ensure label shows YOU WON while accumulating
 					if (this.youWonText) this.youWonText.setText(this.getWinBarText(WINBAR_YOU_WON));
 					this.showWinningsDisplay(amount);
 				}
