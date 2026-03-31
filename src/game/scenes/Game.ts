@@ -1035,6 +1035,16 @@ export class Game extends Scene {
 			this.gameAPI.setUnresolvedSpinUuid(unresolved.uuid);
 			this.symbols.currentSpinData = unresolved.response;
 
+			// Unresolved continuation can inherit intermediate scatter scales from prior transitions.
+			// Clear one-shot skip flag and force a normalization pass before bonus UI resumes.
+			try {
+				(this as any).__skipScatterResetOnNextEnableSymbols = false;
+				void this.symbols?.forceScatterResetImmediate?.();
+				this.symbols?.ensureScatterSymbolsVisible?.();
+				(this.symbols as any)?.container?.setVisible?.(true);
+				(this.symbols as any)?.container?.setAlpha?.(1);
+			} catch { }
+
 			this.events.emit('setBonusMode', true);
 			this.events.emit('showBonusBackground');
 			this.events.emit('showBonusHeader');
@@ -1578,6 +1588,7 @@ export class Game extends Scene {
 			// Show bonus background
 			if (this.bonusBackground) {
 				this.bonusBackground.getContainer().setVisible(true);
+				this.bonusBackground.setBonusCoverVisible(true);
 				console.log('[Game] Bonus background shown');
 				console.log('[Game] Bonus background container visible:', this.bonusBackground.getContainer().visible);
 			} else {
@@ -1627,6 +1638,7 @@ export class Game extends Scene {
 
 			// Hide bonus background
 			if (this.bonusBackground) {
+				this.bonusBackground.setBonusCoverVisible(false);
 				this.bonusBackground.getContainer().setVisible(false);
 				console.log('[Game] Bonus background hidden');
 			}

@@ -1186,7 +1186,13 @@ export class Symbols {
             }
             delete (symbol as any).__pausedMultiplierWin;
           } else if ((symbol as any).animationState.clearTracks) {
-            (symbol as any).animationState.clearTracks();
+            // During pre-spin drop, keep symbols in idle while waiting for each row's
+            // delayed drop start; clearing tracks here causes a visible freeze.
+            if (this.preSpinDropInProgress) {
+              this.playIdleAnimationIfAvailable(symbol);
+            } else {
+              (symbol as any).animationState.clearTracks();
+            }
           }
         } catch { /* ignore */ }
       }
@@ -3219,6 +3225,18 @@ export class Symbols {
 
     this.preSpinDropInProgress = true;
     this.preSpinDropRowPromises.clear();
+    // Keep symbols visually alive while waiting for their staggered drop turn.
+    try {
+      for (let col = 0; col < this.symbols.length; col++) {
+      const column = this.symbols[col];
+      if (!Array.isArray(column)) continue;
+      for (let row = 0; row < column.length; row++) {
+        const symbol = column[row];
+        if (!symbol || (symbol as any).destroyed) continue;
+        this.playIdleAnimationIfAvailable(symbol);
+      }
+      }
+    } catch { }
     const runPromise = (async () => {
       const rowPromises: Promise<void>[] = [];
       const bonusPreDropDelay = gameStateManager.isBonus
@@ -3476,11 +3494,12 @@ export class Symbols {
         ? (isTurbo ? 0.7 : 0.4)
         : 1;
 
-      // During scatter transitions, immediately dispose symbols without animation
-      // to avoid conflicts with special transition sequences
-      // NOTE: Removed isBuyFeatureSpin check to allow first bonus spin to animate normally
-      const shouldSkipAnimation = gameStateManager.isScatter ||
-                                   this.scatterRetriggerAnimationInProgress;
+      // During base-game scatter transitions and retrigger sequences, immediately dispose
+      // symbols without animation to avoid conflicts with special transition sequences.
+      // In bonus mode, pre-spin drops should still animate even if isScatter lingers true.
+      const shouldSkipAnimation =
+        ((!gameStateManager.isBonus && gameStateManager.isScatter) ||
+          this.scatterRetriggerAnimationInProgress);
 
       if (shouldSkipAnimation) {
         // Use immediate disposal for maximum performance
@@ -3859,10 +3878,67 @@ export class Symbols {
         idleAnimName = 'Symbol10_BZ_idle';
       }
 
+      this.configureIdleDropAnimationMix(animState, idleAnimName, dropAnimName);
+      const currentName = this.getCurrentTrackAnimationName(animState, 0);
+      if (currentName === dropAnimName) {
+        return;
+      }
+
       animState.setAnimation(0, dropAnimName, false);
       animState.addAnimation(0, idleAnimName, true, 0);
     } catch (e) {
       console.warn('[Symbols] Failed to play drop animation:', e);
+    }
+  }
+
+  private playIdleAnimationIfAvailable(obj: any): void {
+  if (!obj) return;
+  const animState = (obj as any)?.animationState;
+  if (!animState?.setAnimation) return;
+
+  try {
+    const value = (obj as any)?.symbolValue;
+    if (value === undefined || value === null) return;
+
+    let idleAnimName = `Symbol${value}_BZ_idle`;
+    if (MultiplierSymbols.isMultiplier(value)) {
+    idleAnimName = 'Symbol10_BZ_idle';
+    }
+
+    const dropAnimName = MultiplierSymbols.isMultiplier(value)
+      ? 'Symbol10_BZ_drop'
+      : `Symbol${value}_BZ_drop`;
+    this.configureIdleDropAnimationMix(animState, idleAnimName, dropAnimName);
+    const currentName = this.getCurrentTrackAnimationName(animState, 0);
+    if (currentName === idleAnimName) {
+      return;
+    }
+
+    animState.setAnimation(0, idleAnimName, true);
+  } catch (e) {
+    console.warn('[Symbols] Failed to play idle animation:', e);
+  }
+  }
+
+  private configureIdleDropAnimationMix(animState: any, idleAnimName: string, dropAnimName: string): void {
+    try {
+      const mixData = animState?.data;
+      if (!mixData?.setMix) return;
+      const MIX_DURATION_SEC = 0.08;
+      mixData.setMix(idleAnimName, dropAnimName, MIX_DURATION_SEC);
+      mixData.setMix(dropAnimName, idleAnimName, MIX_DURATION_SEC);
+    } catch { }
+  }
+
+  private getCurrentTrackAnimationName(animState: any, trackIndex: number = 0): string | null {
+    try {
+      const currentTrack = animState?.getCurrent?.(trackIndex);
+      const animationName = currentTrack?.animation?.name;
+      return typeof animationName === 'string' && animationName.length > 0
+        ? animationName
+        : null;
+    } catch {
+      return null;
     }
   }
 

@@ -256,11 +256,6 @@ export class BonusBackground {
 		scene.events.on('setBonusMode', (isBonus: boolean) => {
 			console.log(`[BonusBackground] Bonus mode changed to: ${isBonus}`);
 			
-			if (this.bonusBgCover) {
-				this.bonusBgCover.setVisible(isBonus);
-				console.log(`[BonusBackground] Bonus bg cover visibility: ${isBonus}`);
-			}
-			
 			// if (this.bonusSpine) {
 			// 	this.bonusSpine.setVisible(isBonus);
 			// 	if (isBonus) {
@@ -278,16 +273,19 @@ export class BonusBackground {
 			// }
 		});
 
-		// Set initial visibility based on current bonus state
-		const isBonus = gameStateManager.isBonus;
-		
+		// Keep cover hidden until explicit showBonusBackground/hideBonusBackground events.
 		if (this.bonusBgCover) {
-			this.bonusBgCover.setVisible(isBonus);
-			console.log(`[BonusBackground] Initial bonus bg cover visibility: ${isBonus} (isBonus: ${isBonus})`);
+			this.bonusBgCover.setVisible(false);
+			console.log('[BonusBackground] Initial bonus bg cover visibility: false');
 		}
-		
+		const isBonus = gameStateManager.isBonus;
 		if (this.bonusSpine) {
 			this.bonusSpine.setVisible(isBonus);
 		}
+	}
+
+	public setBonusCoverVisible(visible: boolean): void {
+		if (!this.bonusBgCover) return;
+		this.bonusBgCover.setVisible(visible);
 	}
 }
