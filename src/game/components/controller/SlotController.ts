@@ -21,6 +21,7 @@ import { BalanceController } from './BalanceController';
 import { CurrencyManager } from '../CurrencyManager';
 import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
 import { localizationManager } from '../../../managers/LocalizationManager';
+import { showPopup, PopupType } from '../../../managers/PopupManager';
 import {
 	COMMON_BET,
 	CONTROLLER_AUTOPLAY,
@@ -251,16 +252,11 @@ export class SlotController {
 	private showOutOfBalancePopup(message?: string): void {
 		const scene = this.scene as Scene | null;
 		if (!scene) return;
-		import('../OutOfBalancePopup').then(module => {
-			const Popup = module.OutOfBalancePopup;
-			this.outOfBalancePopup = new Popup(scene, 0, 0, {
-				onClose: () => {
-					this.refreshControlsAfterOutOfBalancePopupClose();
-				}
-			});
-			if (message) this.outOfBalancePopup.updateMessage(message);
-			this.outOfBalancePopup.show();
-		}).catch(() => {});
+		showPopup(PopupType.OUT_OF_BALANCE, {
+			scene,
+			message,
+			onClose: () => this.refreshControlsAfterOutOfBalancePopupClose(),
+		});
 	}
 
 	private refreshControlsAfterOutOfBalancePopupClose(): void {
