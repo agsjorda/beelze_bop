@@ -1204,6 +1204,18 @@ export class Menu {
         // Helper to update slider positions and values
         const updateSliders = (musicX: number | null = null, sfxX: number | null = null) => {
             const sliderWidth = widthSlider * scaleFactor;
+            const syncToggleFromVolume = (
+                vol: number,
+                isOn: boolean,
+                draw: (on: boolean) => void
+            ): boolean => {
+                const displayedPercent = Math.round(vol * 100);
+                const shouldBeOn = displayedPercent >= 1;
+                if (isOn !== shouldBeOn) {
+                    draw(shouldBeOn);
+                }
+                return shouldBeOn;
+            };
 
             const musicVol = musicX !== null ? 
                 Math.max(0, Math.min(1, musicX / sliderWidth)) : 
@@ -1225,19 +1237,12 @@ export class Menu {
             musicSliderBg.fillRoundedRect(sliderStartX, musicSliderY, sliderWidth * musicVol, 8 * scaleFactor, 4 * scaleFactor);
             musicValue.setText(Math.round(musicVol * 100) + '%');
 
-            // Sync music toggle state with slider value
-            // If slider reaches 0%, force toggle OFF; if >0%, ensure toggle ON
-            if (musicVol === 0) {
-                if (musicOn) {
-                    musicOn = false;
-                    drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
-                }
-            } else {
-                if (!musicOn) {
-                    musicOn = true;
-                    drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
-                }
-            }
+            // Keep music toggle state synced to slider value.
+            musicOn = syncToggleFromVolume(
+                musicVol,
+                musicOn,
+                (on) => drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, on)
+            );
             
             // Update SFX slider
             const sfxSliderX = sliderStartX + (sfxVol * sliderWidth);
@@ -1250,18 +1255,12 @@ export class Menu {
             sfxSliderBg.fillRoundedRect(sliderStartX, sfxSliderY, sliderWidth * sfxVol, 8 * scaleFactor, 4 * scaleFactor);
             sfxValue.setText(Math.round(sfxVol * 100) + '%');
 
-            // Sync SFX toggle with slider value
-            if (sfxVol === 0) {
-                if (sfxOn) {
-                    sfxOn = false;
-                    drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 190, sfxOn);
-                }
-            } else {
-                if (!sfxOn) {
-                    sfxOn = true;
-                    drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 190, sfxOn);
-                }
-            }
+            // Keep SFX toggle state synced to slider value.
+            sfxOn = syncToggleFromVolume(
+                sfxVol,
+                sfxOn,
+                (on) => drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 190, on)
+            );
 
             // Update volumes
             if (musicX !== null) scene.audioManager.setVolume(musicVol);

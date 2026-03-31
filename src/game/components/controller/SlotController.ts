@@ -1242,6 +1242,12 @@ export class SlotController {
 		const featureButton = this.buttons.get('feature');
 
 		if (featureButton) {
+			// Keep Buy Feature disabled while amplify/enhanced bet is active.
+			if (this.gameData?.isEnhancedBet) {
+				this.disableFeatureButton();
+				console.log('[SlotController] Skipping feature enable (enhanced bet active)');
+				return;
+			}
 			// Guard: do not re-enable during bonus or before explicit allow
 			if (gameStateManager.isBonus || !this.canEnableFeatureButton) {
 				console.log('[SlotController] Skipping feature enable (bonus active or not allowed yet)');
