@@ -1,4 +1,5 @@
 import type { Scene } from 'phaser';
+import { gameEventManager, GameEventType } from '../event/EventManager';
 
 export enum PopupType {
 	TOKEN_EXPIRED = 'TOKEN_EXPIRED',
@@ -72,7 +73,13 @@ async function loadPopup(type: PopupType, scene: Scene, opts?: { onClose?: () =>
 				clearCurrentPopupIfType(PopupType.BET_FAILED);
 				try { opts?.onClose?.(); } catch {}
 			};
-			return new m.BetFailedPopup(scene as any, 0, 0, { onClose: combinedOnClose }) as any;
+			const popup = new m.BetFailedPopup(scene as any, 0, 0, { onClose: combinedOnClose }) as any;
+			const originalShow = popup.show.bind(popup);
+			popup.show = () => {
+				originalShow();
+				gameEventManager.emit(GameEventType.BET_FAILED_ERROR);
+			};
+			return popup;
 		}
 		default:
 			throw new Error(`Unknown PopupType: ${String(type)}`);

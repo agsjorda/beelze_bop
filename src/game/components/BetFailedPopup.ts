@@ -104,7 +104,7 @@ export class BetFailedPopup extends GameObjects.Container {
 		this.buttonImage.setInteractive({ useHandCursor: true });
 		this.buttonImage.on('pointerdown', () => {
 			try { (window as any).audioManager?.playSoundEffect?.('button_fx'); } catch {}
-			this.hide(() => this.onCloseCallback?.());
+			this.hide();
 		});
 		this.buttonImage.on('pointerover', () => this.buttonImage.setTint(0xcccccc));
 		this.buttonImage.on('pointerout', () => this.buttonImage.clearTint());
@@ -146,6 +146,7 @@ export class BetFailedPopup extends GameObjects.Container {
 			onComplete: () => {
 				this.setVisible(false);
 				this.overlay.setVisible(false);
+				try { this.onCloseCallback?.(); } catch {}
 				if (callback) callback();
 			},
 		});

@@ -9,6 +9,8 @@ export enum GameEventType {
   REELS_STOP = 'REELS_STOP',
   WIN_START = 'WIN_START',
   WIN_STOP = 'WIN_STOP',
+  /** Emitted after the bet-failed error popup is shown (e.g. DJ400BF). */
+  BET_FAILED_ERROR = 'BET_FAILED_ERROR',
   // Tumble-specific win progress events
   TUMBLE_WIN_PROGRESS = 'TUMBLE_WIN_PROGRESS',   // payload: { cumulativeWin: number; tumbleWin?: number } (tumbleWin = this tumble step only)
   TUMBLE_SEQUENCE_DONE = 'TUMBLE_SEQUENCE_DONE', // payload: { totalWin: number }

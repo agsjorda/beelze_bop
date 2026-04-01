@@ -3088,6 +3088,18 @@ export class SlotController {
 			console.log('[SlotController] Autoplay UI reset completed');
 		});
 
+		// Stop autoplay if a bet-failed error popup is shown.
+		gameEventManager.on(GameEventType.BET_FAILED_ERROR, () => {
+			const isAutoplayActive =
+				this.getAutoplaySpinsRemaining() > 0 ||
+				gameStateManager.isAutoPlaying ||
+				!!this.getGameData()?.isAutoPlaying;
+
+			if (!isAutoplayActive) return;
+
+			this.stopAutoplay();
+		});
+
 
 		// Listen for when reels stop spinning to enable spin button for manual spins
 		gameEventManager.on(GameEventType.WIN_STOP, () => {
