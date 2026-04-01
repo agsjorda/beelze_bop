@@ -298,7 +298,7 @@ export class Menu {
 
         // Create main menu container
         const menuContainer = scene.add.container(0, 0) as ButtonContainer;
-        menuContainer.setDepth(2000);
+        menuContainer.setDepth(10000);
         menuContainer.setVisible(false);
         menuContainer.setAlpha(0);
 

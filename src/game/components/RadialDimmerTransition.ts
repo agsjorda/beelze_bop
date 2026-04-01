@@ -65,7 +65,7 @@ export class RadialDimmerTransition {
 		this.overlay.setMask(mask);
 
 		// Set high depth to ensure overlay is in front
-		this.overlay.setDepth(10000);
+		this.overlay.setDepth(9500);
 
 		// Make overlay visible
 		this.overlay.setVisible(true);

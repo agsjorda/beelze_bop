@@ -120,7 +120,7 @@ export class BonusHeader {
 	}
 
 	// Depth above RadialLightTransition overlay (20000) so Total win stays visible during candy/radial light
-	private static readonly WIN_BAR_DEPTH = 20001;
+	private static readonly WIN_BAR_DEPTH = 602;
 
 	private getWinBarText(key: string): string {
 		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;

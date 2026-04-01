@@ -175,7 +175,7 @@ export class Dialogs {
 
 		// Create main dialog overlay container
 		this.dialogOverlay = scene.add.container(0, 0);
-		this.dialogOverlay.setDepth(12000); // Very high depth to cover everything
+		this.dialogOverlay.setDepth(9700); // Very high depth to cover everything
 		this.dialogOverlay.setVisible(false); // Hidden by default
 
 		// Create black overlay background just behind dialog overlay

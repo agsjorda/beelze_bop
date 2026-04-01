@@ -26,7 +26,7 @@ export class RadialLightTransition {
 		this.overlay = this.scene.add.graphics();
 		this.maskShape = this.scene.make.graphics();
 
-		this.overlay.setDepth(20000);
+		this.overlay.setDepth(9500);
 		this.overlay.setVisible(true);
 
 		this.updateBounds();

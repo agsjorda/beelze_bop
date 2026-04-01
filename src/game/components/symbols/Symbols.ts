@@ -1189,7 +1189,9 @@ export class Symbols {
             // During pre-spin drop, keep symbols in idle while waiting for each row's
             // delayed drop start; clearing tracks here causes a visible freeze.
             if (this.preSpinDropInProgress) {
-              this.playIdleAnimationIfAvailable(symbol);
+              if (!this.shouldPreserveSymbolAnimationDuringPreSpinDrop(symbol)) {
+                this.playIdleAnimationIfAvailable(symbol);
+              }
             } else {
               (symbol as any).animationState.clearTracks();
             }
@@ -3233,6 +3235,7 @@ export class Symbols {
       for (let row = 0; row < column.length; row++) {
         const symbol = column[row];
         if (!symbol || (symbol as any).destroyed) continue;
+        if (this.shouldPreserveSymbolAnimationDuringPreSpinDrop(symbol)) continue;
         this.playIdleAnimationIfAvailable(symbol);
       }
       }
@@ -3580,12 +3583,18 @@ export class Symbols {
             try {
               const current = this.symbols?.[col]?.[rowIndex];
               if (current && !(current as any).destroyed) {
-                this.playDropAnimationIfAvailable(current);
+                if (!this.shouldPreserveSymbolAnimationDuringPreSpinDrop(current)) {
+                  this.playDropAnimationIfAvailable(current);
+                }
               }
             } catch { }
           });
         } else {
-          try { this.playDropAnimationIfAvailable(baseObj); } catch { }
+          try {
+            if (!this.shouldPreserveSymbolAnimationDuringPreSpinDrop(baseObj)) {
+              this.playDropAnimationIfAvailable(baseObj);
+            }
+          } catch { }
         }
 
         const tweens: any[] = [
@@ -3918,6 +3927,32 @@ export class Symbols {
   } catch (e) {
     console.warn('[Symbols] Failed to play idle animation:', e);
   }
+  }
+
+  /**
+   * Keep multiplier/symbol10 win pose alive during pre-spin drop if it already
+   * played its win animation in the current spin.
+   */
+  private shouldPreserveSymbolAnimationDuringPreSpinDrop(obj: any): boolean {
+    if (!obj) return false;
+    // Preserve during the whole pre-spin window:
+    // - right after SPIN cleanup (before pre-spin drop starts)
+    // - while pre-spin drop is actively running
+    const isInPreSpinWindow = this.preSpinDropInProgress || !this.spinDataResponseReceivedForCurrentSpin;
+    if (!isInPreSpinWindow) return false;
+    if (!(obj as any).__symbol10WinPlayedThisSpin) return false;
+    const value = (obj as any)?.symbolValue;
+    return value !== undefined && value !== null && MultiplierSymbols.isMultiplier(value);
+  }
+
+  private markSymbol10WinPlayedThisSpin(obj: any, winAnimName?: string): void {
+    if (!obj) return;
+    const value = (obj as any)?.symbolValue;
+    const isMultiplier = value !== undefined && value !== null && MultiplierSymbols.isMultiplier(value);
+    const isSymbol10WinAnim = winAnimName === 'Symbol10_BZ_win';
+    if (isMultiplier || isSymbol10WinAnim) {
+      (obj as any).__symbol10WinPlayedThisSpin = true;
+    }
   }
 
   private configureIdleDropAnimationMix(animState: any, idleAnimName: string, dropAnimName: string): void {
@@ -4324,6 +4359,7 @@ export class Symbols {
               const fallbackMs = Math.max(900, this.scene?.gameData?.winUpDuration ?? 900);
               this.scene.time.delayedCall(fallbackMs, () => startFlyingOverlay());
             }
+            this.markSymbol10WinPlayedThisSpin(obj, winAnim);
             animState.setAnimation(0, winAnim, false);
           } catch {
             safeResolve();
@@ -4885,6 +4921,7 @@ export class Symbols {
                         }
                         this.showMultiplierOverlay(obj);
                       }
+                      this.markSymbol10WinPlayedThisSpin(obj, winAnim);
                       obj.animationState.setAnimation(0, winAnim, false);
                       // Log the tumble index when win animation starts
                       console.log(`[Symbols] Playing win animation "${winAnim}" for tumble index: ${tumbleIndex}`);
