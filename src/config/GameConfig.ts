@@ -28,6 +28,7 @@ export const MAX_IDLE_TIME_MINUTES: number = 5; // 5 minutes (set to 0.25 for 15
 // =============================================================================
 export const SLOT_COLUMNS: number = 6; // number of columns (vertical reels)
 export const SLOT_ROWS: number = 5; // number of rows (horizontal)
+export const STARTING_BET_INDEX: number = 4;
 
 /** Symbol reel center: slotY = scene.scale.height * GRID_CENTER_Y_RATIO + GRID_CENTER_Y_OFFSET_PX */
 export const GRID_CENTER_Y_RATIO = 0.56;

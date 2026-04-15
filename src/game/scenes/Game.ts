@@ -19,7 +19,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
-import { GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX, MAX_IDLE_TIME_MINUTES, MIN_CLUSTER_SIZE } from '../../config/GameConfig';
+import { GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX, MAX_IDLE_TIME_MINUTES, MIN_CLUSTER_SIZE, STARTING_BET_INDEX } from '../../config/GameConfig';
 import { PaylineData } from '../../backend/SpinData';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { Symbols } from '../components/symbols/index';
@@ -955,9 +955,13 @@ export class Game extends Scene {
 
 	private initializeBetAmoung() {
 		try {
-			const firstBet = this.gameData.betLevels.length > 0
-				? Number(this.gameData.betLevels[0])
-				: 0.20;
+			const firstBet =
+				this.gameData.betLevels.length > 0
+					? Number(
+						this.gameData.betLevels[STARTING_BET_INDEX] ??
+						this.gameData.betLevels[0]
+					)
+					: 0.20;
 
 			const previousBet = this.slotController?.getBaseBetAmount?.() ?? 0.20;
 

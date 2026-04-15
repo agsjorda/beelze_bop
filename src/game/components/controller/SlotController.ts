@@ -6,7 +6,7 @@ import { GameData, setSpeed } from "../GameData";
 import { gameEventManager, GameEventType } from '../../../event/EventManager';
 import { gameStateManager } from '../../../managers/GameStateManager';
 import { TurboConfig } from '../../../config/TurboConfig';
-import { LOADING_SPINNER_ENABLED, LOADING_SPINNER_SIMULATE_MIN_DISPLAY_MS, GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX } from '../../../config/GameConfig';
+import { LOADING_SPINNER_ENABLED, LOADING_SPINNER_SIMULATE_MIN_DISPLAY_MS, GRID_CENTER_Y_RATIO, GRID_CENTER_Y_OFFSET_PX, STARTING_BET_INDEX } from '../../../config/GameConfig';
 import { GameAPI } from '../../../backend/GameAPI';
 import { SpinData, SpinDataUtils } from '../../../backend/SpinData';
 import { Symbols } from '../symbols/index';
@@ -1817,11 +1817,16 @@ export class SlotController {
 		this.betLabelContainer.setX(betX - totalWidth / 2);
 		this.controllerContainer.add(this.betLabelContainer);
 
+		const startingBetLevel =
+			this.getBetLevels()[STARTING_BET_INDEX] ??
+			this.getBetLevels()[0] ??
+			0.2;
+
 		// "0.20" amount (2nd line, no currency prefix)
 		this.betAmountText = scene.add.text(
 			betX,
 			betY + 8,
-			'0.20',
+			formatCurrencyNumber(startingBetLevel),
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
@@ -1869,7 +1874,7 @@ export class SlotController {
 		});
 
 		// Initialize base bet amount
-		this.baseBetAmount = 0.20;
+		this.baseBetAmount = startingBetLevel;
 
 		// Hide old currency text (kept for compatibility but not visible)
 		this.betDollarText = scene.add.text(
