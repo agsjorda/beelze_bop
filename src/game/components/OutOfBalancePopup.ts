@@ -17,6 +17,7 @@ export class OutOfBalancePopup extends GameObjects.Container {
     private animationDuration: number = 300;
     private overlay: Phaser.GameObjects.Graphics;
     private onCloseCallback?: () => void;
+    private onHideCallback?: () => void;
 
     constructor(scene: Scene, x: number = 0, y: number = 0, options: {
         opacity?: number,
@@ -25,7 +26,9 @@ export class OutOfBalancePopup extends GameObjects.Container {
         buttonScale?: number,
         overlayColor?: number,
         overlayAlpha?: number,
-        onClose?: () => void
+        onClose?: () => void,
+        /** Called when the popup is hidden (e.g. user clicked OK). Use with PopupManager. */
+        onHideCallback?: () => void;
     } = {}) {
         super(scene, x, y);
         this.scene = scene;
@@ -56,6 +59,9 @@ export class OutOfBalancePopup extends GameObjects.Container {
         }
         if (options.onClose !== undefined) {
             this.onCloseCallback = options.onClose;
+        }
+        if (options.onHideCallback !== undefined) {
+            this.onHideCallback = options.onHideCallback;
         }
 
         this.background = new Phaser.GameObjects.Graphics(scene);
@@ -160,6 +166,7 @@ export class OutOfBalancePopup extends GameObjects.Container {
             onComplete: () => {
                 this.setVisible(false);
                 this.overlay.setVisible(false);
+                this.onHideCallback?.();
                 if (callback) callback();
             }
         });
@@ -221,4 +228,3 @@ export class OutOfBalancePopup extends GameObjects.Container {
         super.destroy(fromScene);
     }
 }
-

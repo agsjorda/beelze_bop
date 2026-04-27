@@ -21,7 +21,7 @@ import { BalanceController } from './BalanceController';
 import { CurrencyManager } from '../CurrencyManager';
 import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
 import { localizationManager } from '../../../managers/LocalizationManager';
-import { showPopup, PopupType } from '../../../managers/PopupManager';
+import { showPopup, PopupType, clearCurrentPopup } from '../../../managers/PopupManager';
 import {
 	COMMON_BET,
 	CONTROLLER_AUTOPLAY,
@@ -35,6 +35,10 @@ import {
 } from './index';
 
 export class SlotController {
+	// Disabled style (should be consistent across autoplay/feature/amplify per product spec)
+	private static readonly DISABLED_UI_ALPHA = 0.8;
+	private static readonly DISABLED_UI_TINT = 0x666666;
+
 	private controllerContainer!: Phaser.GameObjects.Container;
 	private controllerVerticalOffset: number = 0;
 	// Horizontal offset for SlotController container
@@ -165,6 +169,11 @@ export class SlotController {
 	// Set when TotalW_BZ is shown; consumed when that dialog fully closes.
 	private pendingTotalWinBalanceFinalize: boolean = false;
 
+	/** Explicit HUD locks while option modals or buy-feature drawer are open */
+	private uiModalAutoplayOptionsOpen = false;
+	private uiModalBetOptionsOpen = false;
+	private uiModalBuyFeatureDrawerOpen = false;
+
 	// Debug: visualize button hitboxes (red outlines)
 	private showButtonHitboxes: boolean = false;
 	private buttonHitboxGraphics: Phaser.GameObjects.Graphics | null = null;
@@ -196,8 +205,10 @@ export class SlotController {
 			disableTurboButton: () => this.disableTurboButton(),
 			enableBetBackgroundInteraction: (reason: string) => this.enableBetBackgroundInteraction(reason),
 			disableBetBackgroundInteraction: (reason: string) => this.disableBetBackgroundInteraction(reason),
-			showOutOfBalancePopup: () => this.showOutOfBalancePopup(),
 			updateSpinButtonState: () => this.updateSpinButtonState(),
+			updateFeatureButtonState: () => this.updateFeatureButtonState(),
+			updateAutoplayButtonState: () => this.updateAutoplayButtonState(),
+			onBuyFeatureDrawerClosed: () => this.onBuyFeatureDrawerDismissed(),
 		});
 		
 		// Listen for autoplay state changes
@@ -249,35 +260,33 @@ export class SlotController {
 		this.loadingSpinner.hide();
 	}
 
+	/**
+	 * Only for an actual spin attempt: manual spin (spin button) or the next autoplay spin,
+	 * both via handleSpin(). Do not call from passive balance sync or buy feature.
+	 */
 	private showOutOfBalancePopup(message?: string): void {
 		const scene = this.scene as Scene | null;
 		if (!scene) return;
-		showPopup(PopupType.OUT_OF_BALANCE, {
-			scene,
-			message,
-			onClose: () => this.refreshControlsAfterOutOfBalancePopupClose(),
+		showPopup(PopupType.OUT_OF_BALANCE, (registerHide) => {
+			import('../OutOfBalancePopup').then((module) => {
+				const Popup = module.OutOfBalancePopup;
+				this.outOfBalancePopup = new Popup(scene, 0, 0, {
+					onHideCallback: () => clearCurrentPopup(),
+					onClose: () => {
+						this.enableSpinButton();
+						this.updateFeatureButtonState();
+					},
+				});
+				if (message) this.outOfBalancePopup.updateMessage(message);
+				this.outOfBalancePopup.show();
+				registerHide((cb) =>
+					this.outOfBalancePopup?.hide(() => {
+						clearCurrentPopup();
+						if (cb) cb();
+					})
+				);
+			}).catch(() => {});
 		});
-	}
-
-	private refreshControlsAfterOutOfBalancePopupClose(): void {
-		this.updateSpinButtonState();
-
-		const gsmAny: any = gameStateManager as any;
-		const isInFreeSpinRound = gsmAny.isInFreeSpinRound === true;
-		if (
-			this.isSpinLocked ||
-			gameStateManager.isScatter ||
-			(gameStateManager.isBonus && !isInFreeSpinRound) ||
-			gameStateManager.isReelSpinning ||
-			gameStateManager.isProcessingSpin ||
-			(this.balanceController?.hasPendingBalanceUpdate() ?? false)
-		) {
-			console.log('[SlotController] Skipping out-of-balance control refresh (blocked game state still active)');
-			return;
-		}
-
-		this.updateAllAuxiliaryButtonStates();
-		this.updateFeatureButtonState();
 	}
 
 	/**
@@ -446,6 +455,7 @@ export class SlotController {
 		}
 		
 		this.updateSpinButtonState();
+		this.updateAutoplayButtonState();
 		// Don't re-enable auxiliary buttons if buy feature flow is active
 		if (!this.isBuyFeatureControlsLocked()) {
 			this.enableAutoplayButton();
@@ -453,8 +463,10 @@ export class SlotController {
 			this.enableBetButtons(true);
 			this.enableTurboButton();
 			this.enableAmplifyButton();
+			this.enableBetBackgroundInteraction('spin failure');
 		}
-		this.enableFeatureButton();
+		// Respect buy-feature affordability — do not call enableFeatureButton() (it skips price vs balance).
+		this.updateFeatureButtonState();
 	}
 
 	/**
@@ -558,6 +570,9 @@ export class SlotController {
 	 * Re-enable interaction on the bet background that opens the bet options panel.
 	 */
 	private enableBetBackgroundInteraction(reason: string = ''): void {
+		if (this.uiModalAutoplayOptionsOpen || this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen) {
+			return;
+		}
 		// Keep bet panel closed during free round spins until the round is finished
 		const gsmAny: any = gameStateManager as any;
 		if (gsmAny.isInFreeSpinRound === true) {
@@ -578,6 +593,69 @@ export class SlotController {
 		if (this.betAmountText) {
 			this.betAmountText.setInteractive();
 		}
+	}
+
+	/**
+	 * Autoplay options panel open/close — explicit HUD disable per slot-controller UI rules.
+	 */
+	public setAutoplayOptionsModalOpen(open: boolean): void {
+		this.uiModalAutoplayOptionsOpen = open;
+		if (open) {
+			this.disableFeatureButton();
+			this.disableAmplifyButton();
+			this.disableBetButtons();
+			this.disableBetBackgroundInteraction('autoplay options modal');
+		} else {
+			this.refreshUiAfterModalClose();
+		}
+	}
+
+	/**
+	 * Bet options panel open/close — spin, autoplay, feature, amplify, bet HUD locked.
+	 */
+	public setBetOptionsModalOpen(open: boolean): void {
+		this.uiModalBetOptionsOpen = open;
+		if (open) {
+			this.disableSpinButton();
+			this.disableAutoplayButton();
+			this.disableFeatureButton();
+			this.disableAmplifyButton();
+			this.disableBetButtons();
+			this.disableBetBackgroundInteraction('bet options modal');
+		} else {
+			this.refreshUiAfterModalClose();
+		}
+	}
+
+	/** True while any slot HUD modal lock from setAutoplayOptionsModalOpen / setBetOptionsModalOpen / buy drawer is active. */
+	public isSlotModalOpen(): boolean {
+		return this.uiModalAutoplayOptionsOpen || this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen;
+	}
+
+	/**
+	 * Called when the buy-feature drawer is dismissed without transitioning into spin-lock purchase flow.
+	 */
+	public onBuyFeatureDrawerDismissed(): void {
+		this.uiModalBuyFeatureDrawerOpen = false;
+		if (!this.isBuyFeatureControlsLocked()) {
+			this.refreshUiAfterModalClose();
+		}
+	}
+
+	private refreshUiAfterModalClose(): void {
+		if (this.uiModalAutoplayOptionsOpen || this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen) {
+			return;
+		}
+		this.updateSpinButtonState();
+		this.updateAutoplayButtonState();
+		this.updateTurboButtonState();
+		if (!this.isBuyFeatureControlsLocked()) {
+			this.enableBetBackgroundInteraction('modal closed');
+			this.enableBetButtons();
+			this.enableAmplifyButton();
+		}
+		this.updateFeatureButtonState();
+		this.updateAmplifyButtonStateWithLock();
 	}
 
 	/**
@@ -652,7 +730,6 @@ export class SlotController {
 			getGameData: () => this.getGameData(),
 			getBaseBetAmount: () => this.getBaseBetAmount(),
 			updateBetAmount: (bet: number) => this.updateBetAmount(bet),
-			showOutOfBalancePopup: () => this.showOutOfBalancePopup(),
 		});
 		// Scale the SlotController container to 0.95 (adjust as needed)
 		this.controllerContainer.setScale(0.95);
@@ -675,9 +752,8 @@ export class SlotController {
 			this.networkManager,
 			{
 				getGameData: () => this.getGameData(),
-				// Never force-enable Buy Feature from amplify toggle; it must respect affordability gating.
+				// Never force-enable/disable Buy Feature from amplify toggle; it must respect affordability gating.
 				enableFeatureButton: () => this.updateFeatureButtonState(),
-				// Ditto for "disable" requests from amplify flows: re-evaluate instead of hard-disabling.
 				disableFeatureButton: () => this.updateFeatureButtonState(),
 				applyAmplifyBetIncrease: () => this.applyAmplifyBetIncrease(),
 				restoreOriginalBetAmount: () => this.restoreOriginalBetAmount(),
@@ -1110,6 +1186,10 @@ export class SlotController {
 	 * @param force - If true, bypass spin lock and reel spinning checks (for failure recovery)
 	 */
 	private enableBetButtons(force: boolean = false): void {
+		if (this.uiModalAutoplayOptionsOpen || this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen) {
+			this.disableBetButtons();
+			return;
+		}
 		// Keep bet buttons disabled during free round spins until the round is finished
 		const gsmAny: any = gameStateManager as any;
 		if (gsmAny.isInFreeSpinRound === true) {
@@ -1225,8 +1305,8 @@ export class SlotController {
 		const featureButton = this.buttons.get('feature');
 		
 		if (featureButton) {
-			featureButton.setAlpha(0.5); // Make it semi-transparent/greyed out
-			featureButton.setTint(0x555555); // Apply dark grey tint
+			featureButton.setAlpha(SlotController.DISABLED_UI_ALPHA);
+			featureButton.setTint(SlotController.DISABLED_UI_TINT);
 			featureButton.disableInteractive(); // Disable clicking
 			if (this.featureButtonHitbox) {
 				this.featureButtonHitbox.disableInteractive();
@@ -1236,9 +1316,35 @@ export class SlotController {
 	}
 
 	/**
+	 * HUD buy-feature price is baseBet × 100 (enhanced bet is display-only for BET).
+	 * Never treat the button as affordable until balance is initialized and covers that price.
+	 */
+	private canAffordDisplayedBuyFeaturePrice(): boolean {
+		try {
+			const isBalanceReady = this.balanceController?.hasInitializedBalance() ?? false;
+			if (!isBalanceReady) {
+				return false;
+			}
+			const balance = this.getBalanceAmount() || 0;
+			const baseBet = this.getBaseBetAmount() || 0;
+			const price = baseBet * 100;
+			if (!(price > 0 && Number.isFinite(balance))) {
+				return false;
+			}
+			return balance + 1e-9 >= price;
+		} catch {
+			return false;
+		}
+	}
+
+	/**
 	 * Enable feature button (restore opacity and enable interaction)
 	 */
 	private enableFeatureButton(): void {
+		if (this.uiModalAutoplayOptionsOpen || this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen) {
+			this.disableFeatureButton();
+			return;
+		}
 		const featureButton = this.buttons.get('feature');
 
 		if (featureButton) {
@@ -1256,6 +1362,10 @@ export class SlotController {
 			// Also keep Buy Feature disabled while buy feature flow or free spins are active
 			if (this.isBuyFeatureControlsLocked()) {
 				console.log('[SlotController] Skipping feature enable (buy feature flow active)');
+				return;
+			}
+			if (!this.canAffordDisplayedBuyFeaturePrice()) {
+				this.disableFeatureButton();
 				return;
 			}
 			featureButton.setAlpha(1.0); // Restore full opacity
@@ -2314,7 +2424,7 @@ export class SlotController {
 		// Update bet +/- button states based on the new bet (for min/max greying)
 		this.updateBetLimitButtons(betAmount);
 
-		// Bet changes must immediately re-evaluate control states (spin/feature disable on insufficient balance).
+		// Bet changes must immediately re-evaluate control states.
 		this.updateSpinButtonState();
 	}
 
@@ -3058,6 +3168,16 @@ export class SlotController {
 
 			if (gameStateManager.isBonusExitTransitionActive) {
 				console.log('[SlotController] AUTO_STOP during bonus exit transition - skipping base re-enable');
+				// Ensure we still restore the spin button once the transition completes.
+				// Some flows can emit AUTO_STOP while the black-screen transition is active; if we
+				// return here without a follow-up, spin can remain non-interactive.
+				try {
+					this.scene?.events?.once('bonusTransitionComplete', () => {
+						this.updateSpinButtonState();
+						this.updateAllAuxiliaryButtonStates();
+						this.updateFeatureButtonState();
+					});
+				} catch { }
 				return;
 			}
 			
@@ -3074,7 +3194,7 @@ export class SlotController {
 			}
 			this.updateTurboButtonStateWithLock();
 			this.enableFeatureButton();
-		// Show and resume spin icon after autoplay stops, hide stop icon
+			// Show and resume spin icon after autoplay stops, hide stop icon
 			if (this.spinIcon) {
 				this.spinIcon.setVisible(true);
 			}
@@ -3196,7 +3316,32 @@ export class SlotController {
 			// Autoplay continuation is handled by AutoplayController
 			if (gameStateManager.isAutoPlaying || this.getAutoplaySpinsRemaining() > 0) {
 				console.log('[SlotController] Autoplay continuation handled by AutoplayController');
+				return;
 			}
+
+			// Manual/base-game safety: when the win dialog closes, the spin may already be fully finished
+			// but REELS_STOP/WIN_STOP/AUTO_STOP could have been missed or returned early.
+			// If the game is idle, force a full UI re-evaluation so the spin button cannot remain stuck disabled.
+			try {
+				const gsmAny: any = gameStateManager as any;
+				const inFreeRoundMode = gsmAny.isInFreeSpinRound === true;
+				if (inFreeRoundMode) return;
+				if (gameStateManager.isScatter || gameStateManager.isBonus) return;
+				if (gameStateManager.isReelSpinning || gameStateManager.isProcessingSpin) return;
+				if (gameStateManager.isShowingWinDialog) return;
+
+				this.pendingWinLock = false;
+				try {
+					if (this.balanceController?.hasPendingBalanceUpdate()) {
+						this.balanceController.applyPendingBalanceUpdateIfAny();
+					}
+				} catch {
+					/* noop */
+				}
+				this.updateSpinButtonState();
+				this.updateAllAuxiliaryButtonStates();
+				this.updateFeatureButtonState();
+			} catch { }
 		});
 
 		// Note: SPIN_RESPONSE event listeners removed - now using SPIN_DATA_RESPONSE
@@ -3490,7 +3635,15 @@ export class SlotController {
 	 * Enable the amplify button (enable interaction)
 	 */
 	public enableAmplifyButton(): void {
+		if (this.uiModalAutoplayOptionsOpen || this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen) {
+			this.disableAmplifyButton();
+			return;
+		}
 		if (this.isBuyFeatureControlsLocked()) {
+			this.disableAmplifyButton();
+			return;
+		}
+		if (gameStateManager.isReelSpinning || gameStateManager.isProcessingSpin) {
 			this.disableAmplifyButton();
 			return;
 		}
@@ -3919,14 +4072,39 @@ export class SlotController {
 	 * Disable the autoplay button (grey out and disable interaction)
 	 */
 	public disableAutoplayButton(): void {
-		const disabledAlpha = 0.5;
-		this.disableButtonWithAlpha('autoplay', disabledAlpha);
+		const autoplayButton = this.buttons.get('autoplay');
+		if (autoplayButton) {
+			autoplayButton.setAlpha(SlotController.DISABLED_UI_ALPHA);
+			autoplayButton.setTint(SlotController.DISABLED_UI_TINT);
+			autoplayButton.disableInteractive();
+		}
+	}
+
+	/**
+	 * When autoplay is active, keep the green "on" visuals even if interaction is locked during a spin.
+	 * This prevents a brief "green but dimmed" state when autoplay resumes after scatter/bonus.
+	 */
+	private disableAutoplayButtonKeepOnVisuals(): void {
+		const autoplayButton = this.buttons.get('autoplay');
+		if (!autoplayButton) return;
+		try { autoplayButton.setTexture('autoplay_on'); } catch {}
+		autoplayButton.setAlpha(1.0);
+		autoplayButton.clearTint();
+		autoplayButton.disableInteractive();
 	}
 
 	/**
 	 * Enable the autoplay button (remove grey tint and enable interaction)
 	 */
 	public enableAutoplayButton(): void {
+		if (this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen) {
+			this.disableAutoplayButton();
+			return;
+		}
+		if (gameStateManager.isProcessingSpin || gameStateManager.isReelSpinning) {
+			this.disableAutoplayButton();
+			return;
+		}
 		if (this.isBuyFeatureControlsLocked()) {
 			this.disableAutoplayButton();
 			return;
@@ -3946,11 +4124,15 @@ export class SlotController {
 		const autoplayButton = this.buttons.get('autoplay');
 		if (!autoplayButton) return;
 
-		// Disable autoplay button after cancel while spin/tumbles still running (not during active autoplay)
-		const disableBecauseSpinning = gameStateManager.isReelSpinning && !gameStateManager.isAutoPlaying;
-		if (disableBecauseSpinning || this.isBuyFeatureControlsLocked()) {
+		// Disable autoplay while any spin is in progress (manual or autoplay).
+		// While autoplay is active, keep ON visuals but lock interaction.
+		if (gameStateManager.isProcessingSpin || gameStateManager.isReelSpinning || this.isBuyFeatureControlsLocked()) {
 			console.log(`[SlotController] Disabling autoplay button - isReelSpinning: ${gameStateManager.isReelSpinning}, isAutoPlaying: ${gameStateManager.isAutoPlaying}, buyFeatureControlsLocked: ${this.isBuyFeatureControlsLocked()}`);
-			this.disableAutoplayButton();
+			if (gameStateManager.isAutoPlaying || this.getAutoplaySpinsRemaining() > 0 || this.gameData?.isAutoPlaying) {
+				this.disableAutoplayButtonKeepOnVisuals();
+			} else {
+				this.disableAutoplayButton();
+			}
 		} else {
 			console.log(`[SlotController] Enabling autoplay button`);
 			this.enableAutoplayButton();
@@ -4233,12 +4415,15 @@ export class SlotController {
 					}
 					const currentBet = this.getBaseBetAmount() || 0;
 					const gd = this.getGameData();
-					const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * 1.25 : currentBet;
+					const multRaw = Number(gd?.enhancedBetMultiplier);
+					const mult = Number.isFinite(multRaw) && multRaw > 0 ? multRaw : 1.25;
+					const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * mult : currentBet;
 					if (currentBalance < totalBetToCharge) {
 						console.error(`[SlotController] Insufficient balance for spin: ${currentBalance} < ${totalBetToCharge}`);
 						if (this.autoplayController?.isActive() || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
 							this.stopAutoplay();
 						}
+						// Out-of-balance UI only on spin attempts (manual or autoplay), not on balance reconcile.
 						this.showOutOfBalancePopup();
 						this.reenableControlsOnSpinFailure();
 						return;
@@ -4422,6 +4607,22 @@ export class SlotController {
 	 * Show the buy feature drawer
 	 */
 	private showBuyFeatureDrawer(): void {
+		if (this.uiModalBuyFeatureDrawerOpen) {
+			return;
+		}
+		if (this.uiModalAutoplayOptionsOpen || this.uiModalBetOptionsOpen) {
+			return;
+		}
+		if (this.buyFeatureController.isDrawerVisible()) {
+			return;
+		}
+		this.uiModalBuyFeatureDrawerOpen = true;
+		this.disableSpinButton();
+		this.disableAutoplayButton();
+		this.disableFeatureButton();
+		this.disableAmplifyButton();
+		this.disableBetButtons();
+		this.disableBetBackgroundInteraction('buy feature drawer');
 		this.buyFeatureController.showDrawer();
 	}
 
@@ -5148,6 +5349,10 @@ export class SlotController {
 	 * Enable the spin button
 	 */
 	public enableSpinButton(): void {
+		if (this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen) {
+			this.disableSpinButton();
+			return;
+		}
 		// During autoplay (or about-to-start), keep spin button enabled and not greyed so user can stop autoplay (match felice_in_space)
 		if (gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested) {
 			if (this.spinButtonController) {
@@ -5221,9 +5426,25 @@ export class SlotController {
 			return;
 		}
 
+		// Pending balance is normally applied on WIN_STOP. If that event is missed (e.g. after bonus
+		// return or dialog timing), this flag never clears and the spin button stays disabled forever.
+		// When the spin is fully settled (no reels, no in-flight spin, no win presentation lock), apply now.
 		if (this.balanceController?.hasPendingBalanceUpdate()) {
-			this.disableSpinButton();
-			return;
+			const spinFullySettled =
+				!gameStateManager.isReelSpinning &&
+				!gameStateManager.isProcessingSpin &&
+				!this.pendingWinLock &&
+				!gameStateManager.isShowingWinDialog;
+			if (spinFullySettled) {
+				try {
+					this.balanceController.applyPendingBalanceUpdateIfAny();
+				} catch {
+					/* noop */
+				}
+			} else {
+				this.disableSpinButton();
+				return;
+			}
 		}
 
 		try {
@@ -5241,32 +5462,9 @@ export class SlotController {
 		if (gameData.isAutoPlaying && !autoplayEnded) {
 			this.enableSpinButton();
 			this.updateFeatureButtonState();
+			this.updateAmplifyButtonStateWithLock();
 			return;
 		}
-
-		// Disable spin when balance is insufficient for the selected bet.
-		// Applies to both demo and real mode; excludes active autoplay so Spin can still act as STOP.
-		try {
-			const isBalanceReady = this.balanceController?.hasInitializedBalance() ?? false;
-			if (!isBalanceReady) {
-				// Don't treat "balance not initialized" as "insufficient balance".
-				throw new Error('balance not initialized');
-			}
-			const baseBet = this.getBaseBetAmount() || 0;
-			const multiplier =
-				gameData.isEnhancedBet
-					? (Number(gameData.enhancedBetMultiplier) > 0 ? Number(gameData.enhancedBetMultiplier) : 1.25)
-					: 1;
-			const requiredBet = baseBet * multiplier;
-			const balance = this.getBalanceAmount() || 0;
-			if (requiredBet > 0 && balance + 1e-9 < requiredBet) {
-				this.disableSpinButton();
-				this.updateFeatureButtonState();
-				// Keep amplify in sync too (bet just became unaffordable).
-				this.updateAmplifyButtonStateWithLock();
-				return;
-			}
-		} catch {}
 
 		// Simple logic: disable if spinning or spin in progress (e.g. API call in flight), enable otherwise
 		if (gameStateManager.isReelSpinning || gameStateManager.isProcessingSpin) {
@@ -5285,28 +5483,7 @@ export class SlotController {
 	 */
 	public updateFeatureButtonState(): void {
 		if (!this.isBuyFeatureControlsLocked() && !gameStateManager.isBonus && this.canEnableFeatureButton) {
-			// Disable feature when the displayed buy price exceeds current balance (match pastry_cub behavior).
-			try {
-				const isBalanceReady = this.balanceController?.hasInitializedBalance() ?? false;
-				if (!isBalanceReady) {
-					// Before balance is initialized, avoid disabling due to "0" placeholder; let other guards decide.
-					this.enableFeatureButton();
-					return;
-				}
-				const balance = this.getBalanceAmount() || 0;
-				// Feature price shown on the main HUD is always baseBet × 100 (enhanced +25% is display-only for BET).
-				const baseBet = this.getBaseBetAmount() || 0;
-				const price = baseBet * 100;
-				if (price > 0 && Number.isFinite(balance) && balance + 1e-9 < price) {
-					this.disableFeatureButton();
-					return;
-				}
-			} catch {
-				// If anything is not ready yet, keep disabled to avoid incorrect enable.
-				this.disableFeatureButton();
-				return;
-			}
-
+			// Affordability is enforced inside enableFeatureButton() so no caller can bypass it.
 			this.enableFeatureButton();
 		} else {
 			this.disableFeatureButton();

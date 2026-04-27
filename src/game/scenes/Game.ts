@@ -619,6 +619,10 @@ export class Game extends Scene {
 				});
 				return;
 			}
+			if (this.betOptions.isVisible() || this.autoplayOptions.isVisible() || this.slotController.isSlotModalOpen()) {
+				console.log('[Game] show-bet-options blocked — another modal is already open');
+				return;
+			}
 
 			console.log('[Game] Showing bet options with fade-in effect');
 
@@ -629,14 +633,17 @@ export class Game extends Scene {
 			const betDisplayMultiplier = isEnhancedBet ? 1.25 : 1;
 			const currentDisplayBet = currentBaseBet * betDisplayMultiplier;
 
+			this.slotController.setBetOptionsModalOpen(true);
 			this.betOptions.show({
 				currentBet: currentBaseBet,
 				currentBetDisplay: currentDisplayBet,
 				isEnhancedBet: isEnhancedBet,
 				onClose: () => {
+					this.slotController.setBetOptionsModalOpen(false);
 					console.log('[Game] Bet options closed');
 				},
 				onConfirm: (betAmount: number) => {
+					this.slotController.setBetOptionsModalOpen(false);
 					console.log(`[Game] Bet confirmed: £${betAmount}`);
 					// Update the bet display in the slot controller
 					this.slotController.updateBetAmount(betAmount);
@@ -660,6 +667,18 @@ export class Game extends Scene {
 		EventBus.on('autoplay', () => {
 			console.log('[Game] Autoplay button clicked - showing options');
 
+			const gsmAp: any = this.gameStateManager;
+			if (
+				gsmAp?.isProcessingSpin ||
+				gsmAp?.isReelSpinning ||
+				this.autoplayOptions.isVisible() ||
+				this.betOptions.isVisible() ||
+				this.slotController.isSlotModalOpen()
+			) {
+				console.log('[Game] Autoplay options blocked — spin in progress or modal already open');
+				return;
+			}
+
 			// Use base bet as source of truth; display value is derived via isEnhancedBet.
 			const currentBaseBet = this.slotController.getBaseBetAmount() || 0.20;
 			const currentDisplayText = this.slotController.getBetAmountText();
@@ -670,6 +689,7 @@ export class Game extends Scene {
 
 			console.log(`[Game] Current balance for autoplay options: $${currentBalance}`);
 
+			this.slotController.setAutoplayOptionsModalOpen(true);
 			this.autoplayOptions.show({
 				currentAutoplayCount: 10,
 				currentBet: currentBaseBet,
@@ -677,6 +697,7 @@ export class Game extends Scene {
 				currentBalance: currentBalance,
 				isEnhancedBet: this.gameData?.isEnhancedBet,
 				onClose: () => {
+					this.slotController.setAutoplayOptionsModalOpen(false);
 					console.log('[Game] Autoplay options closed');
 				},
 				onBetChange: (betAmount: number) => {
@@ -685,6 +706,7 @@ export class Game extends Scene {
 				},
 				onConfirm: (autoplayCount: number) => {
 					console.log(`[Game] Autoplay confirmed: ${autoplayCount} spins`);
+					this.slotController.setAutoplayOptionsModalOpen(false);
 					// Read the bet selected within the autoplay panel
 					const selectedBet = this.autoplayOptions.getCurrentBet();
 					// If bet changed, update UI and backend

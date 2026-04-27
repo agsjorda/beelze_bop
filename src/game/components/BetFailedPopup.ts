@@ -3,6 +3,11 @@ import { localizationManager } from '../../managers/LocalizationManager';
 import { POPUP_BET_FAILED, COMMON_OK, LOCALIZATION_DEFAULTS } from '../../backend/LocalizationData';
 
 export class BetFailedPopup extends GameObjects.Container {
+	/** Resolves popup text via localization, with fallback to default from LocalizationData. */
+	private getPopupText(key: string): string {
+		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
+	}
+
 	private background: GameObjects.Graphics;
 	private messageText: GameObjects.Text;
 	private buttonImage: GameObjects.Image;
@@ -10,14 +15,14 @@ export class BetFailedPopup extends GameObjects.Container {
 	private backgroundColor: number = 0x000000;
 	private backgroundAlpha: number = 0.8;
 	private cornerRadius: number = 20;
+	/** OK button center Y; matches OutOfBalancePopup (inset from panel bottom). */
 	private buttonOffsetY: number = 130;
 	private buttonScale: number = 0.8;
 	private buttonWidth: number = 364;
 	private buttonHeight: number = 62;
 	private animationDuration: number = 300;
-	private overlay: Phaser.GameObjects.Graphics;
-
-	private onCloseCallback?: () => void;
+	private overlay: GameObjects.Graphics;
+	private onHideCallback?: () => void;
 
 	constructor(
 		scene: Scene,
@@ -30,16 +35,18 @@ export class BetFailedPopup extends GameObjects.Container {
 			buttonScale?: number;
 			overlayColor?: number;
 			overlayAlpha?: number;
-			onClose?: () => void;
+			/** Called when the popup is hidden (e.g. user clicked OK). Use to clear PopupManager state. */
+			onHideCallback?: () => void;
 		} = {}
 	) {
 		super(scene, x, y);
 		this.scene = scene;
 
 		this.overlay = new GameObjects.Graphics(scene);
-		this.overlay.fillStyle(options.overlayColor || 0x000000, options.overlayAlpha !== undefined
-			? Phaser.Math.Clamp(options.overlayAlpha, 0, 1)
-			: 0.35);
+		this.overlay.fillStyle(
+			options.overlayColor || 0x000000,
+			options.overlayAlpha !== undefined ? Phaser.Math.Clamp(options.overlayAlpha, 0, 1) : 0.35
+		);
 		this.overlay.fillRect(0, 0, scene.scale.width, scene.scale.height);
 		this.overlay.setScrollFactor(0);
 		this.overlay.setInteractive(
@@ -49,37 +56,28 @@ export class BetFailedPopup extends GameObjects.Container {
 		this.overlay.visible = false;
 		scene.add.existing(this.overlay);
 
-		if (options.opacity !== undefined) {
-			this.backgroundAlpha = Phaser.Math.Clamp(options.opacity, 0, 1);
-		}
-		if (options.cornerRadius !== undefined) {
-			this.cornerRadius = Math.max(0, options.cornerRadius);
-		}
-		if (options.buttonOffsetY !== undefined) {
-			this.buttonOffsetY = options.buttonOffsetY;
-		}
-		if (options.buttonScale !== undefined) {
-			this.buttonScale = Phaser.Math.Clamp(options.buttonScale, 0.1, 2);
-		}
-		if (options.onClose !== undefined) {
-			this.onCloseCallback = options.onClose;
-		}
+		if (options.opacity !== undefined) this.backgroundAlpha = Phaser.Math.Clamp(options.opacity, 0, 1);
+		if (options.cornerRadius !== undefined) this.cornerRadius = Math.max(0, options.cornerRadius);
+		if (options.buttonOffsetY !== undefined) this.buttonOffsetY = options.buttonOffsetY;
+		if (options.buttonScale !== undefined) this.buttonScale = Phaser.Math.Clamp(options.buttonScale, 0.1, 2);
+		if (options.onHideCallback !== undefined) this.onHideCallback = options.onHideCallback;
 
-		this.background = new Phaser.GameObjects.Graphics(scene);
+		this.background = new GameObjects.Graphics(scene);
 		this.drawBackground();
 
-		const messageStr =
-			localizationManager.getTextByKey(POPUP_BET_FAILED) ??
-			LOCALIZATION_DEFAULTS[POPUP_BET_FAILED] ??
-			POPUP_BET_FAILED;
-
-		this.messageText = new GameObjects.Text(scene, 0, -40, messageStr, {
-			fontFamily: 'Poppins-Regular',
-			fontSize: '21px',
-			color: '#ffffff',
-			align: 'center',
-			wordWrap: { width: scene.scale.width * 0.7, useAdvancedWrap: true },
-		});
+		this.messageText = new GameObjects.Text(
+			scene,
+			0,
+			-40,
+			this.getPopupText(POPUP_BET_FAILED),
+			{
+				fontFamily: 'Poppins-Regular',
+				fontSize: '21px',
+				color: '#ffffff',
+				align: 'center',
+				wordWrap: { width: scene.scale.width * 0.7, useAdvancedWrap: true },
+			}
+		);
 		this.messageText.setOrigin(0.5);
 
 		const buttonX = 0;
@@ -92,8 +90,7 @@ export class BetFailedPopup extends GameObjects.Container {
 		this.buttonImage.setDisplaySize(scaledWidth, scaledHeight);
 		this.buttonImage.setScale(this.buttonScale);
 
-		const okStr = localizationManager.getTextByKey(COMMON_OK) ?? LOCALIZATION_DEFAULTS[COMMON_OK] ?? 'OK';
-		this.buttonText = new GameObjects.Text(scene, buttonX, buttonY, okStr, {
+		this.buttonText = new GameObjects.Text(scene, buttonX, buttonY, this.getPopupText(COMMON_OK), {
 			fontFamily: 'Poppins-Bold',
 			fontSize: '24px',
 			color: '#000000',
@@ -103,7 +100,11 @@ export class BetFailedPopup extends GameObjects.Container {
 
 		this.buttonImage.setInteractive({ useHandCursor: true });
 		this.buttonImage.on('pointerdown', () => {
-			try { (window as any).audioManager?.playSoundEffect?.('button_fx'); } catch {}
+			try {
+				(window as any).audioManager?.playSoundEffect?.('button_fx');
+			} catch {
+				/* noop */
+			}
 			this.hide();
 		});
 		this.buttonImage.on('pointerover', () => this.buttonImage.setTint(0xcccccc));
@@ -118,10 +119,12 @@ export class BetFailedPopup extends GameObjects.Container {
 	public show(): void {
 		this.overlay.setVisible(true);
 		this.overlay.setDepth(9999);
+
 		this.setVisible(true);
 		this.setDepth(10000);
 		this.setScale(0.5);
 		this.setAlpha(0);
+
 		this.scene.tweens.add({
 			targets: this,
 			scaleX: 1,
@@ -130,7 +133,11 @@ export class BetFailedPopup extends GameObjects.Container {
 			duration: this.animationDuration,
 			ease: 'Back.Out',
 			onStart: () => {
-				try { (window as any).audioManager?.playSoundEffect?.('popup_open'); } catch {}
+				try {
+					(window as any).audioManager?.playSoundEffect?.('popup_open');
+				} catch {
+					/* noop */
+				}
 			},
 		});
 	}
@@ -146,7 +153,7 @@ export class BetFailedPopup extends GameObjects.Container {
 			onComplete: () => {
 				this.setVisible(false);
 				this.overlay.setVisible(false);
-				try { this.onCloseCallback?.(); } catch {}
+				this.onHideCallback?.();
 				if (callback) callback();
 			},
 		});
@@ -159,14 +166,18 @@ export class BetFailedPopup extends GameObjects.Container {
 	private drawBackground(): void {
 		const width = this.scene.scale.width * 0.8;
 		const height = this.scene.scale.height * 0.4;
+
 		this.background.clear();
 		this.background.fillStyle(this.backgroundColor, this.backgroundAlpha);
 		this.background.fillRoundedRect(-width / 2, -height / 2, width, height, this.cornerRadius);
 	}
 
 	public destroy(fromScene?: boolean): void {
-		try { this.overlay?.destroy(); } catch {}
+		try {
+			this.overlay?.destroy();
+		} catch {
+			/* noop */
+		}
 		super.destroy(fromScene);
 	}
 }
-

@@ -861,6 +861,10 @@ export class BuyFeature {
 		}
 	}
 
+	public isDrawerVisible(): boolean {
+		return !!(this.container && this.container.visible);
+	}
+
 	public destroy(): void {
 		this.clearBalanceEventSubscriptions();
 		if (this.scatterSpine) {

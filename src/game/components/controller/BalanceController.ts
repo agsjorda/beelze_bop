@@ -12,7 +12,6 @@ export interface BalanceControllerCallbacks {
   getGameData: () => GameData | null;
   getBaseBetAmount: () => number;
   updateBetAmount: (bet: number) => void;
-  showOutOfBalancePopup: () => void;
 }
 
 export class BalanceController {
@@ -484,9 +483,6 @@ export class BalanceController {
         console.log('[SlotController] Balance animation in progress; deferring server reconcile.');
       } else {
         this.startBalanceTween(newBalance, 200);
-      }
-      if (newBalance <= 0) {
-        this.callbacks.showOutOfBalancePopup();
       }
 
       if (gameAPI.getDemoState?.()) {

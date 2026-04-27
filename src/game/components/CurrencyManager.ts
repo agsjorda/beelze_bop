@@ -1,5 +1,8 @@
 import type { SlotInitializeData } from "../../backend/GameAPI";
 import { Scene, GameObjects } from "phaser";
+import { showPopup, PopupType, clearCurrentPopup } from "../../managers/PopupManager";
+import { localizationManager } from "../../managers/LocalizationManager";
+import { POPUP_CURRENCY_ERROR, LOCALIZATION_DEFAULTS } from "../../backend/LocalizationData";
 import { formatCurrencyNumber } from "../../utils/NumberPrecisionFormatter";
 
 type CurrencyInit = Pick<SlotInitializeData, "currency" | "currencySymbol">;
@@ -34,6 +37,11 @@ function isDemoMode(): boolean {
  * (e.g. "USD 1.00"), even when a currency symbol is provided.
  */
 export class CurrencyManager {
+	/** Resolves popup text via localization, with fallback to default from LocalizationData. */
+	public static getPopupText(key: string): string {
+		return localizationManager.getTextByKey(key) ?? LOCALIZATION_DEFAULTS[key] ?? key;
+	}
+
 	private static currencyCode = "";
 	private static currencySymbol = "";
 
@@ -143,29 +151,46 @@ export class CurrencyManager {
 		}
 		const scene = CurrencyManager.resolvePopupScene();
 		if (!scene) {
-			// Scene not ready yet (e.g. during very early boot). We'll skip showing for now.
 			return;
 		}
 
-		const message =
-			"There was an error with the selected currency.\n\nPlease try refreshing the game or selecting another currency.";
+		const message = CurrencyManager.getPopupText(POPUP_CURRENCY_ERROR);
 
-		// Use a local popup implementation (TokenExpiredPopup look/feel, but exclusive to this file).
-		if (!CurrencyManager.currencyErrorPopup) {
-			CurrencyManager.currencyErrorPopup = new CurrencyErrorPopup(scene, {
-				panelWidthFactor: 0.8,
-				panelHeightFactor: 0.30,
-				buttonOffsetY: 90,
-				buttonScale: 0.8,
-				backgroundAlpha: 0.4,
-				cornerRadius: 20,
-				overlayAlpha: 0.35,
+		showPopup(PopupType.CURRENCY_ERROR, (registerHide) => {
+			if (!CurrencyManager.currencyErrorPopup) {
+				CurrencyManager.currencyErrorPopup = new CurrencyErrorPopup(scene, {
+					panelWidthFactor: 0.8,
+					panelHeightFactor: 0.30,
+					buttonOffsetY: 90,
+					buttonScale: 0.8,
+					backgroundAlpha: 0.4,
+					cornerRadius: 20,
+					overlayAlpha: 0.35,
+				});
+			}
+			try {
+				CurrencyManager.currencyErrorPopup.updateMessage(message);
+			} catch {
+				/* noop */
+			}
+			try {
+				CurrencyManager.currencyErrorPopup.show();
+			} catch {
+				/* noop */
+			}
+			registerHide((cb) => {
+				try {
+					CurrencyManager.currencyErrorPopup?.hide(() => {
+						clearCurrentPopup();
+						if (cb) cb();
+					});
+				} catch {
+					clearCurrentPopup();
+					if (cb) cb();
+				}
 			});
-		}
-		try { CurrencyManager.currencyErrorPopup.updateMessage(message); } catch {}
-		try { CurrencyManager.currencyErrorPopup.show(); } catch {}
-
-		CurrencyManager.missingCurrencyPopupShown = true;
+			CurrencyManager.missingCurrencyPopupShown = true;
+		});
 	}
 }
 
@@ -321,6 +346,22 @@ class CurrencyErrorPopup extends GameObjects.Container {
 					}
 				} catch {}
 			}
+		});
+	}
+
+	public hide(callback?: () => void): void {
+		this.scene.tweens.add({
+			targets: this,
+			scaleX: 0.5,
+			scaleY: 0.5,
+			alpha: 0,
+			duration: this.animationDuration * 0.8,
+			ease: "Back.In",
+			onComplete: () => {
+				this.setVisible(false);
+				this.overlay.setVisible(false);
+				if (callback) callback();
+			},
 		});
 	}
 

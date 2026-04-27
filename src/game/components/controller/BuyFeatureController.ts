@@ -28,15 +28,16 @@ export interface BuyFeatureCallbacks {
   disableTurboButton: () => void;
   enableBetBackgroundInteraction: (reason: string) => void;
   disableBetBackgroundInteraction: (reason: string) => void;
-  showOutOfBalancePopup: () => void;
   updateSpinButtonState: () => void;
+  updateFeatureButtonState: () => void;
+  updateAutoplayButtonState: () => void;
+  onBuyFeatureDrawerClosed?: () => void;
 }
 
 export class BuyFeatureController {
   private buyFeature: BuyFeature | null = null;
   private buyFeatureSpinLock: boolean = false;
   private callbacks: BuyFeatureCallbacks;
-  private readonly BET_MULTIPLIER: number = 100;
 
   constructor(callbacks: BuyFeatureCallbacks) {
     this.callbacks = callbacks;
@@ -53,24 +54,12 @@ export class BuyFeatureController {
     this.buyFeature.create(scene);
   }
 
-  public isSpinLocked(): boolean {
-    return this.buyFeatureSpinLock;
+  public isDrawerVisible(): boolean {
+    return !!this.buyFeature?.isDrawerVisible();
   }
 
-  /**
-   * Price shown on the buy feature button/panel (baseBet × multiplier).
-   * Returns 0 when unavailable.
-   */
-  public getDisplayedFeaturePrice(): number {
-    try {
-      const bet = Number(this.buyFeature?.getCurrentBetAmount?.());
-      if (!Number.isFinite(bet) || bet <= 0) {
-        return 0;
-      }
-      return bet * this.BET_MULTIPLIER;
-    } catch {
-      return 0;
-    }
+  public isSpinLocked(): boolean {
+    return this.buyFeatureSpinLock;
   }
 
   public setSpinLock(locked: boolean): void {
@@ -88,9 +77,10 @@ export class BuyFeatureController {
   }
 
   private unlockControls(reason: string): void {
+    gameStateManager.isProcessingSpin = false;
     this.callbacks.enableSpinButton();
     this.callbacks.enableAutoplayButton();
-    this.callbacks.enableFeatureButton();
+    this.callbacks.updateFeatureButtonState();
     this.callbacks.enableBetButtons();
     this.callbacks.enableAmplifyButton();
     this.callbacks.enableTurboButton();
@@ -107,10 +97,14 @@ export class BuyFeatureController {
       featurePrice: 24000.0,
       onClose: () => {
         console.log('[SlotController] Buy feature drawer closed');
+        this.callbacks.onBuyFeatureDrawerClosed?.();
       },
       onConfirm: () => {
         console.log('[SlotController] Buy feature confirmed');
         this.buyFeatureSpinLock = true;
+        // Match shuten_doji: spin is "in progress" until REELS_STOP clears processing (GameStateManager).
+        gameStateManager.isProcessingSpin = true;
+        this.callbacks.updateAutoplayButtonState();
         this.lockControls('buy feature confirmed');
         this.handleBuyFeature();
       }
@@ -119,6 +113,10 @@ export class BuyFeatureController {
 
   private async handleBuyFeature(): Promise<void> {
     console.log('[SlotController] Processing buy feature purchase');
+
+    const preSpinGameData = this.callbacks.getGameData();
+    const originalPreSpinTurboGD = !!preSpinGameData?.isTurbo;
+    const originalPreSpinTurboGSM = !!gameStateManager.isTurbo;
 
     const gameAPI = this.callbacks.getGameAPI();
     if (!this.buyFeature || !gameAPI) {
@@ -142,7 +140,6 @@ export class BuyFeatureController {
         console.error(`[SlotController] Insufficient balance: $${currentBalance.toFixed(2)} < $${calculatedPrice.toFixed(2)}`);
         this.buyFeatureSpinLock = false;
         this.unlockControls('buy feature insufficient balance');
-        this.callbacks.showOutOfBalancePopup();
         return;
       }
 
@@ -157,6 +154,10 @@ export class BuyFeatureController {
       // only animates incoming symbols. Otherwise the old grid stays visible and gets
       // overlaid by the incoming buy-feature spin.
       try {
+        if (preSpinGameData) {
+          preSpinGameData.isTurbo = false;
+        }
+        gameStateManager.isTurbo = false;
         const scene: any = this.callbacks.getScene();
         const symbolsComponent = scene?.symbols;
         if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
@@ -171,6 +172,11 @@ export class BuyFeatureController {
       gameStateManager.isBuyFeatureSpin = true;
       const spinData = await gameAPI.doSpin(buyFeatureBet, true, false);
       console.log('[BUY_FEATURE_SPIN_DATA]', spinData);
+
+      if (preSpinGameData) {
+        preSpinGameData.isTurbo = originalPreSpinTurboGD;
+      }
+      gameStateManager.isTurbo = originalPreSpinTurboGSM;
 
       console.log('[SlotController] Buy feature spin completed:', spinData);
       const hasFreeSpinItems = !!(spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items);
@@ -217,6 +223,10 @@ export class BuyFeatureController {
       }
     } catch (error) {
       console.error('[SlotController] Error processing buy feature purchase:', error);
+      if (preSpinGameData) {
+        preSpinGameData.isTurbo = originalPreSpinTurboGD;
+      }
+      gameStateManager.isTurbo = originalPreSpinTurboGSM;
       gameStateManager.isBuyFeatureSpin = false;
       this.buyFeatureSpinLock = false;
       this.unlockControls('buy feature error');
