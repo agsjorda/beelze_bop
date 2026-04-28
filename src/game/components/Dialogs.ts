@@ -1116,6 +1116,15 @@ export class Dialogs {
 			console.log('[Dialogs] Manual click during staged win - already at final tier, closing dialog normally');
 		}
 
+		// Important: WIN_DIALOG_CLOSED is emitted after fade-out completes.
+		// For UI that must update *before* the fade (e.g., Buy Feature state),
+		// emit a "closing" event immediately when the player closes TotalWin.
+		if (this.currentDialogType === 'TotalWin') {
+			try {
+				gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSING, { dialogType: this.currentDialogType });
+			} catch { }
+		}
+
 		// Start the fade-out sequence first (while isDialogActive is still true)
 		this.startFadeOutSequence(scene);
 

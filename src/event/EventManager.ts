@@ -26,6 +26,13 @@ export enum GameEventType {
   SYMBOL0_RETRIGGER_ANIMATION_COMPLETE = 'SYMBOL0_RETRIGGER_ANIMATION_COMPLETE',
   // Emitted when "TOTAL WIN" is displayed during bonus games
   BONUS_TOTAL_WIN_SHOWN = 'BONUS_TOTAL_WIN_SHOWN',
+  /**
+   * Emitted immediately when a win dialog begins closing (on user click / auto-close),
+   * before the fade-out tween completes.
+   *
+   * payload: dialogType (string)
+   */
+  WIN_DIALOG_CLOSING = 'WIN_DIALOG_CLOSING',
   WIN_DIALOG_CLOSED = 'WIN_DIALOG_CLOSED',
   DIALOG_START = 'DIALOG_START',
   DIALOG_STOP = 'DIALOG_STOP',

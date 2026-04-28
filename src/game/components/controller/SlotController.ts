@@ -1341,6 +1341,12 @@ export class SlotController {
 	 * Enable feature button (restore opacity and enable interaction)
 	 */
 	private enableFeatureButton(): void {
+		// Buy Feature must remain disabled while autoplay is active or about to resume.
+		const autoplayActive = !!(gameStateManager.isAutoPlaying || this.getGameData()?.isAutoPlaying || this.willResumeAutoplayFromPause());
+		if (autoplayActive) {
+			this.disableFeatureButton();
+			return;
+		}
 		if (this.uiModalAutoplayOptionsOpen || this.uiModalBetOptionsOpen || this.uiModalBuyFeatureDrawerOpen) {
 			this.disableFeatureButton();
 			return;
@@ -3305,6 +3311,15 @@ export class SlotController {
 		});
 
 		// Listen for win dialog close (for high winnings case)
+		gameEventManager.on(GameEventType.WIN_DIALOG_CLOSING, (data?: any) => {
+			const dialogType = (data as any)?.dialogType;
+			if (dialogType !== 'TotalWin') return;
+			// TotalWin close begins a fade/bonus-exit transition. Force-disable immediately to avoid
+			// any one-frame "enabled" flicker before autoplay resumes or the base UI is shown.
+			try { this.disableFeatureButton(); } catch { }
+			// Then re-evaluate (will keep disabled if autoplay is active/pending resume).
+			try { this.updateFeatureButtonState(); } catch { }
+		});
 		gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => {
 			console.log('[SlotController] WIN_DIALOG_CLOSED received');
 			console.log('[SlotController] Current autoplay state:', {
@@ -3313,9 +3328,11 @@ export class SlotController {
 				isShowingWinDialog: gameStateManager.isShowingWinDialog
 			});
 
-			// Autoplay continuation is handled by AutoplayController
-			if (gameStateManager.isAutoPlaying || this.getAutoplaySpinsRemaining() > 0) {
+			// Autoplay continuation is handled by AutoplayController (including resume-from-pause).
+			if (this.willResumeAutoplayFromPause() || this.getAutoplaySpinsRemaining() > 0) {
 				console.log('[SlotController] Autoplay continuation handled by AutoplayController');
+				// Ensure Buy Feature is consistent immediately (prevents a one-frame enable flicker).
+				try { this.updateFeatureButtonState(); } catch { }
 				return;
 			}
 
@@ -3583,6 +3600,19 @@ export class SlotController {
 
 		this.autoplayController?.clearPausedSpinsCache();
 		this.startAutoplay(cached);
+	}
+
+	private willResumeAutoplayFromPause(): boolean {
+		try {
+			if (gameStateManager.isAutoPlaying) return true;
+			if (this.getGameData()?.isAutoPlaying) return true;
+			const cached = this.autoplayController?.getPausedSpinsRemaining?.() ?? 0;
+			// If we have paused spins cached, autoplay is effectively "pending resume"
+			// even while bonus-exit / fade transitions are running.
+			return cached > 0;
+		} catch {
+			return false;
+		}
 	}
 
 	/**
@@ -3915,8 +3945,8 @@ export class SlotController {
 		const featureButton = this.buttons.get('feature');
 		if (featureButton) {
 			featureButton.setAlpha(1.0); // Restore full opacity
-			featureButton.setInteractive(); // Re-enable clicking
-			console.log('[SlotController] Feature button restored and enabled');
+			// Do not re-enable Buy Feature while autoplay is active; let updateFeatureButtonState() decide.
+			this.updateFeatureButtonState();
 		}
 		
 		// Restore the bet buttons
@@ -4721,7 +4751,10 @@ export class SlotController {
 		this.scene.events.on('bonusTransitionComplete', () => {
 			console.log('[SlotController] bonusTransitionComplete - restoring primary UI and attempting autoplay resume');
 			this.showPrimaryController();
-			this.enableFeatureButton();
+			// Defensive: bonus transition can complete even if a prior setBonusMode(false) path was missed/raced.
+			// Ensure the Buy Feature gate is re-armed so feature state can be re-evaluated for the current mode.
+			this.canEnableFeatureButton = true;
+			this.updateFeatureButtonState();
 			this.updateSpinButtonState();
 			if (this.scene?.time) {
 				this.scene.time.delayedCall(0, () => {
@@ -5482,7 +5515,9 @@ export class SlotController {
 	 * Public method to update feature button state based on game conditions
 	 */
 	public updateFeatureButtonState(): void {
-		if (!this.isBuyFeatureControlsLocked() && !gameStateManager.isBonus && this.canEnableFeatureButton) {
+		// Buy Feature is not allowed while autoplay is active or about to resume.
+		const autoplayActiveOrWillResume = this.willResumeAutoplayFromPause();
+		if (!autoplayActiveOrWillResume && !this.isBuyFeatureControlsLocked() && !gameStateManager.isBonus && this.canEnableFeatureButton) {
 			// Affordability is enforced inside enableFeatureButton() so no caller can bypass it.
 			this.enableFeatureButton();
 		} else {
