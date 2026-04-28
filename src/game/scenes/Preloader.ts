@@ -33,6 +33,7 @@ export class Preloader extends Scene
 	private character2?: Character;
 	private preloaderVerticalOffsetModifier: number = 10;
 	private bootProgressHandler?: (progress: number) => void;
+	private initialBalance: number | null = null;
 	private unsubscribeLocalizationReady?: () => void;
 
 	// Loading bar graphics
@@ -433,6 +434,17 @@ export class Preloader extends Scene
 			}
 
             console.log('[Preloader] GameAPI and slot session initialized successfully!');
+			console.log('[Preloader] Fetching initial balance before enabling play...');
+			const initialBalance = Number(await this.gameAPI.initializeBalance());
+			if (Number.isFinite(initialBalance) && initialBalance >= 0) {
+				this.initialBalance = initialBalance;
+				console.log('[Preloader] Initial balance ready:', initialBalance);
+			} else {
+				console.warn('[Preloader] Initial balance was invalid, Game scene will fall back to its own initialization.', {
+					initialBalance
+				});
+			}
+
         } catch (error) {
             console.error('[Preloader] Failed to initialize GameAPI or slot session:', error);
         }
@@ -546,7 +558,8 @@ export class Preloader extends Scene
                     networkManager: this.networkManager, 
                     screenModeManager: this.screenModeManager,
                     // Pass the same GameAPI instance so initialization data is shared
-                    gameAPI: this.gameAPI
+                    gameAPI: this.gameAPI,
+					initialBalance: this.initialBalance
                 });
             });
         });

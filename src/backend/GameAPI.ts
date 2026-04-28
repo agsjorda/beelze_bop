@@ -561,7 +561,6 @@ export class GameAPI {
         }
 
         let token =
-            localStorage.getItem('token') ||
             sessionStorage.getItem('token') ||
             '';
 
@@ -712,7 +711,6 @@ export class GameAPI {
         }
 
         const token =
-            localStorage.getItem('token') ||
             sessionStorage.getItem('token') ||
             '';
 
@@ -910,7 +908,7 @@ export class GameAPI {
         }
 
         try {
-            let token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+            let token = sessionStorage.getItem('token') || '';
             if (!token) {
                 const newToken = await this.tryRefreshAndGetNewToken();
                 if (newToken) {
@@ -1022,9 +1020,11 @@ export class GameAPI {
         }
         try {
             localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
         } catch {}
         try {
             localStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+            sessionStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
         } catch {}
         try {
             sessionStorage.removeItem('token');
@@ -1052,7 +1052,6 @@ export class GameAPI {
      */
     public async refreshAccessToken(): Promise<string> {
         const refreshToken =
-            localStorage.getItem(GameAPI.REFRESH_TOKEN_KEY) ||
             sessionStorage.getItem(GameAPI.REFRESH_TOKEN_KEY) ||
             '';
         if (!refreshToken) {
@@ -1151,7 +1150,7 @@ export class GameAPI {
                 const headers: Record<string, string> = {
                     'Content-Type': 'application/json',
                 };
-                const token = localStorage.getItem('token');
+                const token = sessionStorage.getItem('token');
                 if (token) {
                     headers['Authorization'] = `Bearer ${token}`;
                 }
@@ -1195,7 +1194,7 @@ export class GameAPI {
             }
         }
         
-        let token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+        let token = sessionStorage.getItem('token') || '';
         if (!token) {
             const newToken = await this.tryRefreshAndGetNewToken();
             if (newToken) {
@@ -1506,7 +1505,7 @@ export class GameAPI {
             };
         }
 
-        let token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+        let token = sessionStorage.getItem('token') || '';
         if (!token) {
             const newToken = await this.tryRefreshAndGetNewToken();
             if (newToken) {
@@ -1603,3 +1602,4 @@ export class GameAPI {
         }
     }
 }   
+

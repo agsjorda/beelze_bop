@@ -84,6 +84,7 @@ export class Game extends Scene {
 	// Queue for wins that occur while a dialog is already showing
 	private winQueue: Array<{ payout: number; bet: number }> = [];
 	private suppressWinDialogsUntilNextSpin: boolean = false;
+	private initialBalance: number | null = null;
 	private pendingHistorySpinData: any | null = null;
 	private historyRefreshDeferredUntilBonusEnd: boolean = false;
 
@@ -151,6 +152,10 @@ export class Game extends Scene {
 		// Receive managers from Preloader scene
 		this.networkManager = data.networkManager;
 		this.screenModeManager = data.screenModeManager;
+		const parsedInitialBalance = Number(data?.initialBalance);
+		this.initialBalance = Number.isFinite(parsedInitialBalance) && parsedInitialBalance >= 0
+			? parsedInitialBalance
+			: null;
 
 		// Initialize game state manager
 		this.gameStateManager = gameStateManager;
@@ -514,7 +519,7 @@ export class Game extends Scene {
 		(this as any).scatterAnticipation = this.scatterAnticipation;
 
 		// Initialize balance on game start
-		this.initializeGameBalance();
+		this.initializeGameBalance(this.initialBalance ?? undefined);
 
 		// Start idle/session timeout tracking
 		this.initializeAndStartIdleManager();
@@ -1101,12 +1106,14 @@ export class Game extends Scene {
 	/**
 	 * Initialize the game balance on start
 	 */
-	private async initializeGameBalance(): Promise<void> {
+	private async initializeGameBalance(prefetchedBalance?: number): Promise<void> {
 		try {
 			console.log('[Game] Initializing game balance...');
 
 			// Call the GameAPI to get the current balance
-			const rawBalance = await this.gameAPI.initializeBalance();
+			const rawBalance = Number.isFinite(prefetchedBalance as number)
+				? prefetchedBalance
+				: await this.gameAPI.initializeBalance();
 			const balance = Number(rawBalance);
 			if (!Number.isFinite(balance) || balance < 0) {
 				throw new Error(`[Game] Invalid initial balance received: ${rawBalance}`);
