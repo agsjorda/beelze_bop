@@ -37,7 +37,7 @@ function logUrlParameters(): void {
 const getApiBaseUrl = (): string => {
     const configuredUrl = (window as any)?.APP_CONFIG?.['game-url'];
     if (typeof configuredUrl === 'string' && configuredUrl.length > 0) {
-        return configuredUrl.replace(/\/$/, "");
+        return configuredUrl.replace(/\/+$/, "");
     }
     return 'https://stg-game-launcher.dijoker.com'; // 192.168.0.17:3000/
 
@@ -125,7 +125,19 @@ export interface LocalizationData {
 export class GameAPI {  
     private static readonly GAME_ID: string = '00120925';
     private static DEMO_BALANCE: number = 10000;
+    /** Session access token (JWT). Must only be persisted in sessionStorage, never localStorage. */
+    private static readonly ACCESS_TOKEN_KEY: string = 'token';
     private static readonly REFRESH_TOKEN_KEY: string = 'refresh_token';
+
+    /** Remove any legacy copies of auth keys from localStorage; tokens only use sessionStorage. */
+    private static removeAuthKeysFromLocalStorageOnly(): void {
+        try {
+            localStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
+            localStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+        } catch {
+            // ignore (private mode / disabled storage)
+        }
+    }
 
     gameData: GameData;
     exitURL: string = '';
@@ -140,23 +152,23 @@ export class GameAPI {
     // One-shot debug helper: force the first MANUAL spin to contain 3 scatters (symbol id 0)
     // in the first 3 columns. Enable via:
     // - URL: ?mockFirstManualScatterSpin=true
-    // - localStorage: localStorage.setItem('mockFirstManualScatterSpin','true')
+    // - sessionStorage: sessionStorage.setItem('mockFirstManualScatterSpin','true')
     private static readonly MOCK_FIRST_MANUAL_SCATTER_SPIN_ENABLED: boolean =
         new URLSearchParams(window.location.search).get('mockFirstManualScatterSpin') === 'true' ||
-        localStorage.getItem('mockFirstManualScatterSpin') === 'true';
+        sessionStorage.getItem('mockFirstManualScatterSpin') === 'true';
     private mockedFirstManualScatterSpin: boolean = false;
     
     // Test mode: Set to true to force test data on every spin
-    // Can be enabled via URL parameter ?testMode=true or localStorage.setItem('testMode', 'true')
+    // Can be enabled via URL parameter ?testMode=true or sessionStorage.setItem('testMode', 'true')
     private static readonly TEST_MODE_ENABLED: boolean = 
         new URLSearchParams(window.location.search).get('testMode') === 'true' ||
-        localStorage.getItem('testMode') === 'true';
+        sessionStorage.getItem('testMode') === 'true';
 
     // Fake data mode: load spins from /fake_spin_data.json (public)
-    // Enable via URL parameter ?useFakeData=true or localStorage.setItem('useFakeData','true')
+    // Enable via URL parameter ?useFakeData=true or sessionStorage.setItem('useFakeData','true')
     private static readonly USE_FAKE_DATA_ENABLED: boolean =
         new URLSearchParams(window.location.search).get('useFakeData') === 'true' ||
-        localStorage.getItem('useFakeData') === 'true';
+        sessionStorage.getItem('useFakeData') === 'true';
 
     private fakeSpinData: { normalGame?: any[]; bonusGame?: any[] } | null = null;
     private fakeSpinLoadPromise: Promise<{ normalGame?: any[]; bonusGame?: any[] } | null> | null = null;
@@ -260,7 +272,7 @@ export class GameAPI {
     
     constructor(gameData: GameData) {
         this.gameData = gameData;
-        
+        GameAPI.removeAuthKeysFromLocalStorageOnly();
     }   
 
     private async loadFakeSpinData(): Promise<{ normalGame?: any[]; bonusGame?: any[] } | null> {
@@ -491,8 +503,8 @@ export class GameAPI {
      * Only generates a new token if token URL parameter is not present
      */
     public async initializeGame(): Promise<string> {
+        GameAPI.removeAuthKeysFromLocalStorageOnly();
         const isDemo = this.getDemoState();
-        localStorage.setItem('demo', isDemo ? 'true' : 'false');
         sessionStorage.setItem('demo', isDemo ? 'true' : 'false');
         
         if (GameAPI.USE_FAKE_DATA_ENABLED) {
@@ -511,20 +523,21 @@ export class GameAPI {
             
             if (existingToken) {
                 
-                // Store the existing token in localStorage and sessionStorage
-                localStorage.setItem('token', existingToken);
-                sessionStorage.setItem('token', existingToken);
+                // Store the existing token in sessionStorage
+                sessionStorage.setItem(GameAPI.ACCESS_TOKEN_KEY, existingToken);
                 
                 return existingToken;
-            } else {
-                const { token } = await this.generateGameUrlToken();
-                
-                // Store the token in localStorage and sessionStorage
-                localStorage.setItem('token', token);
-                sessionStorage.setItem('token', token);
-                
-                return token;
             }
+            const fromSession = sessionStorage.getItem(GameAPI.ACCESS_TOKEN_KEY);
+            if (fromSession) {
+                return fromSession;
+            }
+            const { token } = await this.generateGameUrlToken();
+                
+                // Store the token in sessionStorage
+                sessionStorage.setItem(GameAPI.ACCESS_TOKEN_KEY, token);
+                
+                return token
             
         } catch (error) {
             console.error('Error initializing game:', error);
@@ -539,7 +552,7 @@ export class GameAPI {
      */
     public async initializeSlotSession(): Promise<SlotInitializeData> {
         // Demo mode: don't call backend; return a minimal safe payload and cache it.
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+        const isDemo = this.getDemoState() || sessionStorage.getItem('demo') === 'true';
         if (GameAPI.USE_FAKE_DATA_ENABLED || isDemo) {
             const payload: SlotInitializeData = {
                 gameId: GameAPI.GAME_ID,
@@ -561,7 +574,7 @@ export class GameAPI {
         }
 
         let token =
-            sessionStorage.getItem('token') ||
+            sessionStorage.getItem(GameAPI.ACCESS_TOKEN_KEY) ||
             '';
 
         if (!token) {
@@ -607,8 +620,7 @@ export class GameAPI {
                     parsed.message ||
                     (await response.clone().text().catch(() => ''));
                 if (response.status === 401) {
-                    localStorage.removeItem('token');
-                    sessionStorage.removeItem('token');
+                    sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
                 }
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
@@ -711,7 +723,7 @@ export class GameAPI {
         }
 
         const token =
-            sessionStorage.getItem('token') ||
+            sessionStorage.getItem(GameAPI.ACCESS_TOKEN_KEY) ||
             '';
 
         if (!token) {
@@ -849,12 +861,12 @@ export class GameAPI {
 
     public async gameLauncher(): Promise<void> {
         try {
-            localStorage.removeItem('token');
-            localStorage.removeItem('exit_url');
-            localStorage.removeItem('what_device');
-            localStorage.removeItem('demo');
+            sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
+            sessionStorage.removeItem('exit_url');
+            sessionStorage.removeItem('what_device');
+            sessionStorage.removeItem('demo');
 
-            sessionStorage.removeItem('token');
+            sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
             sessionStorage.removeItem('exit_url');
             sessionStorage.removeItem('what_device');
             sessionStorage.removeItem('demo');
@@ -864,20 +876,19 @@ export class GameAPI {
             
             if(tokenParam){
                 token1 = tokenParam;
-                localStorage.setItem('token', token1);
-                sessionStorage.setItem('token', token1);
+                sessionStorage.setItem(GameAPI.ACCESS_TOKEN_KEY, token1);
             }
 
             let deviceUrl = getUrlParameter('device');
             if(deviceUrl){
-                localStorage.setItem('what_device',deviceUrl);
+                sessionStorage.setItem('what_device',deviceUrl);
                 sessionStorage.setItem('what_device',deviceUrl);
             }
 
             let apiUrl = getUrlParameter('api_exit');
             if(apiUrl){
                 this.exitURL = apiUrl;
-                localStorage.setItem('exit_url',apiUrl);
+                sessionStorage.setItem('exit_url',apiUrl);
                 sessionStorage.setItem('exit_url',apiUrl);
             }
 
@@ -885,8 +896,7 @@ export class GameAPI {
             if(startGame){
                 let {token} = await this.generateGameUrlToken();
                 token1 = token;
-                localStorage.setItem('token', token);
-                sessionStorage.setItem('token', token);
+                sessionStorage.setItem(GameAPI.ACCESS_TOKEN_KEY, token);
             }
 
             if (!token1 && !startGame) {
@@ -898,7 +908,7 @@ export class GameAPI {
     }
     public async getBalance(): Promise<any> {
         // Demo mode: return mock balance, no API call, no token requirement.
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+        const isDemo = this.getDemoState() || sessionStorage.getItem('demo') === 'true';
         if (GameAPI.USE_FAKE_DATA_ENABLED || isDemo) {
             return {
                 data: {
@@ -908,7 +918,7 @@ export class GameAPI {
         }
 
         try {
-            let token = sessionStorage.getItem('token') || '';
+            let token = sessionStorage.getItem(GameAPI.ACCESS_TOKEN_KEY) || '';
             if (!token) {
                 const newToken = await this.tryRefreshAndGetNewToken();
                 if (newToken) {
@@ -945,8 +955,7 @@ export class GameAPI {
                 const parsed = await this.readBackendErrorResponse(response);
                 checkAndHandlePopup(parsed);
                 if (response.status === 401) {
-                    localStorage.removeItem('token');
-                    sessionStorage.removeItem('token');
+                    sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
                 }
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -1019,18 +1028,9 @@ export class GameAPI {
             console.error('[GameAPI] Failed to show session timeout popup:', e);
         }
         try {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
-        } catch {}
-        try {
-            localStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+            sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
             sessionStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
-        } catch {}
-        try {
-            sessionStorage.removeItem('token');
-        } catch {}
-        try {
-            sessionStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+            GameAPI.removeAuthKeysFromLocalStorageOnly();
         } catch {}
     }
 
@@ -1041,7 +1041,6 @@ export class GameAPI {
     public initializeRefreshToken(): void {
         const refreshToken = getUrlParameter('refresh_token');
         if (refreshToken) {
-            localStorage.setItem(GameAPI.REFRESH_TOKEN_KEY, refreshToken);
             sessionStorage.setItem(GameAPI.REFRESH_TOKEN_KEY, refreshToken);
         }
     }
@@ -1074,8 +1073,7 @@ export class GameAPI {
         if (!newToken) {
             throw new Error('Refresh response missing token');
         }
-        localStorage.setItem('token', newToken);
-        sessionStorage.setItem('token', newToken);
+        sessionStorage.setItem(GameAPI.ACCESS_TOKEN_KEY, newToken);
         return newToken;
     }
 
@@ -1144,13 +1142,13 @@ export class GameAPI {
         }
 
         // Demo mode: no token required, use analytics endpoint and simplified payload.
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+        const isDemo = this.getDemoState() || sessionStorage.getItem('demo') === 'true';
         if (isDemo) {
             try {
                 const headers: Record<string, string> = {
                     'Content-Type': 'application/json',
                 };
-                const token = sessionStorage.getItem('token');
+                const token = sessionStorage.getItem(GameAPI.ACCESS_TOKEN_KEY);
                 if (token) {
                     headers['Authorization'] = `Bearer ${token}`;
                 }
@@ -1194,7 +1192,7 @@ export class GameAPI {
             }
         }
         
-        let token = sessionStorage.getItem('token') || '';
+        let token = sessionStorage.getItem(GameAPI.ACCESS_TOKEN_KEY) || '';
         if (!token) {
             const newToken = await this.tryRefreshAndGetNewToken();
             if (newToken) {
@@ -1284,8 +1282,7 @@ export class GameAPI {
                 
                 checkAndHandlePopup(parsed);
                 if (response.status === 401) {
-                    localStorage.removeItem('token');
-                    sessionStorage.removeItem('token');
+                    sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
                 }
                 
                 throw error;
@@ -1460,7 +1457,7 @@ export class GameAPI {
      * This method calls getBalance and updates the GameData with the current balance
      */
     public async initializeBalance(): Promise<number> {
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+        const isDemo = this.getDemoState() || sessionStorage.getItem('demo') === 'true';
         if (isDemo) {
             return GameAPI.DEMO_BALANCE;
         }
@@ -1505,7 +1502,7 @@ export class GameAPI {
             };
         }
 
-        let token = sessionStorage.getItem('token') || '';
+        let token = sessionStorage.getItem(GameAPI.ACCESS_TOKEN_KEY) || '';
         if (!token) {
             const newToken = await this.tryRefreshAndGetNewToken();
             if (newToken) {
@@ -1547,8 +1544,7 @@ export class GameAPI {
                 parsed.message ||
                 (await response.clone().text().catch(() => ''));
             if (response.status === 401) {
-                localStorage.removeItem('token');
-                sessionStorage.removeItem('token');
+                sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
             }
             throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
         }
