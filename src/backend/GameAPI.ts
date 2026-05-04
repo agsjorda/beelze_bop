@@ -134,6 +134,7 @@ export class GameAPI {
         try {
             localStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
             localStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+            localStorage.removeItem('refreshToken');
         } catch {
             // ignore (private mode / disabled storage)
         }
@@ -273,7 +274,18 @@ export class GameAPI {
     constructor(gameData: GameData) {
         this.gameData = gameData;
         GameAPI.removeAuthKeysFromLocalStorageOnly();
-    }   
+    }
+
+    /** Clear access + refresh from sessionStorage and scrub any legacy localStorage auth keys. */
+    private clearStoredAuthCredentials(): void {
+        try {
+            sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
+            sessionStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
+            GameAPI.removeAuthKeysFromLocalStorageOnly();
+        } catch {
+            /* private mode / storage disabled */
+        }
+    }
 
     private async loadFakeSpinData(): Promise<{ normalGame?: any[]; bonusGame?: any[] } | null> {
         if (this.fakeSpinData) return this.fakeSpinData;
@@ -861,12 +873,7 @@ export class GameAPI {
 
     public async gameLauncher(): Promise<void> {
         try {
-            sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
-            sessionStorage.removeItem('exit_url');
-            sessionStorage.removeItem('what_device');
-            sessionStorage.removeItem('demo');
-
-            sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
+            this.clearStoredAuthCredentials();
             sessionStorage.removeItem('exit_url');
             sessionStorage.removeItem('what_device');
             sessionStorage.removeItem('demo');
@@ -1027,11 +1034,7 @@ export class GameAPI {
         } catch (e) {
             console.error('[GameAPI] Failed to show session timeout popup:', e);
         }
-        try {
-            sessionStorage.removeItem(GameAPI.ACCESS_TOKEN_KEY);
-            sessionStorage.removeItem(GameAPI.REFRESH_TOKEN_KEY);
-            GameAPI.removeAuthKeysFromLocalStorageOnly();
-        } catch {}
+        this.clearStoredAuthCredentials();
     }
 
     /**
