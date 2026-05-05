@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<link rel="icon" type="image/png" href="/favicon.png" />
-	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 	
 	<!-- Resource hints for faster loading -->
 	<!-- Preload critical background image -->
@@ -18,12 +18,6 @@
 	<title>Beelze-Bop</title>
 	<link rel="stylesheet" href="/main.scss">
 	<style>
-		body {
-			margin: 0;
-			padding: 0;
-			overflow: hidden;
-		}
-		
 		.background-container {
 			position: fixed;
 			top: 0;
@@ -49,17 +43,6 @@
 			pointer-events: none;
 		}
 		
-		#root {
-			position: relative;
-			z-index: 1;
-		}
-
-		/* Add drop shadow under the game view (canvas inside #root) */
-		#root canvas {
-			filter: drop-shadow(0 16px 24px rgba(0, 0, 0, 0.7));
-			border-radius: 8px;      /* or whatever radius you want */
-			overflow: hidden;         /* helps ensure content respects rounding */
-		}
 	</style>
 </head>
 

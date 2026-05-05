@@ -1,18 +1,62 @@
+/*
+ * Shell chain for React + Phaser FIT (see docs/orientation-modal-porting-guide.md):
+ * html/body → #root (mobile may set px via main.ts) → #app → #game-container (Phaser parent).
+ * Use % height, not 100vh-only, for mobile dynamic toolbars.
+ */
+html {
+    height: 100%;
+    min-height: 100%;
+}
+
 body {
+    height: 100%;
+    min-height: 100%;
     margin: 0;
     padding: 0;
+    overflow: hidden;
     color: rgba(255, 255, 255, 0);
     background-color: #000000; 
     font-family: Arial, Helvetica, sans-serif;
 }
 
-#app {
+#root {
+    position: relative;
+    z-index: 1;
     width: 100%;
-    height: 100vh;
+    height: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+#root canvas {
+    filter: drop-shadow(0 16px 24px rgba(0, 0, 0, 0.7));
+    border-radius: 8px;
     overflow: hidden;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+}
+
+/* Fill the shell so Phaser’s Scale.FIT parent (#game-container) measures the full viewport.
+   (Flex centering shrink-wraps the game container, so fullscreen/window resize keeps a tiny box.) */
+#app {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+}
+
+#game-container {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+/* React UI (loading, etc.): overlay without affecting #game-container flow size. */
+.app-ui-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
 }
 
 #orientation-modal {
@@ -24,8 +68,10 @@ body {
     justify-content: center;
     flex-direction: column;
     box-sizing: border-box;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.80);
     cursor: pointer;
+    pointer-events: auto;
+    touch-action: none;
 }
 
 #orientation-modal.orientation-modal--hidden {
@@ -38,7 +84,6 @@ body {
     width: auto;
     height: auto;
     object-fit: contain;
-    pointer-events: none;
     user-select: none;
     -webkit-user-drag: none;
 }
@@ -48,7 +93,6 @@ body {
     width: 100%;
     max-width: min(90vw, 360px);
     text-align: center;
-    pointer-events: none;
 }
 
 #orientation-modal .orientation-modal__copy p {

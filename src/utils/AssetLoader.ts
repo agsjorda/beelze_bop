@@ -249,7 +249,8 @@ export class AssetLoader {
 				face.load().then((loaded) => {
 					(document as any).fonts?.add(loaded);
 					try {
-						(document as any).fonts?.load?.(`1em ${fontFamily}`);
+						// fonts.load returns a Promise; rejections must be handled (e.g. NetworkError if the font URL failed).
+						void (document as any).fonts?.load?.(`1em ${fontFamily}`)?.catch?.(() => {});
 					} catch {}
 					console.log(`[AssetLoader] Font ${fontFamily} loaded via FontFace API`);
 				}).catch((error) => {

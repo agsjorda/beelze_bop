@@ -2,8 +2,8 @@ import React, { useRef, useState } from 'react';
 import { IRefPhaserGame, PhaserGame } from './PhaserGame';
 import { Main } from './ui/Main';
 
-function App()
-{
+/** React shell: `#app` fills `#root`; Phaser mounts in `#game-container`, UI in `.app-ui-layer`. See `docs/orientation-modal-porting-guide.md`. */
+function App() {
 	const [scene, setScene] = useState<Phaser.Scene | null>(null);
 	const phaserRef = useRef<IRefPhaserGame | null>(null);
 
@@ -15,9 +15,11 @@ function App()
 	return (
 		<div id="app">
 			<PhaserGame ref={phaserRef} currentActiveScene={currentSceneHandler} />
-			<Main currentScene={scene} />
+			<div className="app-ui-layer">
+				<Main currentScene={scene} />
+			</div>
 		</div>
-	)
+	);
 }
 
-export default App
+export default App;

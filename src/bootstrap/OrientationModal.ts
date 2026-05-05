@@ -139,7 +139,11 @@ function getRoot(): HTMLElement | null {
 }
 
 let keyboardBlocker: ((e: Event) => void) | null = null;
+let pointerModalBlocker: ((e: Event) => void) | null = null;
 let keyboardGuardsActive = false;
+
+/** Capture phase + non-passive so preventDefault works on touch (blocks game under modal). */
+const POINTER_MODAL_OPTS: AddEventListenerOptions = { capture: true, passive: false };
 
 function blurGameFocus(): void {
 	try {
@@ -173,6 +177,32 @@ function enableKeyboardGuards(): void {
 	window.addEventListener('keyup', block, true);
 	window.addEventListener('keypress', block, true);
 
+	/**
+	 * Phaser (inputWindowEvents) listens on `window` for touch/mouse and forwards any
+	 * `touchstart` whose target is not the canvas — including touches on this modal.
+	 * While the modal is visible, stop those events in the capture phase on `window`
+	 * before they descend or bubble so the game cannot receive them.
+	 */
+	const pointerBlock = (e: Event) => {
+		const m = getModal();
+		if (!m || m.classList.contains(HIDDEN_CLASS)) {
+			return;
+		}
+		e.preventDefault();
+		e.stopPropagation();
+	};
+	pointerModalBlocker = pointerBlock;
+	window.addEventListener('pointerdown', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('pointermove', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('pointerup', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('pointercancel', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('touchstart', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('touchmove', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('touchend', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('touchcancel', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('mousedown', pointerBlock, POINTER_MODAL_OPTS);
+	window.addEventListener('click', pointerBlock, POINTER_MODAL_OPTS);
+
 	const root = getRoot();
 	if (root && 'inert' in root) {
 		try {
@@ -196,6 +226,20 @@ function disableKeyboardGuards(): void {
 		window.removeEventListener('keyup', keyboardBlocker, true);
 		window.removeEventListener('keypress', keyboardBlocker, true);
 		keyboardBlocker = null;
+	}
+
+	if (pointerModalBlocker) {
+		window.removeEventListener('pointerdown', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('pointermove', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('pointerup', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('pointercancel', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('touchstart', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('touchmove', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('touchend', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('touchcancel', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('mousedown', pointerModalBlocker, POINTER_MODAL_OPTS);
+		window.removeEventListener('click', pointerModalBlocker, POINTER_MODAL_OPTS);
+		pointerModalBlocker = null;
 	}
 
 	const root = getRoot();
