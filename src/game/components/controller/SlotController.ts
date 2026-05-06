@@ -21,7 +21,7 @@ import { BalanceController } from './BalanceController';
 import { CurrencyManager } from '../CurrencyManager';
 import { formatCurrencyNumber } from '../../../utils/NumberPrecisionFormatter';
 import { localizationManager } from '../../../managers/LocalizationManager';
-import { showPopup, PopupType, clearCurrentPopup } from '../../../managers/PopupManager';
+import { showPopup, PopupType, clearCurrentPopup, showBetFailurePopupFromError } from '../../../managers/PopupManager';
 import {
 	COMMON_BET,
 	CONTROLLER_AUTOPLAY,
@@ -4470,12 +4470,10 @@ export class SlotController {
 		// Clear any stale pending balance update before starting a new spin
 		this.balanceController?.clearPendingBalanceUpdate();
 
-		if (!this.isFreeRoundAutoplay && !inInitFreeRoundContext) {
-			this.decrementBalanceByBet();
-		}
-
 		try {
 			let spinData: SpinData;
+			/** True when doSpin resolved null and we build a local dummy grid (init FS ended — not a paid result). */
+			let spinDataFromNullFallback = false;
 			const spinStartTime = Date.now();
 
 				// Show loading spinner only while fetching API and when enabled
@@ -4537,12 +4535,18 @@ export class SlotController {
 					
 					// If spinData is null, it means the free spins have ended (422 error handled gracefully)
 					if (!spinData) {
+						spinDataFromNullFallback = true;
 						console.log('[SlotController] No spin data received - free spins have ended, creating dummy spin with initial symbols');
 						
 						// Create a dummy SpinData with initial symbols so reels drop naturally
 						spinData = this.createDummySpinDataWithInitialSymbols(currentBet);
 						console.log('[SlotController] Created dummy spin data with initial symbols:', spinData);
 					}
+				}
+
+				// Decrement balance (frontend) only after a successful spin response.
+				if (!this.isFreeRoundAutoplay && !inInitFreeRoundContext && !spinDataFromNullFallback) {
+					this.decrementBalanceByBet();
 				}
 
 				// Display comprehensive spin data information
@@ -4627,6 +4631,7 @@ export class SlotController {
 				// Don't emit the spin event if the API call failed
 				this.hideSpinner();
 				this.reenableControlsOnSpinFailure();
+				showBetFailurePopupFromError(this.scene, error);
 			}
 		} finally {
 			this.isSpinLocked = false;

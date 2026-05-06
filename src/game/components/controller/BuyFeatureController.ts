@@ -6,6 +6,7 @@ import { BuyFeature } from '../BuyFeature';
 import type { GameAPI } from '../../../backend/GameAPI';
 import type { SlotController } from './SlotController';
 import type { GameData } from '../GameData';
+import { showBetFailurePopupFromError } from '../../../managers/PopupManager';
 
 export interface BuyFeatureCallbacks {
   getGameData: () => GameData | null;
@@ -143,13 +144,6 @@ export class BuyFeatureController {
         return;
       }
 
-      const newBalance = currentBalance - calculatedPrice;
-      if (gameAPI?.getDemoState()) {
-        gameAPI.updateDemoBalance(newBalance);
-      }
-      this.callbacks.updateBalanceAmount(newBalance);
-      console.log(`[SlotController] Balance deducted: $${currentBalance.toFixed(2)} -> $${newBalance.toFixed(2)}`);
-
       // Buy feature spins also need the pre-spin clear now that the main reel-drop path
       // only animates incoming symbols. Otherwise the old grid stays visible and gets
       // overlaid by the incoming buy-feature spin.
@@ -172,6 +166,22 @@ export class BuyFeatureController {
       gameStateManager.isBuyFeatureSpin = true;
       const spinData = await gameAPI.doSpin(buyFeatureBet, true, false);
       console.log('[BUY_FEATURE_SPIN_DATA]', spinData);
+
+      if (spinData) {
+        const balanceBeforeCharge = this.callbacks.getBalanceAmount();
+        if (Number.isFinite(balanceBeforeCharge)) {
+          const newBalance = Math.max(0, balanceBeforeCharge - calculatedPrice);
+          if (gameAPI?.getDemoState()) {
+            gameAPI.updateDemoBalance(newBalance);
+          }
+          this.callbacks.updateBalanceAmount(newBalance);
+          console.log(
+            `[SlotController] Buy feature balance deducted after spin OK: $${balanceBeforeCharge.toFixed(2)} -> $${newBalance.toFixed(2)}`
+          );
+        } else {
+          console.warn('[SlotController] Skipping buy feature balance deduction: balance not readable');
+        }
+      }
 
       if (preSpinGameData) {
         preSpinGameData.isTurbo = originalPreSpinTurboGD;
@@ -230,6 +240,7 @@ export class BuyFeatureController {
       gameStateManager.isBuyFeatureSpin = false;
       this.buyFeatureSpinLock = false;
       this.unlockControls('buy feature error');
+      showBetFailurePopupFromError(this.callbacks.getScene(), error);
     }
   }
 }
