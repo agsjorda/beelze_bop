@@ -7,6 +7,7 @@
  * - TOKEN_EXPIRED (100): session timeout / token invalid
  * - OUT_OF_BALANCE (50): insufficient balance
  * - BET_FAILED (40): backend rejected bet
+ * - NETWORK_OFFLINE (40): no network response / offline (client-side bet failure)
  * - CURRENCY_ERROR (30): missing or invalid currency
  *
  * Other UI overlays in the project (not in this priority system; add to PopupType if they should compete):
@@ -15,6 +16,10 @@
  */
 
 import { gameEventManager, GameEventType } from '../event/EventManager';
+import { TokenExpiredPopup } from '../game/components/TokenExpiredPopup';
+import { OutOfBalancePopup } from '../game/components/OutOfBalancePopup';
+import { BetFailedPopup } from '../game/components/BetFailedPopup';
+import { NetworkOfflinePopup } from '../game/components/NetworkOfflinePopup';
 
 export enum PopupType {
 	/** Session expired / token invalid; user must re-authenticate. */
@@ -23,6 +28,8 @@ export enum PopupType {
 	OUT_OF_BALANCE = 'OUT_OF_BALANCE',
 	/** Bet failed (backend rejected bet; refund expected). */
 	BET_FAILED = 'BET_FAILED',
+	/** No network / fetch failed before a response (spin or buy feature). */
+	NETWORK_OFFLINE = 'NETWORK_OFFLINE',
 	/** Currency / missing currency error. */
 	CURRENCY_ERROR = 'CURRENCY_ERROR',
 }
@@ -41,6 +48,7 @@ const PRIORITY: Record<PopupType, number> = {
 	[PopupType.TOKEN_EXPIRED]: 100,
 	[PopupType.OUT_OF_BALANCE]: 50,
 	[PopupType.BET_FAILED]: 40,
+	[PopupType.NETWORK_OFFLINE]: 40,
 	[PopupType.CURRENCY_ERROR]: 30,
 };
 
@@ -147,31 +155,21 @@ const ERROR_CODE_TO_POPUP: Record<string, { popupType: PopupType }> = {
 	DJ400BF: { popupType: PopupType.BET_FAILED },
 };
 
-async function loadPopupFactory(errorCode: string): Promise<PopupFactory | null> {
+function loadPopupFactory(errorCode: string): PopupFactory | null {
 	switch (errorCode) {
-		case 'DJ401UA': {
-			const module = await import('../game/components/TokenExpiredPopup');
-			const Popup = module.TokenExpiredPopup;
-			return (scene) => new Popup(scene as any) as any;
-		}
-		case 'DJ400NEB': {
-			const module = await import('../game/components/OutOfBalancePopup');
-			const Popup = module.OutOfBalancePopup;
+		case 'DJ401UA':
+			return (scene) => new TokenExpiredPopup(scene as any) as any;
+		case 'DJ400NEB':
 			return (scene) =>
-				new Popup(scene as any, 0, 0, {
+				new OutOfBalancePopup(scene as any, 0, 0, {
 					onHideCallback: () => {
 						clearCurrentPopup();
 					},
 				}) as any;
-		}
-		case 'DJ400BF': {
-			const module = await import('../game/components/BetFailedPopup');
-			const Popup = module.BetFailedPopup;
+		case 'DJ400BF':
 			return (scene) => {
-				const popup = new Popup(scene as any, 0, 0, {
-					onHideCallback: () => {
-						clearCurrentPopup();
-					},
+				const popup = new BetFailedPopup(scene as any, 0, 0, {
+					onHideCallback: () => clearCurrentPopup(),
 				}) as PopupInstance;
 				const originalShow = popup.show.bind(popup);
 				popup.show = () => {
@@ -180,7 +178,6 @@ async function loadPopupFactory(errorCode: string): Promise<PopupFactory | null>
 				};
 				return popup;
 			};
-		}
 		default:
 			return null;
 	}
@@ -228,20 +225,84 @@ export function checkAndHandlePopup(response: BackendErrorResponse | null | unde
 	if (!config) return false;
 
 	showPopup(config.popupType, (registerHide) => {
-		loadPopupFactory(errorCode)
-			.then((factory) => {
-				if (!factory) return;
-				const popup = factory(scene);
-				if (messageText && popup.updateMessage) popup.updateMessage(messageText);
-				popup.show();
-				registerHide((cb) =>
-					popup.hide(() => {
-						clearCurrentPopup();
-						if (cb) cb();
-					})
-				);
+		const factory = loadPopupFactory(errorCode);
+		if (!factory) return;
+		const popup = factory(scene);
+		if (messageText && popup.updateMessage) popup.updateMessage(messageText);
+		popup.show();
+		registerHide((cb) =>
+			popup.hide(() => {
+				clearCurrentPopup();
+				if (cb) cb();
 			})
-			.catch(() => {});
+		);
 	});
 	return true;
+}
+
+/**
+ * True when a bet/spin failed with no usable HTTP response (client offline or fetch failed before response).
+ */
+export function isNetworkOfflineBetError(error: unknown): boolean {
+	if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+		return true;
+	}
+	const msg =
+		error instanceof Error
+			? error.message
+			: typeof error === 'string'
+				? error
+				: '';
+	const m = msg.toLowerCase();
+	if (!m) return false;
+	return (
+		m.includes('failed to fetch') ||
+		m.includes('networkerror when attempting to fetch') ||
+		m.includes('networkerror') ||
+		m.includes('load failed') ||
+		m.includes('network request failed')
+	);
+}
+
+/**
+ * Show bet-failed or network-offline modal after a spin/buy-feature request throws (not DJ400BF from API).
+ */
+export function showBetFailurePopupFromError(scene: unknown, error: unknown): void {
+	if (!scene) return;
+	const popupType = isNetworkOfflineBetError(error) ? PopupType.NETWORK_OFFLINE : PopupType.BET_FAILED;
+	showPopup(popupType, (registerHide) => {
+		if (popupType === PopupType.NETWORK_OFFLINE) {
+			const popup = new NetworkOfflinePopup(scene as any, 0, 0, {
+				onHideCallback: () => clearCurrentPopup(),
+			}) as PopupInstance;
+			const originalShow = popup.show.bind(popup);
+			popup.show = () => {
+				originalShow();
+				gameEventManager.emit(GameEventType.BET_FAILED_ERROR);
+			};
+			popup.show();
+			registerHide((cb) =>
+				popup.hide(() => {
+					clearCurrentPopup();
+					if (cb) cb();
+				})
+			);
+		} else {
+			const popup = new BetFailedPopup(scene as any, 0, 0, {
+				onHideCallback: () => clearCurrentPopup(),
+			}) as PopupInstance;
+			const originalShow = popup.show.bind(popup);
+			popup.show = () => {
+				originalShow();
+				gameEventManager.emit(GameEventType.BET_FAILED_ERROR);
+			};
+			popup.show();
+			registerHide((cb) =>
+				popup.hide(() => {
+					clearCurrentPopup();
+					if (cb) cb();
+				})
+			);
+		}
+	});
 }
