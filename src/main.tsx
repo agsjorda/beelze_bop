@@ -28,8 +28,6 @@ if (import.meta.env.PROD) {
 	c.clear = noop;
 }
 
-import './bootstrap/OrientationModal';
-
 const mount = async () => {
 	const mod = await import('./App.tsx');
 	const App = mod.default;
