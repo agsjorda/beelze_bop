@@ -59,6 +59,65 @@ body {
     z-index: 2;
 }
 
+.app-ui-layer > * {
+    pointer-events: auto;
+}
+
+#orientation-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.80);
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+#orientation-modal.orientation-modal--hidden {
+    display: none;
+}
+
+#orientation-modal .orientation-modal__icon {
+    max-width: min(80vw, 320px);
+    max-height: min(50vh, 320px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    transform: scale(var(--orientation-icon-scale, .6));
+    margin: -1rem 0;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+#orientation-modal .orientation-modal__copy {
+    margin-top: 0.15rem;
+    width: 100%;
+    max-width: min(90vw, 320px);
+    text-align: center;
+}
+
+#orientation-modal .orientation-modal__copy p {
+    margin: 0.35rem 0 0;
+    color: #ffffff;
+    font-size: 1rem;
+    line-height: 1.45;
+    font-family: 'Poppins-Regular', 'Poppins', system-ui, sans-serif;
+}
+
+#orientation-modal .orientation-modal__copy p:first-child {
+    margin-top: 0;
+}
+
+#orientation-modal .orientation-modal__copy strong {
+    color: #09FF5C;
+    font-family: 'Poppins-Bold', 'Poppins-Regular', 'Poppins', system-ui, sans-serif;
+}
+
 .spritePosition {
     margin: 10px 0 0 10px;
     font-size: 0.8em;
