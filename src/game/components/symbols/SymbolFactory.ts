@@ -20,7 +20,7 @@ import { gameStateManager } from '../../../managers/GameStateManager';
  */
 export class SymbolFactory {
   private static readonly POOLED_HIDE_POSITION = -10000;
-  private static readonly PREWARM_SPINE_VALUES = [0, 1, 2, 3, 4, 5, 6, 7];
+  private static readonly PREWARM_SPINE_VALUES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   private static readonly PREWARM_INSTANCES_PER_VALUE = 10;
   private scene: Game;
   private animations: SymbolAnimations;
