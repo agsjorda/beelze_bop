@@ -89,7 +89,6 @@ body {
     height: auto;
     object-fit: contain;
     transform: scale(var(--orientation-icon-scale, .6));
-    margin: -1rem 0;
     user-select: none;
     -webkit-user-drag: none;
 }

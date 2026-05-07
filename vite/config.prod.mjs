@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite';
-import viteCompression from 'vite-plugin-compression2';
 
 const phasermsg = () => {
     return {
@@ -65,21 +64,5 @@ export default defineConfig({
     plugins: [
         phasermsg(),
         suppressConsole(),
-        // Precompress text assets to Brotli
-        viteCompression({
-            algorithm: 'brotliCompress',
-            ext: '.br',
-            deleteOriginalAssets: false,
-            threshold: 1024,
-            filter: (file) => /\.(js|css|html|svg|json|ttf|woff2?)$/i.test(file)
-        }),
-        // Also generate gzip as fallback
-        viteCompression({
-            algorithm: 'gzip',
-            ext: '.gz',
-            deleteOriginalAssets: false,
-            threshold: 1024,
-            filter: (file) => /\.(js|css|html|svg|json|ttf|woff2?)$/i.test(file)
-        })
     ]
 });

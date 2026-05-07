@@ -3526,6 +3526,9 @@ export class Symbols {
               try { if (overlayObj) this.scene.tweens.killTweensOf(overlayObj); } catch {}
               // Return to pool immediately
               try { this.factory.releaseSymbol(baseObj); } catch {}
+              if (this.symbols[col]) {
+                this.symbols[col][rowIndex] = null as any;
+              }
             } catch (e) {
               // Silently ignore errors during fast cleanup
             }
@@ -3561,6 +3564,9 @@ export class Symbols {
             this.scene.tweens.killTweensOf(baseObj);
             if (overlayObj) this.scene.tweens.killTweensOf(overlayObj);
             this.factory.releaseSymbol(baseObj);
+            if (this.symbols[col]) {
+              this.symbols[col][rowIndex] = null as any;
+            }
           } catch { }
           completedAnimations++;
           if (completedAnimations === totalAnimations) {
@@ -3619,6 +3625,9 @@ export class Symbols {
               // Return the symbol to pool after it drops off screen
               try {
                 this.factory.releaseSymbol(baseObj);
+                if (this.symbols[col]?.[rowIndex] === baseObj) {
+                  this.symbols[col][rowIndex] = null as any;
+                }
               } catch { }
 
               completedAnimations++;
@@ -3640,6 +3649,9 @@ export class Symbols {
           // If tween creation fails, count it as completed and clean up
           try {
             this.factory.releaseSymbol(baseObj);
+            if (this.symbols[col]) {
+              this.symbols[col][rowIndex] = null as any;
+            }
           } catch { }
           completedAnimations++;
           if (completedAnimations === totalAnimations) {
@@ -3668,6 +3680,9 @@ export class Symbols {
                 this.scene.tweens.killTweensOf(baseObj);
                 if (overlayObj) this.scene.tweens.killTweensOf(overlayObj);
                 this.factory.releaseSymbol(baseObj);
+                if (this.symbols[col]?.[rowIndex] === baseObj) {
+                  this.symbols[col][rowIndex] = null as any;
+                }
                 forcedCount++;
               } catch (e) {
                 console.warn(`[Symbols] Failed to force-destroy symbol at row ${rowIndex}, col ${col}:`, e);
@@ -3696,14 +3711,6 @@ export class Symbols {
         resolve();
         return;
       }
-
-      if (!this.symbols || !this.symbols[0] || !this.symbols[0][0]) {
-        console.warn('[Symbols] dropNewSymbols: invalid symbols array');
-        resolve();
-        return;
-      }
-
-      const height = this.symbols[0][0].displayHeight + this.verticalSpacing;
       const extraMs = extendDuration ? 3000 : 0;
 
       let completedAnimations = 0;
@@ -3724,6 +3731,13 @@ export class Symbols {
 
       for (let col = 0; col < this.newSymbols.length; col++) {
         let symbol = this.newSymbols[col][index];
+        if (!symbol || (symbol as any).destroyed) {
+          completedAnimations++;
+          if (completedAnimations === totalAnimations) {
+            resolve();
+          }
+          continue;
+        }
         const targetY = this.getYPos(index);
 
         // Trigger drop animation if available
@@ -3791,10 +3805,18 @@ export class Symbols {
           };
         }
 
-        this.scene.tweens.chain({
-          targets: tweenTargets,
-          tweens,
-        });
+        try {
+          this.scene.tweens.chain({
+            targets: tweenTargets,
+            tweens,
+          });
+        } catch (e) {
+          console.warn(`[Symbols] dropNewSymbols tween creation failed for row ${index}, col ${col}:`, e);
+          completedAnimations++;
+          if (completedAnimations === totalAnimations) {
+            resolve();
+          }
+        }
       }
     });
   }
