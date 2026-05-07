@@ -87,6 +87,10 @@ const config: Phaser.Types.Core.GameConfig = {
 	render: {
 		antialias: true,
 		clearBeforeRender: false,
+		/** Hint the browser to use the discrete/high-performance GPU on dual-GPU devices.
+		 *  On most modern phones and laptops this prevents the game from being scheduled
+		 *  on the power-saving integrated GPU with no visible cost. */
+		powerPreference: 'high-performance',
 	},
 };
 
