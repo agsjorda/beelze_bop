@@ -76,6 +76,9 @@ export interface SymbolObject {
   __gridRow?: number;
   __pausedMultiplierWin?: { base: string };
   __bounceTween?: any;
+  __poolKind?: 'spine' | 'png';
+  __pooled?: boolean;
+  __dropIdleListener?: SpineAnimationListener | null;
 }
 
 /**

@@ -8,7 +8,7 @@
  */
 
 import type { Game } from '../../scenes/Game';
-import type { SymbolObject } from './types';
+import type { SpineAnimationListener, SymbolObject } from './types';
 import { SymbolAnimations } from './SymbolAnimations';
 import { MultiplierSymbols } from './MultiplierSymbols';
 import type { SymbolOverlay } from './SymbolOverlay';
@@ -19,12 +19,17 @@ import { gameStateManager } from '../../../managers/GameStateManager';
  * Factory for creating symbol objects
  */
 export class SymbolFactory {
+  private static readonly POOLED_HIDE_POSITION = -10000;
+  private static readonly PREWARM_SPINE_VALUES = [0, 1, 2, 3, 4, 5, 6, 7];
+  private static readonly PREWARM_INSTANCES_PER_VALUE = 10;
   private scene: Game;
   private animations: SymbolAnimations;
   private displayWidth: number;
   private displayHeight: number;
   private container: Phaser.GameObjects.Container;
   private overlay: SymbolOverlay | null;
+  private readonly spinePool = new Map<number, SymbolObject[]>();
+  private readonly pngPool = new Map<number, SymbolObject[]>();
 
   constructor(
     scene: Game,
@@ -40,6 +45,140 @@ export class SymbolFactory {
     this.displayHeight = displayHeight;
     this.container = container;
     this.overlay = overlay ?? null;
+    this.prewarmPools();
+  }
+
+  private getPool(kind: 'spine' | 'png', value: number): SymbolObject[] {
+    const poolMap = kind === 'spine' ? this.spinePool : this.pngPool;
+    let pool = poolMap.get(value);
+    if (!pool) {
+      pool = [];
+      poolMap.set(value, pool);
+    }
+    return pool;
+  }
+
+  private acquireFromPool(kind: 'spine' | 'png', value: number): SymbolObject | null {
+    const pool = this.getPool(kind, value);
+    while (pool.length > 0) {
+      const pooled = pool.pop();
+      if (pooled) {
+        return pooled;
+      }
+    }
+    return null;
+  }
+
+  private detachSymbol(obj: any): void {
+    try { obj?.parentContainer?.remove?.(obj); } catch { /* ignore */ }
+    try { this.scene.children.remove(obj); } catch { /* ignore */ }
+  }
+
+  private resetCommonSymbolState(obj: any, value: number, x: number, y: number, alpha: number): void {
+    try { obj.symbolValue = value; } catch { /* ignore */ }
+    try { obj.__pooled = false; } catch { /* ignore */ }
+    try { obj.active = true; } catch { /* ignore */ }
+    try { obj.setVisible?.(true); } catch { /* ignore */ }
+    try { obj.setAlpha?.(alpha); } catch { /* ignore */ }
+    try { obj.alpha = alpha; } catch { /* ignore */ }
+    try { obj.clearTint?.(); } catch { /* ignore */ }
+    try { obj.setPosition?.(x, y); } catch { /* ignore */ }
+    try { obj.x = x; obj.y = y; } catch { /* ignore */ }
+    try { obj.__gridCol = undefined; obj.__gridRow = undefined; } catch { /* ignore */ }
+    try { obj.__bounceTween = null; } catch { /* ignore */ }
+    try { obj.__winText = null; } catch { /* ignore */ }
+    try {
+      if (obj.parentContainer !== this.container) {
+        this.detachSymbol(obj);
+        this.container.add(obj);
+      }
+    } catch {
+      try { this.container.add(obj); } catch { /* ignore */ }
+    }
+  }
+
+  private prepareSpineSymbol(spineObj: any, value: number, x: number, y: number, alpha: number): SymbolObject {
+    this.resetCommonSymbolState(spineObj, value, x, y, alpha);
+    try { spineObj.setOrigin?.(0.5, 0.5); } catch { /* ignore */ }
+    this.animations.fitSpineToSymbolBox(spineObj);
+    this.playIdleAnimation(spineObj, value);
+    return spineObj as SymbolObject;
+  }
+
+  private preparePngSymbol(sprite: any, value: number, x: number, y: number, alpha: number): SymbolObject {
+    this.resetCommonSymbolState(sprite, value, x, y, alpha);
+    try {
+      sprite.displayWidth = this.displayWidth;
+      sprite.displayHeight = this.displayHeight;
+    } catch { /* ignore */ }
+    return sprite as SymbolObject;
+  }
+
+  private prewarmPools(): void {
+    for (const value of SymbolFactory.PREWARM_SPINE_VALUES) {
+      for (let i = 0; i < SymbolFactory.PREWARM_INSTANCES_PER_VALUE; i++) {
+        try {
+          const created =
+            this.instantiateSpineSymbol(value, SymbolFactory.POOLED_HIDE_POSITION, SymbolFactory.POOLED_HIDE_POSITION, 1)
+            ?? this.instantiatePngSymbol(value, SymbolFactory.POOLED_HIDE_POSITION, SymbolFactory.POOLED_HIDE_POSITION, 1);
+          this.releaseSymbol(created);
+        } catch (error) {
+          console.warn(`[SymbolFactory] Failed to prewarm symbol pool for value ${value}:`, error);
+          break;
+        }
+      }
+    }
+  }
+
+  public releaseSymbol(symbol: SymbolObject | null | undefined): void {
+    const obj: any = symbol as any;
+    if (!obj || obj.__pooled) return;
+
+    const value = Number(obj.symbolValue);
+    const kind = obj.__poolKind as 'spine' | 'png' | undefined;
+    if (!Number.isFinite(value) || (kind !== 'spine' && kind !== 'png')) {
+      try { if (!obj.destroyed && typeof obj.destroy === 'function') obj.destroy(); } catch { /* ignore */ }
+      return;
+    }
+
+    try { this.scene.tweens.killTweensOf(obj); } catch { /* ignore */ }
+    try {
+      const overlayObj = obj.__overlayImage;
+      if (overlayObj) {
+        this.scene.tweens.killTweensOf(overlayObj);
+        if (!overlayObj.destroyed && typeof overlayObj.destroy === 'function') {
+          overlayObj.destroy();
+        }
+      }
+      obj.__overlayImage = null;
+    } catch { /* ignore */ }
+    try {
+      const listener: SpineAnimationListener | null = obj.__dropIdleListener ?? null;
+      if (listener && obj.animationState?.removeListener) {
+        obj.animationState.removeListener(listener);
+      }
+      obj.__dropIdleListener = null;
+    } catch { /* ignore */ }
+    try { obj.animationState?.clearTracks?.(); } catch { /* ignore */ }
+    try { obj.skeleton?.setToSetupPose?.(); } catch { /* ignore */ }
+    try { obj.disableInteractive?.(); } catch { /* ignore */ }
+    try { obj.clearTint?.(); } catch { /* ignore */ }
+    try { obj.setVisible?.(false); } catch { /* ignore */ }
+    try { obj.active = false; } catch { /* ignore */ }
+    try { obj.setAlpha?.(1); } catch { /* ignore */ }
+    try { obj.__winText = null; } catch { /* ignore */ }
+    try { obj.__bounceTween = null; } catch { /* ignore */ }
+    try { obj.__gridCol = undefined; obj.__gridRow = undefined; } catch { /* ignore */ }
+
+    this.detachSymbol(obj);
+    try {
+      obj.setPosition?.(SymbolFactory.POOLED_HIDE_POSITION, SymbolFactory.POOLED_HIDE_POSITION);
+      obj.x = SymbolFactory.POOLED_HIDE_POSITION;
+      obj.y = SymbolFactory.POOLED_HIDE_POSITION;
+    } catch { /* ignore */ }
+    try { obj.__pooled = true; } catch { /* ignore */ }
+
+    this.getPool(kind, value).push(obj as SymbolObject);
   }
 
   /**
@@ -123,6 +262,20 @@ export class SymbolFactory {
     y: number,
     alpha: number
   ): SymbolObject | null {
+    const pooled = this.acquireFromPool('spine', value);
+    if (pooled) {
+      return this.prepareSpineSymbol(pooled as any, value, x, y, alpha);
+    }
+
+    return this.instantiateSpineSymbol(value, x, y, alpha);
+  }
+
+  private instantiateSpineSymbol(
+    value: number,
+    x: number,
+    y: number,
+    alpha: number
+  ): SymbolObject | null {
     const spineKey = `symbol_${value}_sugar_spine`;
     const atlasKey = `${spineKey}-atlas`;
     
@@ -133,6 +286,7 @@ export class SymbolFactory {
     
     const spineObj: any = (this.scene.add as any).spine(x, y, spineKey, atlasKey);
     if (!spineObj) return null;
+    try { spineObj.__poolKind = 'spine'; } catch { /* ignore */ }
     
     // Set symbol value for tracking
     try { spineObj.symbolValue = value; } catch { /* ignore */ }
@@ -150,14 +304,7 @@ export class SymbolFactory {
       spineObj.setAlpha(alpha);
     }
     
-    // Keep reel symbols in idle on creation so the reel tween provides the motion
-    // without the BZ drop asset's squash / flip-like effect.
-    this.playIdleAnimation(spineObj, value);
-    
-    // Add to container
-    this.container.add(spineObj);
-    
-    return spineObj as SymbolObject;
+    return this.prepareSpineSymbol(spineObj, value, x, y, alpha);
   }
 
   /**
@@ -187,7 +334,6 @@ export class SymbolFactory {
           }
         } catch { /* ignore */ }
 
-        console.log(`[SymbolFactory] Playing idle animation: ${idleName}`);
       } else {
         console.warn(`[SymbolFactory] Failed to set idle animation ${idleName} for symbol ${value}`);
       }
@@ -207,6 +353,26 @@ export class SymbolFactory {
   ): SymbolObject | null {
     const idleName = MultiplierSymbols.getIdleAnimationName(value);
     if (!idleName) return null;
+
+    const pooled = this.acquireFromPool('spine', value);
+    if (pooled) {
+      const spineObj: any = pooled as any;
+      this.resetCommonSymbolState(spineObj, value, x, y, alpha);
+      try { spineObj.setOrigin?.(0.5, 0.5); } catch { /* ignore */ }
+      this.animations.fitSpineToSymbolBox(spineObj);
+      try {
+        const baseX = (spineObj as any)?.scaleX ?? 1;
+        const baseY = (spineObj as any)?.scaleY ?? 1;
+        if (typeof spineObj.setScale === 'function') {
+          spineObj.setScale(baseX * MULTIPLIER_VISUAL_SCALE, baseY * MULTIPLIER_VISUAL_SCALE);
+        }
+      } catch { /* ignore */ }
+      const animState = spineObj.animationState;
+      if (animState && typeof animState.setAnimation === 'function') {
+        animState.setAnimation(0, idleName, true);
+      }
+      return spineObj as SymbolObject;
+    }
     
     const spineKey = 'symbol_10_sugar_spine';
     const atlasKey = `${spineKey}-atlas`;
@@ -219,6 +385,7 @@ export class SymbolFactory {
     try {
       const spineObj: any = (this.scene.add as any).spine(x, y, spineKey, atlasKey);
       if (!spineObj) return null;
+      try { spineObj.__poolKind = 'spine'; } catch { /* ignore */ }
       
       // Set symbol value
       try { spineObj.symbolValue = value; } catch { /* ignore */ }
@@ -305,6 +472,20 @@ export class SymbolFactory {
     y: number,
     alpha: number = 1
   ): SymbolObject {
+    const pooled = this.acquireFromPool('png', value);
+    if (pooled) {
+      return this.preparePngSymbol(pooled as any, value, x, y, alpha);
+    }
+
+    return this.instantiatePngSymbol(value, x, y, alpha);
+  }
+
+  private instantiatePngSymbol(
+    value: number,
+    x: number,
+    y: number,
+    alpha: number = 1
+  ): SymbolObject {
     const spriteKey = `symbol_${value}`;
     
     // Check if texture exists
@@ -312,6 +493,7 @@ export class SymbolFactory {
       throw new Error(`[SymbolFactory] Texture '${spriteKey}' not found`);
     }
     const sprite = this.scene.add.sprite(x, y, spriteKey);
+    try { (sprite as any).__poolKind = 'png'; } catch { /* ignore */ }
     
     sprite.displayWidth = this.displayWidth;
     sprite.displayHeight = this.displayHeight;
@@ -320,10 +502,7 @@ export class SymbolFactory {
     // Store symbol value
     (sprite as any).symbolValue = value;
     
-    // Add to container
-    this.container.add(sprite);
-    
-    return sprite as SymbolObject;
+    return this.preparePngSymbol(sprite as any, value, x, y, alpha);
   }
 
   private attachMultiplierOverlay(symbol: SymbolObject, value: number, x: number, y: number): void {
@@ -358,12 +537,8 @@ export class SymbolFactory {
     const atlasKey = `${spineKey}-atlas`;
     
     try {
-      console.log(`[SymbolFactory] Replacing sprite with Spine: ${spineKey} at (${col}, ${row})`);
-      
-      // Destroy current symbol
-      if (currentSymbol.destroy) {
-        currentSymbol.destroy();
-      }
+      // Return current symbol to pool
+      this.releaseSymbol(currentSymbol);
       
       // Create Spine animation
       if (typeof (this.scene.add as any).spine !== 'function') {
@@ -392,8 +567,6 @@ export class SymbolFactory {
       // Add to container
       this.container.add(spineSymbol);
       
-      console.log(`[SymbolFactory] Successfully replaced at (${col}, ${row})`);
-      
       return spineSymbol as SymbolObject;
     } catch (error) {
       console.warn(`[SymbolFactory] Failed to replace at (${col}, ${row}):`, error);
@@ -417,10 +590,8 @@ export class SymbolFactory {
     x: number,
     y: number
   ): SymbolObject {
-    // Destroy Spine object
-    if (spineSymbol.destroy) {
-      spineSymbol.destroy();
-    }
+    // Return Spine object to pool
+    this.releaseSymbol(spineSymbol);
     
     // Create PNG replacement
     return this.createPngSymbol(symbolValue, x, y, 1);

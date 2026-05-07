@@ -3524,9 +3524,8 @@ export class Symbols {
               // Kill tweens immediately without delay
               try { this.scene.tweens.killTweensOf(baseObj); } catch {}
               try { if (overlayObj) this.scene.tweens.killTweensOf(overlayObj); } catch {}
-              // Destroy immediately
-              try { if (!baseObj.destroyed) baseObj.destroy(); } catch {}
-              try { if (overlayObj && !overlayObj.destroyed) overlayObj.destroy(); } catch {}
+              // Return to pool immediately
+              try { this.factory.releaseSymbol(baseObj); } catch {}
             } catch (e) {
               // Silently ignore errors during fast cleanup
             }
@@ -3561,8 +3560,7 @@ export class Symbols {
           try {
             this.scene.tweens.killTweensOf(baseObj);
             if (overlayObj) this.scene.tweens.killTweensOf(overlayObj);
-            if (!baseObj.destroyed) baseObj.destroy();
-            if (overlayObj && !overlayObj.destroyed) overlayObj.destroy();
+            this.factory.releaseSymbol(baseObj);
           } catch { }
           completedAnimations++;
           if (completedAnimations === totalAnimations) {
@@ -3618,10 +3616,9 @@ export class Symbols {
             duration: Math.max(1, dropDuration * 0.9 * speed),
             ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
             onComplete: () => {
-              // Destroy the symbol after it drops off screen
+              // Return the symbol to pool after it drops off screen
               try {
-                if (!baseObj.destroyed) baseObj.destroy();
-                if (overlayObj && !overlayObj.destroyed) overlayObj.destroy();
+                this.factory.releaseSymbol(baseObj);
               } catch { }
 
               completedAnimations++;
@@ -3642,8 +3639,7 @@ export class Symbols {
           console.warn(`[Symbols] Failed to create tween chain for symbol at row ${rowIndex}, col ${col}:`, e);
           // If tween creation fails, count it as completed and clean up
           try {
-            if (!baseObj.destroyed) baseObj.destroy();
-            if (overlayObj && !overlayObj.destroyed) overlayObj.destroy();
+            this.factory.releaseSymbol(baseObj);
           } catch { }
           completedAnimations++;
           if (completedAnimations === totalAnimations) {
@@ -3671,8 +3667,7 @@ export class Symbols {
                 const overlayObj: any = baseObj?.__overlayImage;
                 this.scene.tweens.killTweensOf(baseObj);
                 if (overlayObj) this.scene.tweens.killTweensOf(overlayObj);
-                if (!baseObj.destroyed) baseObj.destroy();
-                if (overlayObj && !overlayObj.destroyed) overlayObj.destroy();
+                this.factory.releaseSymbol(baseObj);
                 forcedCount++;
               } catch (e) {
                 console.warn(`[Symbols] Failed to force-destroy symbol at row ${rowIndex}, col ${col}:`, e);
@@ -3727,8 +3722,6 @@ export class Symbols {
         ? (isTurbo ? 0.7 : 0.35)
         : 1;
 
-      console.log(`[Symbols] dropNewSymbols row ${index}: ${totalAnimations} columns, isTurbo=${isTurbo}, STAGGER_MS=${STAGGER_MS}`);
-
       for (let col = 0; col < this.newSymbols.length; col++) {
         let symbol = this.newSymbols[col][index];
         const targetY = this.getYPos(index);
@@ -3745,8 +3738,6 @@ export class Symbols {
         const delayMs = isTurbo
           ? 0
           : (isSkip ? STAGGER_MS * 0.3 * col : STAGGER_MS * col);
-        console.log(`[Symbols] Column ${col}: delay=${delayMs}ms, targetY=${targetY}`);
-
         const tweens: any[] = [
           {
             delay: delayMs,
@@ -3999,9 +3990,7 @@ export class Symbols {
 
         try {
           this.scene.tweens.killTweensOf(symbol);
-          if (!symbol.destroyed && symbol.destroy) {
-            symbol.destroy();
-          }
+          this.factory.releaseSymbol(symbol as any);
         } catch (e) {
           console.warn('[Symbols] Error disposing symbol:', e);
         }
