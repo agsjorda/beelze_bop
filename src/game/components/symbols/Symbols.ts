@@ -975,6 +975,20 @@ export class Symbols {
     return !!this.skipReelDropsActive;
   }
 
+  public canRequestSkipReelDropsNow(): boolean {
+    if (this.tumbleInProgress) return false;
+    if (gameStateManager.isShowingWinDialog) return false;
+    if (!gameStateManager.isBonus && !this.spinDataResponseReceivedForCurrentSpin) return false;
+    if (!gameStateManager.isReelSpinning || !this.reelDropInProgress) return false;
+    return true;
+  }
+
+  public tryRequestSkipReelDrops(): boolean {
+    if (!this.canRequestSkipReelDropsNow()) return false;
+    this.requestSkipReelDrops();
+    return true;
+  }
+
   public async forceScatterResetImmediate(): Promise<void> {
     try {
       this.restoreSymbolVisibility();
@@ -3005,12 +3019,7 @@ export class Symbols {
 
       zone.on('pointerdown', () => {
         try {
-          if (this.tumbleInProgress) return;
-          if (gameStateManager.isShowingWinDialog) return;
-          if (!gameStateManager.isBonus && !this.spinDataResponseReceivedForCurrentSpin) return;
-          if (gameStateManager.isReelSpinning && this.reelDropInProgress) {
-            this.requestSkipReelDrops();
-          }
+          this.tryRequestSkipReelDrops();
         } catch {}
       });
 
