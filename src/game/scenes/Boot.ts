@@ -46,7 +46,14 @@ export class Boot extends Scene
 		console.log(`[Boot] Asset loading configuration:`);
 		console.log(`[Boot] - Asset scale: ${this.networkManager.getAssetScale()}x`);
 		console.log(`[Boot] - Asset prefix: ${this.assetConfig['getAssetPrefix']()}`);
-		
+
+		// Feed the HTML boot-loader progress bar while Boot's own assets load.
+		// Boot contributes 0–25% of the total visible progress bar range;
+		// the Preloader will claim the remaining 25–100% once it starts.
+		this.load.on('progress', (p: number) => {
+			try { (window as any).setBootLoaderProgress?.(p * 0.25); } catch {}
+		});
+
 		// Load loading assets using AssetLoader
 		this.assetLoader.loadLoadingAssets(this);
 
@@ -184,10 +191,31 @@ export class Boot extends Scene
 		} catch (_e) {
 			// no-op
 		}
-		
-		this.scene.start('Preloader', { 
-			networkManager: this.networkManager, 
-			screenModeManager: this.screenModeManager 
-		});
+
+		// Wait for all CSS web fonts (Poppins, etc.) to finish loading before starting the
+		// Preloader scene. loadFontAssets() above queues @font-face rules into document.head
+		// synchronously during preload(), so document.fonts.ready correctly covers them.
+		// Without this guard, Phaser text objects in the Preloader that reference Poppins
+		// can render with a fallback font on slow mobile connections.
+		const startPreloader = () => {
+			this.scene.start('Preloader', {
+				networkManager: this.networkManager,
+				screenModeManager: this.screenModeManager
+			});
+		};
+
+		const fontsObj: any = (document as any).fonts;
+		if (fontsObj && typeof fontsObj.ready?.then === 'function') {
+			fontsObj.ready.then(() => {
+				console.log('[Boot] Web fonts ready — starting Preloader');
+				startPreloader();
+			}).catch((err: any) => {
+				console.warn('[Boot] Font loading error — starting Preloader anyway', err);
+				startPreloader();
+			});
+		} else {
+			// document.fonts not supported (very old WebView) — start immediately
+			startPreloader();
+		}
 	}
 }

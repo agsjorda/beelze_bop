@@ -63,14 +63,14 @@ export class Preloader extends Scene
 
 	init (data: any)
 	{
-		// Check if add.spine is available - if not, reload the game
+		// Try to ensure Spine is attached. ensureSpineFactory() already attempts a dynamic
+		// plugin install internally, so false here means it genuinely isn't ready yet.
+		// We log a warning and continue — a full page reload here would fire on every first
+		// load on slow mobile devices and would tear down the orientation modal state,
+		// causing the modal to flicker and never stabilise.
 		const hasSpineFactory = ensureSpineFactory(this, '[Preloader] init');
 		if (!hasSpineFactory) {
-			console.error('[Preloader] add.spine is not recognized. Reloading the game...');
-			setTimeout(() => {
-				window.location.reload();
-			}, 250);
-			return;
+			console.warn('[Preloader] add.spine not ready in init — will retry in create(). Continuing without reload.');
 		}
 
 		// Receive managers from Boot scene

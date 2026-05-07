@@ -11,6 +11,8 @@
 	<!-- Preload critical fonts -->
 	<link rel="preload" as="font" href="/assets/fonts/poppins/Poppins-Regular.ttf" type="font/ttf" crossorigin="anonymous" />
 	<link rel="preload" as="font" href="/assets/fonts/poppins/Poppins-Bold.ttf" type="font/ttf" crossorigin="anonymous" />
+	<!-- Preload orientation icon so it is in cache when the modal first shows -->
+	<link rel="preload" as="image" href="/assets/portrait/high/loading/orientation_icon.webp" type="image/webp" />
 	<!-- Prefetch DNS for external resources (if any) -->
 	<!-- <link rel="dns-prefetch" href="https://api.example.com" /> -->
 	
@@ -18,6 +20,15 @@
 	<title>Beelze-Bop</title>
 	<link rel="stylesheet" href="/main.scss">
 	<style>
+		/* Inline fallback: locks body overflow before style.css loads.
+		   position:fixed;inset:0 on #orientation-modal depends on this. */
+		body {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+			background: #000;
+		}
+
 		.background-container {
 			position: fixed;
 			top: 0;
@@ -42,7 +53,82 @@
 			-webkit-user-drag: none;
 			pointer-events: none;
 		}
-		
+
+		/* == Boot loader: shows from HTML parse time, hides when Phaser Preloader is ready.
+		   Gives users immediate visual feedback before any JS has run. == */
+		#boot-loader {
+			position: fixed;
+			inset: 0;
+			background: #000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			z-index: 2147483647;
+			transition: opacity 200ms ease;
+		}
+		#boot-loader.hidden {
+			opacity: 0;
+			pointer-events: none;
+		}
+		#boot-loader, #boot-loader * { box-sizing: border-box; }
+		#boot-loader .bl-stage {
+			position: relative;
+			width: min(100vw, calc(100vh * (428 / 926)));
+			height: min(100vh, calc(100vw * (926 / 428)));
+			aspect-ratio: 428 / 926;
+			background: #10161D;
+			overflow: hidden;
+		}
+		#boot-loader .bl-grid {
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+			background-image: radial-gradient(rgba(255,255,255,0.10) 1px, transparent 1.5px);
+			background-size: 20px 20px;
+		}
+		#boot-loader .bl-content {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			font-family: 'Poppins-Regular', Arial, sans-serif;
+		}
+		#boot-loader .bl-logo-slot {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 2.5%;
+			width: 80%;
+			margin-bottom: 8%;
+		}
+		#boot-loader .bl-char  { display: block; width: 28%; height: auto; }
+		#boot-loader .bl-logo  { display: block; width: 42%; height: auto; }
+		#boot-loader .bl-progress-track {
+			width: 60%;
+			height: 4px;
+			background: rgba(255,255,255,0.15);
+			border-radius: 2px;
+			overflow: hidden;
+			margin-bottom: 16px;
+		}
+		#boot-loader .bl-progress-fill {
+			height: 100%;
+			width: 0%;
+			background: #09FF5C;
+			border-radius: 2px;
+			transition: width 150ms linear;
+		}
+		#boot-loader .bl-spinner {
+			width: 36px;
+			height: 36px;
+			border-radius: 50%;
+			border: 3px solid rgba(255,255,255,0.2);
+			border-top-color: #fff;
+			animation: bl-spin 0.9s linear infinite;
+		}
+		@keyframes bl-spin { to { transform: rotate(360deg); } }
 	</style>
 </head>
 
@@ -54,6 +140,23 @@
 			alt="Fullscreen background"
 			draggable="false"
 		/>
+	</div>
+	<!-- Boot loader: pure HTML+CSS, no JS dependency, shows immediately on page load.
+	     Fades out once Phaser's Preloader scene has rendered its own background. -->
+	<div id="boot-loader" aria-live="polite">
+		<div class="bl-stage">
+			<div class="bl-grid"></div>
+			<div class="bl-content">
+				<div class="bl-logo-slot">
+					<img class="bl-char" src="assets/portrait/high/loading/DiJoker.png" alt="DiJoker" onerror="this.style.display='none'"/>
+					<img class="bl-logo" src="assets/portrait/high/loading/DiJoker-logo.png" alt="DiJoker" onerror="this.style.display='none'"/>
+				</div>
+				<div class="bl-progress-track">
+					<div class="bl-progress-fill" id="boot-loader-fill"></div>
+				</div>
+				<div class="bl-spinner"></div>
+			</div>
+		</div>
 	</div>
 	<div id="root"></div>
 	<div id="orientation-modal" class="orientation-modal orientation-modal--hidden" aria-hidden="true">
@@ -70,6 +173,25 @@
 		</div>
 	</div>
 	<script type="module" src="/src/main.tsx"></script>
-	
+	<script>
+		(function(){
+			/** Move the green progress fill. p is 0.0–1.0. */
+			window.setBootLoaderProgress = function(p){
+				try{
+					var el = document.getElementById('boot-loader-fill');
+					if (el) el.style.width = Math.max(0, Math.min(100, Math.floor((p||0)*100))) + '%';
+				}catch(e){}
+			};
+			/** Fade out and remove the boot loader div. Called by Phaser Preloader once its own screen is visible. */
+			window.hideBootLoader = function(){
+				try{
+					var el = document.getElementById('boot-loader');
+					if (!el) return;
+					el.classList.add('hidden');
+					setTimeout(function(){ try{ el.remove(); }catch(e){} }, 250);
+				}catch(e){}
+			};
+		})();
+	</script>
 </body>
 </html>

@@ -56,7 +56,7 @@ function installAudioContextGuards(): void {
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 
 const config: Phaser.Types.Core.GameConfig = {
-	type: Phaser.WEBGL,
+	type: Phaser.AUTO,
 	width: GAME_DESIGN_WIDTH,
 	height: GAME_DESIGN_HEIGHT,
 	parent: 'game-container',
